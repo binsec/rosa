@@ -1,12 +1,9 @@
 - Check output directory
     - Most notably, make sure that the names of the files/traces/etc check out
 
-- Investigate "double decisions"
-    - Some inputs map to two decisions somehow??? I think it happens because of how the seed
-      decisions are saved.
-
-- Stop fuzzer more gracefully
-    - Instead of `.kill()`ing the fuzzer process, we should send a SIGINT.
+- Check for crashes
+    - If crashes were found by AFL++, it's gonna generate more inputs like them, which is probably
+      not what we want, so we should notify the user
 
 - Add READMEs to the various output directories
     - Kinda like AFL++, to explain how to interpret each one.
