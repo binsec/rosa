@@ -261,6 +261,7 @@ dependencies = [
  "colored",
  "ctrlc",
  "derive_builder",
+ "libc",
 ]
 
 [[package]]

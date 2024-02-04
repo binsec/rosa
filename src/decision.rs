@@ -29,9 +29,9 @@ impl DecisionReason {
 
 impl Decision {
     pub fn print(&self) {
-        print_debug!("Decision:");
-        print_debug!("  Is backdoor?: {}", &self.is_backdoor);
-        print_debug!("  Reason?: {}", &self.reason.to_str());
+        println_debug!("Decision:");
+        println_debug!("  Is backdoor?: {}", &self.is_backdoor);
+        println_debug!("  Reason?: {}", &self.reason.to_str());
     }
 
     pub fn save(

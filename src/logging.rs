@@ -15,7 +15,7 @@ macro_rules! debug_message {
         {
             rosa_message!(
                 "{}",
-                format!("{}:{}: DEBUG: {}", file!(), line!(), format!($( $arg )*)).dimmed()
+                format!("DEBUG: {}", format!($( $arg )*)).dimmed()
             )
         }
     }
@@ -43,7 +43,7 @@ macro_rules! error_message {
     }};
 }
 
-macro_rules! print_info {
+macro_rules! println_info {
     ( $( $arg:tt )* ) => {
         {
             eprintln!("{}", info_message!($( $arg )*))
@@ -51,7 +51,7 @@ macro_rules! print_info {
     }
 }
 
-macro_rules! print_debug {
+macro_rules! println_debug {
     ( $( $arg:tt )* ) => {
         {
             eprintln!("{}", debug_message!($( $arg )*))

@@ -60,12 +60,18 @@ struct Cli {
     force: bool,
 }
 
+macro_rules! send_sigint {
+    ( $child_process:expr ) => {{
+        unsafe {
+            libc::kill($child_process.id() as i32, libc::SIGINT);
+        }
+    }};
+}
+
 macro_rules! with_cleanup {
     ( $action:expr, $fuzzer_process:tt ) => {{
         $action.or_else(|err| {
-            $fuzzer_process
-                .kill()
-                .or_else(|err| fail!("failed to kill fuzzer process: {}", err))?;
+            send_sigint!($fuzzer_process);
             Err(err)
         })
     }};
@@ -101,7 +107,20 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
         .expect("could not clone fuzzer seed log file.");
 
     // Spawn the fuzzer seed process.
-    print_info!("Collecting seed traces...");
+    println_info!("Collecting seed traces...");
+    println_debug!(
+        "Running fuzzer with environment: {}",
+        &config
+            .fuzzer_seed_env
+            .iter()
+            .map(|(key, value)| format!("{}={}", key, value))
+            .collect::<Vec<String>>()
+            .join(", ")
+    );
+    println_debug!(
+        "Running fuzzer with command: {}",
+        &config.fuzzer_seed_cmd.join(" ")
+    );
     let mut fuzzer_seed_process = Command::new(&config.fuzzer_seed_cmd[0])
         .args(&config.fuzzer_seed_cmd[1..])
         .envs(&config.fuzzer_seed_env)
@@ -127,7 +146,7 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
 
     // Check to see if we received a Ctrl-C while waiting.
     if fuzzer_seed_process_is_running && !running.load(Ordering::Acquire) {
-        print_info!("Stopping fuzzer seed process.");
+        println_info!("Stopping fuzzer seed process.");
         fuzzer_seed_process
             .kill()
             .or_else(|err| fail!("failed to kill fuzzer seed process: {}", err))?;
@@ -153,10 +172,10 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
     )?;
     // Save traces to output dir for later inspection.
     trace::save_traces(&seed_traces, &config.traces_dir())?;
-    print_info!("Collected {} seed traces.", seed_traces.len());
+    println_info!("Collected {} seed traces.", seed_traces.len());
 
     // Form seed clusters.
-    print_info!("Clustering seed traces...");
+    println_info!("Clustering seed traces...");
     let clusters = clustering::cluster_traces(
         &seed_traces,
         config.cluster_formation_criterion,
@@ -166,7 +185,7 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
     );
     // Save clusters to output dir for later inspection.
     clustering::save_clusters(&clusters, &config.clusters_dir())?;
-    print_info!("Created {} clusters.", clusters.len());
+    println_info!("Created {} clusters.", clusters.len());
     // Save the decisions for the seed traces too, even though we know what they're gonna be.
     clusters.iter().try_for_each(|cluster| {
         cluster
@@ -196,8 +215,21 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
         .expect("could not clone fuzzer run log file.");
 
     // Spawn the fuzzer run process.
-    print_info!("Starting backdoor detection...");
-    let mut fuzzer_run_process = Command::new(&config.fuzzer_run_cmd[0])
+    println_info!("Starting backdoor detection...");
+    println_debug!(
+        "Running fuzzer with environment: {}",
+        &config
+            .fuzzer_run_env
+            .iter()
+            .map(|(key, value)| format!("{}={}", key, value))
+            .collect::<Vec<String>>()
+            .join(", ")
+    );
+    println_debug!(
+        "Running fuzzer with command: {}",
+        &config.fuzzer_run_cmd.join(" ")
+    );
+    let fuzzer_run_process = Command::new(&config.fuzzer_run_cmd[0])
         .args(&config.fuzzer_run_cmd[1..])
         .envs(&config.fuzzer_run_env)
         .stdout(Stdio::from(fuzzer_run_log_stdout))
@@ -258,7 +290,7 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
             })
             .try_for_each(|(trace, cluster, decision)| {
                 if decision.is_backdoor {
-                    print_info!("!!!! BACKDOOR FOUND !!!!");
+                    println_info!("!!!! BACKDOOR FOUND !!!!");
                     trace.print(false);
                     decision.print();
 
@@ -276,10 +308,8 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
             })?;
     }
 
-    print_info!("Stopping fuzzer run process.");
-    fuzzer_run_process
-        .kill()
-        .or_else(|err| fail!("failed to kill fuzzer run process: {}", err))?;
+    println_info!("Stopping fuzzer run process.");
+    send_sigint!(fuzzer_run_process);
 
     Ok(())
 }
@@ -289,7 +319,7 @@ fn main() -> ExitCode {
 
     match run(&cli.config_file, &cli.output_dir, cli.force) {
         Ok(_) => {
-            print_info!("Bye :)");
+            println_info!("Bye :)");
             ExitCode::SUCCESS
         }
         Err(err) => {

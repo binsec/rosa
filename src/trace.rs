@@ -138,10 +138,10 @@ impl Trace {
             }
         };
 
-        print_debug!("Trace:");
-        print_debug!("  Test input: {}", self.printable_test_input());
-        print_debug!("  Edges: {}", printable_edges);
-        print_debug!("  Syscalls: {}", printable_syscalls);
+        println_debug!("Trace:");
+        println_debug!("  Test input: {}", self.printable_test_input());
+        println_debug!("  Edges: {}", printable_edges);
+        println_debug!("  Syscalls: {}", printable_syscalls);
     }
 
     pub fn printable_test_input(&self) -> String {
