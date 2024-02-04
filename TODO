@@ -5,6 +5,9 @@
     - Some inputs map to two decisions somehow??? I think it happens because of how the seed
       decisions are saved.
 
+- Stop fuzzer more gracefully
+    - Instead of `.kill()`ing the fuzzer process, we should send a SIGINT.
+
 - Add READMEs to the various output directories
     - Kinda like AFL++, to explain how to interpret each one.
 
