@@ -1,8 +1,10 @@
 use std::{fmt, str};
 
+use serde::{Deserialize, Serialize};
+
 use crate::error::RosaError;
 
-#[derive(Copy, Clone)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub enum DistanceMetric {
     Hamming,
 }

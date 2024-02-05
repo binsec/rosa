@@ -1,8 +1,10 @@
 use std::{fmt, str};
 
+use serde::{Deserialize, Serialize};
+
 use crate::error::RosaError;
 
-#[derive(Clone, Copy)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub enum Criterion {
     EdgesOnly,
     SyscallsOnly,

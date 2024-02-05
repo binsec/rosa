@@ -1,5 +1,7 @@
 use std::{fmt, str};
 
+use serde::{Deserialize, Serialize};
+
 use crate::{
     clustering::Cluster,
     criterion::Criterion,
@@ -9,7 +11,7 @@ use crate::{
     trace::Trace,
 };
 
-#[derive(Copy, Clone)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub enum Oracle {
     CompMinMax,
 }
@@ -99,6 +101,8 @@ fn comp_min_max_oracle(
     };
 
     Decision {
+        trace_uid: trace.uid.clone(),
+        cluster_uid: cluster.uid.clone(),
         is_backdoor,
         reason,
     }

@@ -6,10 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{
-    decision::{Decision, DecisionReason},
-    error::RosaError,
-};
+use crate::error::RosaError;
 
 /// Runtime trace definition.
 #[derive(Debug, Clone)]
@@ -114,7 +111,7 @@ impl Trace {
 pub fn load_traces(
     test_input_dir: &Path,
     trace_dump_dir: &Path,
-    known_traces: &mut HashMap<String, Decision>,
+    known_traces: &mut HashMap<String, Trace>,
     skip_missing_traces: bool,
 ) -> Result<Vec<Trace>, RosaError> {
     let mut test_inputs: Vec<PathBuf> = fs::read_dir(test_input_dir)
@@ -185,13 +182,7 @@ pub fn load_traces(
                 true => {
                     let trace = Trace::load(&trace_uid, &test_input_file, &trace_dump_file)?;
                     // If load was successful, log the trace as a known trace.
-                    known_traces.insert(
-                        trace_uid.to_string(),
-                        Decision {
-                            is_backdoor: false,
-                            reason: DecisionReason::Seed,
-                        },
-                    );
+                    known_traces.insert(trace_uid.to_string(), trace.clone());
 
                     Ok(trace)
                 }

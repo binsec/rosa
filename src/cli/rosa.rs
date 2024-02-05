@@ -2,6 +2,7 @@ use colored::Colorize;
 
 use std::{
     collections::HashMap,
+    path::PathBuf,
     process::ExitCode,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -15,6 +16,7 @@ use clap::Parser;
 use rosa::{
     clustering,
     config::Config,
+    decision::{Decision, DecisionReason},
     error::RosaError,
     fuzzer::{self, FuzzerProcess},
     trace,
@@ -36,19 +38,10 @@ struct Cli {
     #[arg(
         short = 'c',
         long = "config-file",
-        default_value = "config.ini",
+        default_value = "config.json",
         value_name = "FILE"
     )]
     config_file: String,
-
-    /// The output directory to use.
-    #[arg(
-        short = 'o',
-        long = "output",
-        default_value = "out",
-        value_name = "DIR"
-    )]
-    output_dir: String,
 
     /// Force the creation of the output directory, potentially overwriting existing results.
     #[arg(short = 'f', long = "force")]
@@ -64,10 +57,12 @@ macro_rules! with_cleanup {
     }};
 }
 
-fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError> {
+fn run(config_file: &str, force: bool) -> Result<(), RosaError> {
     // Load the configuration and set up the output directories.
-    let config = Config::load(config_file, output_dir)?;
+    let config_file_path = PathBuf::from(config_file);
+    let config = Config::load_exp(&config_file_path)?;
     config.setup_dirs(force)?;
+    config.save(&config.output_dir)?;
 
     // Set up a "global" running boolean, and create a Ctrl-C handler that just sets it to false.
     let rosa_should_stop = Arc::new(AtomicBool::new(false));
@@ -160,11 +155,14 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
     // Save the decisions for the seed traces too, even though we know what they're gonna be.
     clusters.iter().try_for_each(|cluster| {
         cluster.traces.iter().try_for_each(|trace| {
-            let decision = known_traces
-                .get(&trace.uid)
-                .expect("failed to get decision for seed trace.");
+            let decision = Decision {
+                trace_uid: trace.uid.clone(),
+                cluster_uid: cluster.uid.clone(),
+                is_backdoor: false,
+                reason: DecisionReason::Seed,
+            };
 
-            decision.save(&trace.uid, &cluster.uid, &config, &config.decisions_dir())
+            decision.save(&config.decisions_dir())
         })
     })?;
 
@@ -235,9 +233,9 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
                     config.oracle_criterion,
                     config.oracle_distance_metric,
                 );
-                (trace, cluster, decision)
+                (trace, decision)
             })
-            .try_for_each(|(trace, cluster, decision)| {
+            .try_for_each(|(trace, decision)| {
                 if decision.is_backdoor {
                     println_info!("!!!! BACKDOOR FOUND !!!!");
                     println_debug!("{}", trace);
@@ -250,10 +248,7 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
                     )?;
                 }
 
-                with_cleanup!(
-                    decision.save(&trace.uid, &cluster.uid, &config, &config.decisions_dir()),
-                    fuzzer_run_process
-                )
+                with_cleanup!(decision.save(&config.decisions_dir()), fuzzer_run_process)
             })?;
     }
 
@@ -266,7 +261,7 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    match run(&cli.config_file, &cli.output_dir, cli.force) {
+    match run(&cli.config_file, cli.force) {
         Ok(_) => {
             println_info!("Bye :)");
             ExitCode::SUCCESS
