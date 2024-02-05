@@ -81,8 +81,46 @@ impl Decision {
                 &config.oracle_criterion
             ),
             format!(
-                "    \"oracle_distance_metric\": \"{}\"",
+                "    \"oracle_distance_metric\": \"{}\",",
                 &config.oracle_distance_metric
+            ),
+            format!(
+                "    \"fuzzer_seed_env\": \"{}\",",
+                &config
+                    .fuzzer_seed_env
+                    .iter()
+                    .map(|(key, value)| format!("{}={}", key, value))
+                    .map(|string| string.replace('"', "\\\""))
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
+            format!(
+                "    \"fuzzer_seed_cmd\": \"{}\",",
+                &config
+                    .fuzzer_seed_cmd
+                    .iter()
+                    .map(|string| string.replace('"', "\\\""))
+                    .collect::<Vec<String>>()
+                    .join(" ")
+            ),
+            format!(
+                "    \"fuzzer_run_env\": \"{}\",",
+                &config
+                    .fuzzer_run_env
+                    .iter()
+                    .map(|(key, value)| format!("{}={}", key, value))
+                    .map(|string| string.replace('"', "\\\""))
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
+            format!(
+                "    \"fuzzer_run_cmd\": \"{}\"",
+                &config
+                    .fuzzer_run_cmd
+                    .iter()
+                    .map(|string| string.replace('"', "\\\""))
+                    .collect::<Vec<String>>()
+                    .join(" ")
             ),
             "}\n".to_string(),
         ];

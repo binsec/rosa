@@ -93,7 +93,11 @@ impl Config {
         - `oracle`: the oracle algorithm to use (see documentation)\n\
         - `oracle_criterion`: like `cluster_formation_criterion`, but for the oracle\n\
         - `oracle_distance_metric`: like `cluster_formation_distance_metric`, but for the \n  \
-          oracle\n";
+          oracle\n\
+        - `fuzzer_seed_env`: the environment variables passed to the fuzzer seed process\n\
+        - `fuzzer_seed_cmd`: the command used to launch the fuzzer seed process\n\
+        - `fuzzer_run_env`: the environment variables passed to the fuzzer run process\n\
+        - `fuzzer_run_cmd`: the command used to launch the fuzzer run process\n";
     const LOGS_DIR_README: &'static str = "\
         This directory contains the logs created by the fuzzer processes (both stdout and\n\
         stderr).\n\
