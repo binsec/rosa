@@ -1,11 +1,10 @@
 use std::{
     collections::HashMap,
+    fmt,
     fs::{self, File},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
 };
-
-use colored::Colorize;
 
 use crate::error::RosaError;
 
@@ -55,20 +54,6 @@ impl FuzzerProcess {
             Some(_) => fail!("could not start fuzzer process; process is already running."),
             None => Ok(()),
         }?;
-
-        println_debug!(
-            "Running fuzzer with environment: {}",
-            &self
-                .fuzzer_env
-                .iter()
-                .map(|(key, value)| format!("{}={}", key, value))
-                .collect::<Vec<String>>()
-                .join(", ")
-        );
-        println_debug!(
-            "Running fuzzer with command: {}",
-            &self.fuzzer_cmd.join(" ")
-        );
 
         let process = self.command.spawn().or(fail!(
             "could not run fuzzer seed command. See {}.",
@@ -129,4 +114,22 @@ pub fn fuzzer_found_crashes(crashes_dir: &Path) -> Result<bool, RosaError> {
         },
         |res| Ok(res.filter_map(|item| item.ok()).next().is_some()),
     )
+}
+
+impl fmt::Display for FuzzerProcess {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let printable_env = &self
+            .fuzzer_env
+            .iter()
+            .map(|(key, value)| format!("{}={}", key, value))
+            .collect::<Vec<String>>()
+            .join(", ");
+        let printable_cmd = &self.fuzzer_cmd.join(" ");
+
+        write!(
+            f,
+            "Fuzzer process:\n  Env: {}\n  Cmd: {}",
+            printable_env, printable_cmd
+        )
+    }
 }

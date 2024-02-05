@@ -15,6 +15,7 @@ impl fmt::Display for RosaError {
     }
 }
 
+#[macro_export]
 macro_rules! error {
     ( $( $arg:expr ),+ ) => {{
         RosaError {
@@ -26,6 +27,7 @@ macro_rules! error {
     }};
 }
 
+#[macro_export]
 macro_rules! fail {
     ( $( $arg:expr ),+ ) => {{
         Err(error!($( $arg ),+))

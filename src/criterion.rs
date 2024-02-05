@@ -1,4 +1,6 @@
-use std::fmt;
+use std::{fmt, str};
+
+use crate::error::RosaError;
 
 #[derive(Clone, Copy)]
 pub enum Criterion {
@@ -6,18 +8,6 @@ pub enum Criterion {
     SyscallsOnly,
     EdgesOrSyscalls,
     EdgesAndSyscalls,
-}
-
-impl Criterion {
-    pub fn from_str(criterion: &str) -> Option<Self> {
-        match criterion {
-            "edges-only" => Some(Criterion::EdgesOnly),
-            "syscalls-only" => Some(Criterion::SyscallsOnly),
-            "edges-or-syscalls" => Some(Criterion::EdgesOrSyscalls),
-            "edges-and-syscalls" => Some(Criterion::EdgesAndSyscalls),
-            _ => None,
-        }
-    }
 }
 
 impl fmt::Display for Criterion {
@@ -32,5 +22,19 @@ impl fmt::Display for Criterion {
                 Self::EdgesAndSyscalls => "edges-and-syscalls",
             }
         )
+    }
+}
+
+impl str::FromStr for Criterion {
+    type Err = RosaError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "edges-only" => Ok(Self::EdgesOnly),
+            "syscalls-only" => Ok(Self::SyscallsOnly),
+            "edges-or-syscalls" => Ok(Self::EdgesOrSyscalls),
+            "edges-and-syscalls" => Ok(Self::EdgesAndSyscalls),
+            unknown => fail!("invalid criterion '{}'.", unknown),
+        }
     }
 }

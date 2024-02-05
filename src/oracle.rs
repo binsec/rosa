@@ -1,10 +1,11 @@
-use std::fmt;
+use std::{fmt, str};
 
 use crate::{
     clustering::Cluster,
     criterion::Criterion,
     decision::{Decision, DecisionReason},
     distance_metric::DistanceMetric,
+    error::RosaError,
     trace::Trace,
 };
 
@@ -14,13 +15,6 @@ pub enum Oracle {
 }
 
 impl Oracle {
-    pub fn from_str(oracle: &str) -> Option<Self> {
-        match oracle {
-            "comp_min_max" => Some(Self::CompMinMax),
-            _ => None,
-        }
-    }
-
     pub fn decide(
         &self,
         trace: &Trace,
@@ -43,6 +37,17 @@ impl fmt::Display for Oracle {
                 Self::CompMinMax => "comp_min_max",
             }
         )
+    }
+}
+
+impl str::FromStr for Oracle {
+    type Err = RosaError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "comp_min_max" => Ok(Self::CompMinMax),
+            unknown => fail!("invalid oracle '{}'.", unknown),
+        }
     }
 }
 

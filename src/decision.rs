@@ -1,7 +1,5 @@
 use std::{fmt, fs, path::Path};
 
-use colored::Colorize;
-
 use crate::{config::Config, error::RosaError};
 
 pub enum DecisionReason {
@@ -16,28 +14,7 @@ pub struct Decision {
     pub reason: DecisionReason,
 }
 
-impl fmt::Display for DecisionReason {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Seed => "seed",
-                Self::Edges => "edges",
-                Self::Syscalls => "syscalls",
-                Self::EdgesAndSyscalls => "edges-and-syscalls",
-            }
-        )
-    }
-}
-
 impl Decision {
-    pub fn print(&self) {
-        println_debug!("Decision:");
-        println_debug!("  Is backdoor?: {}", &self.is_backdoor);
-        println_debug!("  Reason?: {}", &self.reason);
-    }
-
     pub fn save(
         &self,
         trace_uid: &str,
@@ -133,5 +110,30 @@ impl Decision {
                 err
             )
         })
+    }
+}
+
+impl fmt::Display for Decision {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Decision\n  Is backdoor? {}\n  Reason? {}",
+            self.is_backdoor, self.reason
+        )
+    }
+}
+
+impl fmt::Display for DecisionReason {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Seed => "seed",
+                Self::Edges => "edges",
+                Self::Syscalls => "syscalls",
+                Self::EdgesAndSyscalls => "edges-and-syscalls",
+            }
+        )
     }
 }

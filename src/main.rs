@@ -12,21 +12,16 @@ use std::{
 
 use clap::Parser;
 
-use crate::{config::Config, error::RosaError, fuzzer::FuzzerProcess};
+use rosa::{
+    clustering,
+    config::Config,
+    error::RosaError,
+    fuzzer::{self, FuzzerProcess},
+    trace,
+};
 
 #[macro_use]
 mod logging;
-#[macro_use]
-mod error;
-
-mod clustering;
-mod config;
-mod criterion;
-mod decision;
-mod distance_metric;
-mod fuzzer;
-mod oracle;
-mod trace;
 
 #[derive(Parser)]
 #[command(
@@ -107,6 +102,7 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
 
     // Spawn the fuzzer seed process.
     println_info!("Collecting seed traces...");
+    println_debug!("{}", fuzzer_seed_process);
     fuzzer_seed_process.spawn()?;
 
     // Wait for the fuzzer process (or for a Ctrl-C).
@@ -121,7 +117,7 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
 
     // Check the exit code of the fuzzer seed process.
     fuzzer_seed_process.check_success().map_err(|err| {
-        error!(
+        rosa::error!(
             "fuzzer seed command failed: {}. See {}.",
             err,
             fuzzer_seed_process.log_file.display()
@@ -174,6 +170,7 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
 
     // Spawn the fuzzer run process.
     println_info!("Starting backdoor detection...");
+    println_debug!("{}", fuzzer_run_process);
     fuzzer_run_process.spawn()?;
     // Sleep for 3 seconds to give some time to the fuzzer to get started.
     thread::sleep(time::Duration::from_secs(3));
@@ -243,8 +240,8 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
             .try_for_each(|(trace, cluster, decision)| {
                 if decision.is_backdoor {
                     println_info!("!!!! BACKDOOR FOUND !!!!");
-                    trace.print(false);
-                    decision.print();
+                    println_debug!("{}", trace);
+                    println_debug!("{}", decision);
 
                     // Save backdoor.
                     with_cleanup!(

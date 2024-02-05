@@ -1,4 +1,6 @@
-use std::fmt;
+use std::{fmt, str};
+
+use crate::error::RosaError;
 
 #[derive(Copy, Clone)]
 pub enum DistanceMetric {
@@ -6,13 +8,6 @@ pub enum DistanceMetric {
 }
 
 impl DistanceMetric {
-    pub fn from_str(distance_metric: &str) -> Option<Self> {
-        match distance_metric {
-            "hamming" => Some(Self::Hamming),
-            _ => None,
-        }
-    }
-
     pub fn dist(&self, v1: &[u8], v2: &[u8]) -> u64 {
         match self {
             Self::Hamming => hamming(v1, v2),
@@ -29,6 +24,17 @@ impl fmt::Display for DistanceMetric {
                 Self::Hamming => "hamming",
             }
         )
+    }
+}
+
+impl str::FromStr for DistanceMetric {
+    type Err = RosaError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "hamming" => Ok(Self::Hamming),
+            unknown => fail!("invalid distance metric '{}'.", unknown),
+        }
     }
 }
 

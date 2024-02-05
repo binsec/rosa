@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{collections::HashMap, fs, path::PathBuf, str::FromStr};
 
 use derive_builder::Builder;
 
@@ -266,24 +266,15 @@ impl Config {
 
                 Criterion::from_str(value)
                     .map(|criterion| builder.cluster_formation_criterion(criterion))
-                    .ok_or(error!(
-                        "{}: invalid criterion '{}'.",
-                        config_file_position, value
-                    ))
             }
             // The distance metric is a string, but it has to be one of the recognized distance
             // metric functions.
             "cluster_formation_distance_metric" => {
                 let value = value.trim_matches('"');
 
-                DistanceMetric::from_str(value)
-                    .map(|distance_metric| {
-                        builder.cluster_formation_distance_metric(distance_metric)
-                    })
-                    .ok_or(error!(
-                        "{}: invalid criterion '{}'.",
-                        config_file_position, value
-                    ))
+                DistanceMetric::from_str(value).map(|distance_metric| {
+                    builder.cluster_formation_distance_metric(distance_metric)
+                })
             }
             // The edge tolerance should be a positive (or zero) integer.
             "cluster_formation_edge_tolerance" => value
@@ -313,45 +304,26 @@ impl Config {
 
                 Criterion::from_str(value)
                     .map(|criterion| builder.cluster_selection_criterion(criterion))
-                    .ok_or(error!(
-                        "{}: invalid criterion '{}'.",
-                        config_file_position, value
-                    ))
             }
             // Same as `cluster_formation_distance_metric`.
             "cluster_selection_distance_metric" => {
                 let value = value.trim_matches('"');
 
-                DistanceMetric::from_str(value)
-                    .map(|distance_metric| {
-                        builder.cluster_selection_distance_metric(distance_metric)
-                    })
-                    .ok_or(error!(
-                        "{}: invalid criterion '{}'.",
-                        config_file_position, value
-                    ))
+                DistanceMetric::from_str(value).map(|distance_metric| {
+                    builder.cluster_selection_distance_metric(distance_metric)
+                })
             }
             // The oracle is a string, but it has to be one of the recognized oracle functions.
             "oracle" => {
                 let value = value.trim_matches('"');
 
-                Oracle::from_str(value)
-                    .map(|oracle| builder.oracle(oracle))
-                    .ok_or(error!(
-                        "{}: invalid oracle '{}'.",
-                        config_file_position, value
-                    ))
+                Oracle::from_str(value).map(|oracle| builder.oracle(oracle))
             }
             // Same as `cluster_formation_criterion`.
             "oracle_criterion" => {
                 let value = value.trim_matches('"');
 
-                Criterion::from_str(value)
-                    .map(|criterion| builder.oracle_criterion(criterion))
-                    .ok_or(error!(
-                        "{}: invalid criterion '{}'.",
-                        config_file_position, value
-                    ))
+                Criterion::from_str(value).map(|criterion| builder.oracle_criterion(criterion))
             }
             // Same as `cluster_formation_distance_metric`.
             "oracle_distance_metric" => {
@@ -359,10 +331,6 @@ impl Config {
 
                 DistanceMetric::from_str(value)
                     .map(|distance_metric| builder.oracle_distance_metric(distance_metric))
-                    .ok_or(error!(
-                        "{}: invalid criterion '{}'.",
-                        config_file_position, value
-                    ))
             }
             // Everything else is invalid.
             _ => fail!("{}: unknown option '{}'.", config_file_position, key),

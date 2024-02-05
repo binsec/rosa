@@ -1,11 +1,10 @@
 use std::{
     collections::HashMap,
+    fmt,
     fs::{self, File},
     io::Read,
     path::{Path, PathBuf},
 };
-
-use colored::Colorize;
 
 use crate::{
     decision::{Decision, DecisionReason},
@@ -95,53 +94,6 @@ impl Trace {
             edges,
             syscalls,
         })
-    }
-
-    pub fn print(&self, in_full: bool) {
-        let (printable_edges, printable_syscalls) = match in_full {
-            true => (
-                self.edges
-                    .iter()
-                    .map(|edge| edge.to_string())
-                    .collect::<Vec<String>>()
-                    .join(" "),
-                self.syscalls
-                    .iter()
-                    .map(|syscall| syscall.to_string())
-                    .collect::<Vec<String>>()
-                    .join(" "),
-            ),
-            false => {
-                let nb_edges = self
-                    .edges
-                    .clone()
-                    .into_iter()
-                    .fold(0u64, |acc, edge| acc + (edge as u64));
-                let nb_syscalls = self
-                    .syscalls
-                    .clone()
-                    .into_iter()
-                    .fold(0u64, |acc, syscall| acc + (syscall as u64));
-
-                (
-                    format!(
-                        "{} edges ({:.2}%)",
-                        nb_edges,
-                        (nb_edges as f64) / (self.edges.len() as f64)
-                    ),
-                    format!(
-                        "{} syscalls ({:.2}%)",
-                        nb_syscalls,
-                        (nb_syscalls as f64) / (self.syscalls.len() as f64)
-                    ),
-                )
-            }
-        };
-
-        println_debug!("Trace:");
-        println_debug!("  Test input: {}", self.printable_test_input());
-        println_debug!("  Edges: {}", printable_edges);
-        println_debug!("  Syscalls: {}", printable_syscalls);
     }
 
     pub fn printable_test_input(&self) -> String {
@@ -298,4 +250,38 @@ fn save_trace_dump(trace: &Trace, output_dir: &Path) -> Result<(), RosaError> {
     })?;
 
     Ok(())
+}
+
+impl fmt::Display for Trace {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let nb_edges = self
+            .edges
+            .clone()
+            .into_iter()
+            .fold(0u64, |acc, edge| acc + (edge as u64));
+        let nb_syscalls = self
+            .syscalls
+            .clone()
+            .into_iter()
+            .fold(0u64, |acc, syscall| acc + (syscall as u64));
+
+        let printable_edges = format!(
+            "{} edges ({:.2}%)",
+            nb_edges,
+            (nb_edges as f64) / (self.edges.len() as f64)
+        );
+        let printable_syscalls = format!(
+            "{} syscalls ({:.2}%)",
+            nb_syscalls,
+            (nb_syscalls as f64) / (self.syscalls.len() as f64)
+        );
+
+        write!(
+            f,
+            "Trace:\n  Test input: {}\n  Edges {}\n  Syscalls: {}",
+            self.printable_test_input(),
+            printable_edges,
+            printable_syscalls
+        )
+    }
 }
