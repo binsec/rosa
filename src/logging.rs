@@ -58,3 +58,12 @@ macro_rules! println_debug {
         }
     }
 }
+
+macro_rules! println_error {
+    ( $error:expr ) => {{
+        eprintln!(
+            "{}",
+            error_message!($error.file, $error.line, $error.message)
+        )
+    }};
+}

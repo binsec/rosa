@@ -1,8 +1,6 @@
 use std::{error, fmt};
 
-use colored::Colorize;
-
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct RosaError {
     pub function: String,
     pub line: u32,
@@ -13,7 +11,7 @@ pub struct RosaError {
 impl error::Error for RosaError {}
 impl fmt::Display for RosaError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", error_message!(self.file, self.line, self.message))
+        write!(f, "{}", self.message)
     }
 }
 

@@ -2,8 +2,7 @@ use colored::Colorize;
 
 use std::{
     collections::HashMap,
-    fs::File,
-    process::{Command, ExitCode, Stdio},
+    process::ExitCode,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -13,7 +12,7 @@ use std::{
 
 use clap::Parser;
 
-use crate::{config::Config, error::RosaError};
+use crate::{config::Config, error::RosaError, fuzzer::FuzzerProcess};
 
 #[macro_use]
 mod logging;
@@ -25,6 +24,7 @@ mod config;
 mod criterion;
 mod decision;
 mod distance_metric;
+mod fuzzer;
 mod oracle;
 mod trace;
 
@@ -60,18 +60,10 @@ struct Cli {
     force: bool,
 }
 
-macro_rules! send_sigint {
-    ( $child_process:expr ) => {{
-        unsafe {
-            libc::kill($child_process.id() as i32, libc::SIGINT);
-        }
-    }};
-}
-
 macro_rules! with_cleanup {
     ( $action:expr, $fuzzer_process:tt ) => {{
         $action.or_else(|err| {
-            send_sigint!($fuzzer_process);
+            $fuzzer_process.stop()?;
             Err(err)
         })
     }};
@@ -83,83 +75,58 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
     config.setup_dirs(force)?;
 
     // Set up a "global" running boolean, and create a Ctrl-C handler that just sets it to false.
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
+    let rosa_should_stop = Arc::new(AtomicBool::new(false));
+    let should_stop_flag = rosa_should_stop.clone();
     ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
+        should_stop_flag.store(true, Ordering::SeqCst);
     })
     .expect("could not set Ctrl-C handler.");
 
     // Set up a hashmap to keep track of known traces via their UIDs.
     let mut known_traces = HashMap::new();
 
-    // Set up the log file for the fuzzer seed process.
-    let fuzzer_seed_log_file = config.logs_dir().join("fuzzer_seed.log");
-    let fuzzer_seed_log_stdout = File::create(&fuzzer_seed_log_file).or_else(|err| {
-        fail!(
-            "could not create log file '{}': {}.",
-            &fuzzer_seed_log_file.display(),
-            err
-        )
-    })?;
-    let fuzzer_seed_log_stderr = fuzzer_seed_log_stdout
-        .try_clone()
-        .expect("could not clone fuzzer seed log file.");
+    // Set up both fuzzer processes.
+    let mut fuzzer_seed_process = FuzzerProcess::create(
+        config.fuzzer_seed_cmd.clone(),
+        config.fuzzer_seed_env.clone(),
+        config
+            .logs_dir()
+            .clone()
+            .join("fuzzer_seed")
+            .with_extension("log"),
+    )?;
+    let mut fuzzer_run_process = FuzzerProcess::create(
+        config.fuzzer_run_cmd.clone(),
+        config.fuzzer_run_env.clone(),
+        config
+            .logs_dir()
+            .clone()
+            .join("fuzzer_run")
+            .with_extension("log"),
+    )?;
 
     // Spawn the fuzzer seed process.
     println_info!("Collecting seed traces...");
-    println_debug!(
-        "Running fuzzer with environment: {}",
-        &config
-            .fuzzer_seed_env
-            .iter()
-            .map(|(key, value)| format!("{}={}", key, value))
-            .collect::<Vec<String>>()
-            .join(", ")
-    );
-    println_debug!(
-        "Running fuzzer with command: {}",
-        &config.fuzzer_seed_cmd.join(" ")
-    );
-    let mut fuzzer_seed_process = Command::new(&config.fuzzer_seed_cmd[0])
-        .args(&config.fuzzer_seed_cmd[1..])
-        .envs(&config.fuzzer_seed_env)
-        .stdout(Stdio::from(fuzzer_seed_log_stdout))
-        .stderr(Stdio::from(fuzzer_seed_log_stderr))
-        .spawn()
-        .or(fail!(
-            "could not run fuzzer seed command. See {}.",
-            &fuzzer_seed_log_file.display()
-        ))?;
+    fuzzer_seed_process.spawn()?;
+
     // Wait for the fuzzer process (or for a Ctrl-C).
-    let mut fuzzer_seed_process_is_running = fuzzer_seed_process
-        .try_wait()
-        .expect("could not get status of fuzzer seed process.")
-        .is_none();
-    while fuzzer_seed_process_is_running && running.load(Ordering::Acquire) {
-        // Wait.
-        fuzzer_seed_process_is_running = fuzzer_seed_process
-            .try_wait()
-            .expect("could not get status of fuzzer seed process.")
-            .is_none();
-    }
+    while fuzzer_seed_process.is_running()? && !rosa_should_stop.load(Ordering::Acquire) {}
 
     // Check to see if we received a Ctrl-C while waiting.
-    if fuzzer_seed_process_is_running && !running.load(Ordering::Acquire) {
+    if fuzzer_seed_process.is_running()? && rosa_should_stop.load(Ordering::Acquire) {
         println_info!("Stopping fuzzer seed process.");
-        send_sigint!(fuzzer_seed_process);
+        fuzzer_seed_process.stop()?;
         return Ok(());
     }
+
     // Check the exit code of the fuzzer seed process.
-    fuzzer_seed_process
-        .wait()
-        .expect("failed to get exit status of fuzzer seed process.")
-        .success()
-        .then_some(())
-        .ok_or(error!(
-            "fuzzer seed command failed. See {}.",
-            &fuzzer_seed_log_file.display()
-        ))?;
+    fuzzer_seed_process.check_success().or_else(|err| {
+        fail!(
+            "fuzzer seed command failed: {}. See {}.",
+            err,
+            fuzzer_seed_process.log_file.display()
+        )
+    })?;
 
     // Collect seed traces.
     let seed_traces = trace::load_traces(
@@ -199,49 +166,14 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
             .collect::<Result<(), RosaError>>()
     })?;
 
-    // Set up the log file for the fuzzer run process.
-    let fuzzer_run_log_file = config.logs_dir().join("fuzzer_run.log");
-    let fuzzer_run_log_stdout = File::create(&fuzzer_run_log_file).or_else(|err| {
-        fail!(
-            "could not create log file '{}': {}.",
-            &fuzzer_run_log_file.display(),
-            err
-        )
-    })?;
-    let fuzzer_run_log_stderr = fuzzer_run_log_stdout
-        .try_clone()
-        .expect("could not clone fuzzer run log file.");
-
     // Spawn the fuzzer run process.
     println_info!("Starting backdoor detection...");
-    println_debug!(
-        "Running fuzzer with environment: {}",
-        &config
-            .fuzzer_run_env
-            .iter()
-            .map(|(key, value)| format!("{}={}", key, value))
-            .collect::<Vec<String>>()
-            .join(", ")
-    );
-    println_debug!(
-        "Running fuzzer with command: {}",
-        &config.fuzzer_run_cmd.join(" ")
-    );
-    let fuzzer_run_process = Command::new(&config.fuzzer_run_cmd[0])
-        .args(&config.fuzzer_run_cmd[1..])
-        .envs(&config.fuzzer_run_env)
-        .stdout(Stdio::from(fuzzer_run_log_stdout))
-        .stderr(Stdio::from(fuzzer_run_log_stderr))
-        .spawn()
-        .or(fail!(
-            "could not run fuzzer run command. See {}.",
-            &fuzzer_run_log_file.display()
-        ))?;
+    fuzzer_run_process.spawn()?;
     // Sleep for 3 seconds to give some time to the fuzzer to get started.
     thread::sleep(time::Duration::from_secs(3));
 
     // Loop until Ctrl-C.
-    while running.load(Ordering::SeqCst) {
+    while !rosa_should_stop.load(Ordering::SeqCst) {
         // Collect new traces.
         let new_traces = with_cleanup!(
             trace::load_traces(
@@ -307,7 +239,7 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
     }
 
     println_info!("Stopping fuzzer run process.");
-    send_sigint!(fuzzer_run_process);
+    fuzzer_run_process.stop()?;
 
     Ok(())
 }
@@ -321,7 +253,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(err) => {
-            eprintln!("{}", err);
+            println_error!(err);
             ExitCode::FAILURE
         }
     }
