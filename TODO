@@ -1,13 +1,3 @@
-- Check output directory
-    - Most notably, make sure that the names of the files/traces/etc check out
-
-- Add READMEs to the various output directories
-    - Kinda like AFL++, to explain how to interpret each one.
-
-- Make sure to pick up traces for ALL inputs (AFL++-centric stuff):
-    - Something to do with `out/default/_resume`?
-    - Something to do with the log message "Loaded a total of X seeds"?
-
 - Add a "discriminator mode":
     - This is mostly for analysis. It would be nice to have some way of telling which
       discriminators (i.e. edges/syscalls) caused a trace to be flagged as (non-)backdoor.
