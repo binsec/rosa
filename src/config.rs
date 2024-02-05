@@ -15,6 +15,7 @@ pub struct Config {
     pub fuzzer_run_env: HashMap<String, String>,
     pub test_input_dir: PathBuf,
     pub trace_dump_dir: PathBuf,
+    pub crashes_dir: PathBuf,
 
     pub cluster_formation_criterion: Criterion,
     pub cluster_formation_distance_metric: DistanceMetric,
@@ -89,7 +90,7 @@ impl Config {
             )?
             // Build the final configuration (if possible), or report a missing element.
             .build()
-            .or_else(|err| fail!("{}: incomplete configuration: {}", file, err))
+            .or_else(|err| fail!("{}: incomplete configuration: {}.", file, err))
     }
 
     fn build_option_from_key_value_pair<'a>(
@@ -184,6 +185,10 @@ impl Config {
             // Same as `test_input_dir`.
             "trace_dump_dir" => {
                 Ok(builder.trace_dump_dir(PathBuf::from(value.trim_matches('"').to_string())))
+            }
+            // Same as `test_input_dir`.
+            "crashes_dir" => {
+                Ok(builder.crashes_dir(PathBuf::from(value.trim_matches('"').to_string())))
             }
             // The criterion is a string, but it has to be one of the recognized criteria.
             "cluster_formation_criterion" => {

@@ -128,6 +128,16 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
         )
     })?;
 
+    // Check for crashes; if some of the inputs crash, the fuzzer will most likely get oriented
+    // towards that family of inputs, which decreases the overall chance of finding backdoors.
+    if fuzzer::fuzzer_found_crashes(&config.crashes_dir)? {
+        println_warning!(
+            "the fuzzer has detected one or more crashes in {}. This is probably hindering the \
+            thorough exploration of the binary; it is recommended that you fix the crashes and \
+            try again.",
+            &config.crashes_dir.display()
+        );
+    }
     // Collect seed traces.
     let seed_traces = trace::load_traces(
         &config.test_input_dir,
@@ -172,8 +182,24 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
     // Sleep for 3 seconds to give some time to the fuzzer to get started.
     thread::sleep(time::Duration::from_secs(3));
 
+    let mut already_warned_about_crashes = false;
     // Loop until Ctrl-C.
     while !rosa_should_stop.load(Ordering::SeqCst) {
+        if !already_warned_about_crashes {
+            // Check for crashes; if some of the inputs crash, the fuzzer will most likely get
+            // oriented towards that family of inputs, which decreases the overall chance of
+            // finding backdoors.
+            if fuzzer::fuzzer_found_crashes(&config.crashes_dir)? {
+                println_warning!(
+                    "the fuzzer has detected one or more crashes in {}. This is probably \
+                    hindering the thorough exploration of the binary; it is recommended that you \
+                    fix the crashes and try again.",
+                    &config.crashes_dir.display()
+                );
+                already_warned_about_crashes = true;
+            }
+        }
+
         // Collect new traces.
         let new_traces = with_cleanup!(
             trace::load_traces(

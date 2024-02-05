@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    fs::File,
+    fs::{self, File},
     path::PathBuf,
     process::{Child, Command, Stdio},
 };
@@ -116,4 +116,17 @@ impl FuzzerProcess {
             },
         )
     }
+}
+
+pub fn fuzzer_found_crashes(crashes_dir: &PathBuf) -> Result<bool, RosaError> {
+    fs::read_dir(crashes_dir).map_or_else(
+        |err| {
+            fail!(
+                "invalid crashes directory '{}': {}.",
+                crashes_dir.display(),
+                err
+            )
+        },
+        |res| Ok(res.filter_map(|item| item.ok()).next().is_some()),
+    )
 }

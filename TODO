@@ -1,10 +1,6 @@
 - Check output directory
     - Most notably, make sure that the names of the files/traces/etc check out
 
-- Check for crashes
-    - If crashes were found by AFL++, it's gonna generate more inputs like them, which is probably
-      not what we want, so we should notify the user
-
 - Add READMEs to the various output directories
     - Kinda like AFL++, to explain how to interpret each one.
 

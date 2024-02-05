@@ -32,6 +32,17 @@ macro_rules! info_message {
     }
 }
 
+macro_rules! warning_message {
+    ( $( $arg:tt )* ) => {
+        {
+            rosa_message!(
+                "{}",
+                format!("WARNING: {}", format!($( $arg )*)).bold().truecolor(255, 111, 0)
+            )
+        }
+    }
+}
+
 macro_rules! error_message {
     ( $file:expr, $line:expr, $message:expr ) => {{
         rosa_message!(
@@ -55,6 +66,14 @@ macro_rules! println_debug {
     ( $( $arg:tt )* ) => {
         {
             eprintln!("{}", debug_message!($( $arg )*))
+        }
+    }
+}
+
+macro_rules! println_warning {
+    ( $( $arg:tt )* ) => {
+        {
+            eprintln!("{}", warning_message!($( $arg )*))
         }
     }
 }
