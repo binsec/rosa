@@ -147,9 +147,7 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
     // Check to see if we received a Ctrl-C while waiting.
     if fuzzer_seed_process_is_running && !running.load(Ordering::Acquire) {
         println_info!("Stopping fuzzer seed process.");
-        fuzzer_seed_process
-            .kill()
-            .or_else(|err| fail!("failed to kill fuzzer seed process: {}", err))?;
+        send_sigint!(fuzzer_seed_process);
         return Ok(());
     }
     // Check the exit code of the fuzzer seed process.
