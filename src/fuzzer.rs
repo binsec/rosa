@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs::{self, File},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
 };
 
@@ -23,8 +23,8 @@ impl FuzzerProcess {
         fuzzer_env: HashMap<String, String>,
         log_file: PathBuf,
     ) -> Result<Self, RosaError> {
-        let log_stdout = File::create(&log_file).or_else(|err| {
-            fail!(
+        let log_stdout = File::create(&log_file).map_err(|err| {
+            error!(
                 "could not create log file '{}': {}.",
                 &log_file.display(),
                 err
@@ -118,7 +118,7 @@ impl FuzzerProcess {
     }
 }
 
-pub fn fuzzer_found_crashes(crashes_dir: &PathBuf) -> Result<bool, RosaError> {
+pub fn fuzzer_found_crashes(crashes_dir: &Path) -> Result<bool, RosaError> {
     fs::read_dir(crashes_dir).map_or_else(
         |err| {
             fail!(

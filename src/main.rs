@@ -120,8 +120,8 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
     }
 
     // Check the exit code of the fuzzer seed process.
-    fuzzer_seed_process.check_success().or_else(|err| {
-        fail!(
+    fuzzer_seed_process.check_success().map_err(|err| {
+        error!(
             "fuzzer seed command failed: {}. See {}.",
             err,
             fuzzer_seed_process.log_file.display()
@@ -163,17 +163,13 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
     println_info!("Created {} clusters.", clusters.len());
     // Save the decisions for the seed traces too, even though we know what they're gonna be.
     clusters.iter().try_for_each(|cluster| {
-        cluster
-            .traces
-            .iter()
-            .map(|trace| {
-                let decision = known_traces
-                    .get(&trace.uid)
-                    .expect("failed to get decision for seed trace.");
+        cluster.traces.iter().try_for_each(|trace| {
+            let decision = known_traces
+                .get(&trace.uid)
+                .expect("failed to get decision for seed trace.");
 
-                decision.save(&trace.uid, &cluster.uid, &config, &config.decisions_dir())
-            })
-            .collect::<Result<(), RosaError>>()
+            decision.save(&trace.uid, &cluster.uid, &config, &config.decisions_dir())
+        })
     })?;
 
     // Spawn the fuzzer run process.
@@ -238,7 +234,7 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
             .map(|(trace, cluster)| {
                 let decision = config.oracle.decide(
                     trace,
-                    &cluster,
+                    cluster,
                     config.oracle_criterion,
                     config.oracle_distance_metric,
                 );
@@ -252,7 +248,7 @@ fn run(config_file: &str, output_dir: &str, force: bool) -> Result<(), RosaError
 
                     // Save backdoor.
                     with_cleanup!(
-                        trace::save_trace_test_input(&trace, &config.backdoors_dir()),
+                        trace::save_trace_test_input(trace, &config.backdoors_dir()),
                         fuzzer_run_process
                     )?;
                 }

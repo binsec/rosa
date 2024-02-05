@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[derive(Copy, Clone)]
 pub enum DistanceMetric {
     Hamming,
@@ -11,16 +13,22 @@ impl DistanceMetric {
         }
     }
 
-    pub fn to_str(&self) -> &'static str {
-        match self {
-            Self::Hamming => "hamming",
-        }
-    }
-
     pub fn dist(&self, v1: &[u8], v2: &[u8]) -> u64 {
         match self {
             Self::Hamming => hamming(v1, v2),
         }
+    }
+}
+
+impl fmt::Display for DistanceMetric {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Hamming => "hamming",
+            }
+        )
     }
 }
 

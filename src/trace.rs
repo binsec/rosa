@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     fs::{self, File},
     io::Read,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use colored::Colorize;
@@ -28,18 +28,18 @@ pub struct Trace {
 impl Trace {
     pub fn load(
         uid: &str,
-        test_input_file: &PathBuf,
-        trace_dump_file: &PathBuf,
+        test_input_file: &Path,
+        trace_dump_file: &Path,
     ) -> Result<Self, RosaError> {
         let test_input = fs::read(test_input_file)
-            .or_else(|err| fail!("could not read '{}': {}.", test_input_file.display(), err))?;
+            .map_err(|err| error!("could not read '{}': {}.", test_input_file.display(), err))?;
 
         let mut file = File::open(trace_dump_file)
-            .or_else(|err| fail!("could not open '{}': {}.", trace_dump_file.display(), err))?;
+            .map_err(|err| error!("could not open '{}': {}.", trace_dump_file.display(), err))?;
         // Read the length of the edges (64 bytes, so 8 * u8).
         let mut length_buffer = [0u8; 8];
-        file.read_exact(&mut length_buffer).or_else(|err| {
-            fail!(
+        file.read_exact(&mut length_buffer).map_err(|err| {
+            error!(
                 "could not read length of edge trace from {}: {}.",
                 trace_dump_file.display(),
                 err
@@ -49,8 +49,8 @@ impl Trace {
         let edges_length = u64::from_le_bytes(length_buffer);
         // Read the length of the syscalls (64 bytes, so 8 * u8).
         let mut length_buffer = [0u8; 8];
-        file.read_exact(&mut length_buffer).or_else(|err| {
-            fail!(
+        file.read_exact(&mut length_buffer).map_err(|err| {
+            error!(
                 "could not read length of edge trace from {}: {}.",
                 trace_dump_file.display(),
                 err
@@ -66,8 +66,8 @@ impl Trace {
                 .try_into()
                 .expect("failed to convert length of edge trace into usize.")
         ];
-        file.read_exact(&mut edges).or_else(|err| {
-            fail!(
+        file.read_exact(&mut edges).map_err(|err| {
+            error!(
                 "could not read edge trace from {}: {}.",
                 trace_dump_file.display(),
                 err
@@ -81,8 +81,8 @@ impl Trace {
                 .try_into()
                 .expect("failed to convert length of edge trace into usize.")
         ];
-        file.read_exact(&mut syscalls).or_else(|err| {
-            fail!(
+        file.read_exact(&mut syscalls).map_err(|err| {
+            error!(
                 "could not read edge trace from {}: {}.",
                 trace_dump_file.display(),
                 err
@@ -160,8 +160,8 @@ impl Trace {
 }
 
 pub fn load_traces(
-    test_input_dir: &PathBuf,
-    trace_dump_dir: &PathBuf,
+    test_input_dir: &Path,
+    trace_dump_dir: &Path,
     known_traces: &mut HashMap<String, Decision>,
     skip_missing_traces: bool,
 ) -> Result<Vec<Trace>, RosaError> {
@@ -251,20 +251,16 @@ pub fn load_traces(
         .collect()
 }
 
-pub fn save_traces(traces: &[Trace], output_dir: &PathBuf) -> Result<(), RosaError> {
-    traces
-        .iter()
-        .map(|trace| {
-            save_trace_test_input(trace, output_dir)
-                .and_then(|()| save_trace_dump(trace, output_dir))
-        })
-        .collect()
+pub fn save_traces(traces: &[Trace], output_dir: &Path) -> Result<(), RosaError> {
+    traces.iter().try_for_each(|trace| {
+        save_trace_test_input(trace, output_dir).and_then(|()| save_trace_dump(trace, output_dir))
+    })
 }
 
-pub fn save_trace_test_input(trace: &Trace, output_dir: &PathBuf) -> Result<(), RosaError> {
+pub fn save_trace_test_input(trace: &Trace, output_dir: &Path) -> Result<(), RosaError> {
     let trace_test_input_file = output_dir.join(&trace.uid);
-    fs::write(&trace_test_input_file, &trace.test_input).or_else(|err| {
-        fail!(
+    fs::write(&trace_test_input_file, &trace.test_input).map_err(|err| {
+        error!(
             "could not write trace test input to {}: {}.",
             trace_test_input_file.display(),
             err
@@ -273,7 +269,7 @@ pub fn save_trace_test_input(trace: &Trace, output_dir: &PathBuf) -> Result<(), 
     Ok(())
 }
 
-fn save_trace_dump(trace: &Trace, output_dir: &PathBuf) -> Result<(), RosaError> {
+fn save_trace_dump(trace: &Trace, output_dir: &Path) -> Result<(), RosaError> {
     let mut output = vec![];
     let edges_length: u64 = trace
         .edges
@@ -293,8 +289,8 @@ fn save_trace_dump(trace: &Trace, output_dir: &PathBuf) -> Result<(), RosaError>
 
     // Write the result to a file.
     let trace_dump_file = output_dir.join(&trace.uid).with_extension("trace");
-    fs::write(&trace_dump_file, &output).or_else(|err| {
-        fail!(
+    fs::write(&trace_dump_file, &output).map_err(|err| {
+        error!(
             "could not write trace dump to {}: {}.",
             trace_dump_file.display(),
             err

@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::{
     clustering::Cluster,
     criterion::Criterion,
@@ -19,12 +21,6 @@ impl Oracle {
         }
     }
 
-    pub fn to_str(&self) -> &'static str {
-        match self {
-            Self::CompMinMax => "comp_min_max",
-        }
-    }
-
     pub fn decide(
         &self,
         trace: &Trace,
@@ -35,6 +31,18 @@ impl Oracle {
         match self {
             Self::CompMinMax => comp_min_max_oracle(trace, cluster, criterion, distance_metric),
         }
+    }
+}
+
+impl fmt::Display for Oracle {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::CompMinMax => "comp_min_max",
+            }
+        )
     }
 }
 

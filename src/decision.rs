@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf};
+use std::{fmt, fs, path::Path};
 
 use colored::Colorize;
 
@@ -16,14 +16,18 @@ pub struct Decision {
     pub reason: DecisionReason,
 }
 
-impl DecisionReason {
-    pub fn to_str(&self) -> &'static str {
-        match self {
-            Self::Seed => "seed",
-            Self::Edges => "edges",
-            Self::Syscalls => "syscalls",
-            Self::EdgesAndSyscalls => "edges-and-syscalls",
-        }
+impl fmt::Display for DecisionReason {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Seed => "seed",
+                Self::Edges => "edges",
+                Self::Syscalls => "syscalls",
+                Self::EdgesAndSyscalls => "edges-and-syscalls",
+            }
+        )
     }
 }
 
@@ -31,7 +35,7 @@ impl Decision {
     pub fn print(&self) {
         println_debug!("Decision:");
         println_debug!("  Is backdoor?: {}", &self.is_backdoor);
-        println_debug!("  Reason?: {}", &self.reason.to_str());
+        println_debug!("  Reason?: {}", &self.reason);
     }
 
     pub fn save(
@@ -39,21 +43,21 @@ impl Decision {
         trace_uid: &str,
         cluster_uid: &str,
         config: &Config,
-        output_dir: &PathBuf,
+        output_dir: &Path,
     ) -> Result<(), RosaError> {
         let content = vec![
             "{".to_string(),
             format!("    \"trace_uid\": \"{}\",", trace_uid),
             format!("    \"cluster_uid\": \"{}\",", cluster_uid),
             format!("    \"is_backdoor\": {},", self.is_backdoor),
-            format!("    \"detection_reason\": \"{}\",", self.reason.to_str()),
+            format!("    \"detection_reason\": \"{}\",", self.reason),
             format!(
                 "    \"cluster_formation_criterion\": \"{}\",",
-                &config.cluster_formation_criterion.to_str()
+                &config.cluster_formation_criterion
             ),
             format!(
                 "    \"cluster_formation_distance_metric\": \"{}\",",
-                &config.cluster_formation_distance_metric.to_str()
+                &config.cluster_formation_distance_metric
             ),
             format!(
                 "    \"cluster_formation_edge_tolerance\": {},",
@@ -65,27 +69,27 @@ impl Decision {
             ),
             format!(
                 "    \"cluster_selection_criterion\": \"{}\",",
-                &config.cluster_selection_criterion.to_str()
+                &config.cluster_selection_criterion
             ),
             format!(
                 "    \"cluster_selection_distance_metric\": \"{}\",",
-                &config.cluster_selection_distance_metric.to_str()
+                &config.cluster_selection_distance_metric
             ),
-            format!("    \"oracle\": \"{}\",", &config.oracle.to_str()),
+            format!("    \"oracle\": \"{}\",", &config.oracle),
             format!(
                 "    \"oracle_criterion\": \"{}\",",
-                &config.oracle_criterion.to_str()
+                &config.oracle_criterion
             ),
             format!(
                 "    \"oracle_distance_metric\": \"{}\"",
-                &config.oracle_distance_metric.to_str()
+                &config.oracle_distance_metric
             ),
             "}\n".to_string(),
         ];
         let decision_file = output_dir.join(trace_uid).with_extension("json");
 
-        fs::write(&decision_file, content.join("\n")).or_else(|err| {
-            fail!(
+        fs::write(&decision_file, content.join("\n")).map_err(|err| {
+            error!(
                 "could not save decision to file {}: {}.",
                 decision_file.display(),
                 err

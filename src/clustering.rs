@@ -1,4 +1,4 @@
-use std::{cmp, fs, path::PathBuf};
+use std::{cmp, fs, path::Path};
 
 use crate::{
     criterion::Criterion, distance_metric::DistanceMetric, error::RosaError, trace::Trace,
@@ -81,7 +81,7 @@ pub fn get_most_similar_cluster<'a>(
         },
     );
 
-    cluster_index.and_then(|index| Some(&clusters[index]))
+    cluster_index.map(|index| &clusters[index])
 }
 
 pub fn cluster_traces(
@@ -92,7 +92,7 @@ pub fn cluster_traces(
     syscall_tolerance: u64,
 ) -> Vec<Cluster> {
     traces.iter().fold(Vec::new(), |mut clusters, trace| {
-        let result = get_most_similar_cluster(&trace, &clusters, criterion, distance_metric).map(
+        let result = get_most_similar_cluster(trace, &clusters, criterion, distance_metric).map(
             |most_similar_cluster| {
                 let max_edge_distance = most_similar_cluster
                     .traces
@@ -182,7 +182,7 @@ pub fn cluster_traces(
     })
 }
 
-pub fn save_clusters(clusters: &[Cluster], output_dir: &PathBuf) -> Result<(), RosaError> {
+pub fn save_clusters(clusters: &[Cluster], output_dir: &Path) -> Result<(), RosaError> {
     clusters.iter().try_for_each(|cluster| {
         let trace_uids: Vec<&str> = cluster
             .traces
@@ -190,8 +190,8 @@ pub fn save_clusters(clusters: &[Cluster], output_dir: &PathBuf) -> Result<(), R
             .map(|trace| trace.uid.as_ref())
             .collect();
         let cluster_file = output_dir.join(&cluster.uid).with_extension("txt");
-        fs::write(&cluster_file, format!("{}\n", trace_uids.join("\n"))).or_else(|err| {
-            fail!(
+        fs::write(&cluster_file, format!("{}\n", trace_uids.join("\n"))).map_err(|err| {
+            error!(
                 "could not save cluster to file {}: {}.",
                 cluster_file.display(),
                 err

@@ -41,7 +41,7 @@ impl Config {
 
     pub fn load(file: &str, output_dir: &str) -> Result<Self, RosaError> {
         let source = fs::read_to_string(file)
-            .or_else(|err| fail!("invalid config file '{}': {}.", file, err))?;
+            .map_err(|err| error!("invalid config file '{}': {}.", file, err))?;
 
         // Set the defaults for the config.
         // This builder will be passed around, parsing different options of the config as it goes
@@ -62,7 +62,7 @@ impl Config {
         // Parse the `.ini` file.
         source
             // Each line is its own option, and spaces on either side of the line are ignored.
-            .split("\n")
+            .split('\n')
             .map(|line| line.trim())
             // Enumerate, to get the line number (for error reporting).
             .enumerate()
@@ -82,15 +82,12 @@ impl Config {
             })
             // Aggregate all of the key-value pairs to build the final configuration. We start with
             // the default configuration, and tack on the parsed option on every iteration.
-            .fold(
-                Ok(default_config_builder),
-                |builder, (index, (key, value))| {
-                    Self::build_option_from_key_value_pair(builder, key, value, file, index + 1)
-                },
-            )?
+            .try_fold(default_config_builder, |builder, (index, (key, value))| {
+                Self::build_option_from_key_value_pair(Ok(builder), key, value, file, index + 1)
+            })?
             // Build the final configuration (if possible), or report a missing element.
             .build()
-            .or_else(|err| fail!("{}: incomplete configuration: {}.", file, err))
+            .map_err(|err| error!("{}: incomplete configuration: {}.", file, err))
     }
 
     fn build_option_from_key_value_pair<'a>(
@@ -129,7 +126,7 @@ impl Config {
             "fuzzer_seed_cmd" => Ok(builder.fuzzer_seed_cmd(
                 value
                     .trim_matches('"')
-                    .split(" ")
+                    .split(' ')
                     .map(|arg| arg.to_string())
                     .collect(),
             )),
@@ -138,7 +135,7 @@ impl Config {
             "fuzzer_seed_env" => Ok(builder.fuzzer_seed_env(
                 value
                     .trim_matches('"')
-                    .split(" ")
+                    .split(' ')
                     .map(|arg| arg.to_string())
                     .filter_map(|arg| {
                         let mut splitter = arg.splitn(2, '=');
@@ -156,7 +153,7 @@ impl Config {
             "fuzzer_run_cmd" => Ok(builder.fuzzer_run_cmd(
                 value
                     .trim_matches('"')
-                    .split(" ")
+                    .split(' ')
                     .map(|arg| arg.to_string())
                     .collect(),
             )),
@@ -164,7 +161,7 @@ impl Config {
             "fuzzer_run_env" => Ok(builder.fuzzer_run_env(
                 value
                     .trim_matches('"')
-                    .split(" ")
+                    .split(' ')
                     .map(|arg| arg.to_string())
                     .filter_map(|arg| {
                         let mut splitter = arg.splitn(2, '=');
@@ -219,11 +216,10 @@ impl Config {
             "cluster_formation_edge_tolerance" => value
                 .parse::<u64>()
                 .map(|edge_tolerance| builder.cluster_formation_edge_tolerance(edge_tolerance))
-                .or_else(|_| {
-                    fail!(
-                        "{}: invalid edge tolerance '{}'.",
-                        config_file_position,
-                        value
+                .map_err(|_| {
+                    error!(
+                        "{}: invalid integer for edge tolerance '{}'.",
+                        config_file_position, value
                     )
                 }),
             // Same as `cluster_formation_edge_tolerance`.
@@ -232,11 +228,10 @@ impl Config {
                 .map(|syscall_tolerance| {
                     builder.cluster_formation_syscall_tolerance(syscall_tolerance)
                 })
-                .or_else(|_| {
-                    fail!(
-                        "{}: invalid syscall tolerance '{}'.",
-                        config_file_position,
-                        value
+                .map_err(|_| {
+                    error!(
+                        "{}: invalid integer for syscall tolerance '{}'.",
+                        config_file_position, value
                     )
                 }),
             // Same as `cluster_formation_criterion`.
@@ -311,8 +306,8 @@ impl Config {
                 )?;
             }
 
-            fs::remove_dir_all(&self.output_dir).or_else(|err| {
-                fail!(
+            fs::remove_dir_all(&self.output_dir).map_err(|err| {
+                error!(
                     "could not remove '{}': {}.",
                     &self.output_dir.display(),
                     err
@@ -329,8 +324,8 @@ impl Config {
             &self.logs_dir(),
             &self.traces_dir(),
         ] {
-            fs::create_dir(&dir)
-                .or_else(|err| fail!("could not create '{}': {}", &dir.display(), err))?;
+            fs::create_dir(dir)
+                .map_err(|err| error!("could not create '{}': {}", &dir.display(), err))?;
         }
 
         Ok(())
