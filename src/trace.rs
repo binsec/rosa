@@ -175,8 +175,8 @@ pub fn load_traces(
                 )
             },
             |res| {
-                // Ignore files/dirs we cannot read.
                 Ok(res
+                    // Ignore files/dirs we cannot read.
                     .filter_map(|item| item.ok())
                     .map(|item| item.path())
                     // Only keep files.
