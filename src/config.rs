@@ -126,7 +126,7 @@ impl Config {
         })
     }
 
-    pub fn load_exp(file: &Path) -> Result<Self, RosaError> {
+    pub fn load(file: &Path) -> Result<Self, RosaError> {
         let config_json = fs::read_to_string(file)
             .map_err(|err| error!("failed to read configuration from file: {}.", err))?;
 

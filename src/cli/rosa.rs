@@ -1,5 +1,3 @@
-use colored::Colorize;
-
 use std::{
     collections::HashMap,
     path::PathBuf,
@@ -12,6 +10,7 @@ use std::{
 };
 
 use clap::Parser;
+use colored::Colorize;
 
 use rosa::{
     clustering,
@@ -60,7 +59,7 @@ macro_rules! with_cleanup {
 fn run(config_file: &str, force: bool) -> Result<(), RosaError> {
     // Load the configuration and set up the output directories.
     let config_file_path = PathBuf::from(config_file);
-    let config = Config::load_exp(&config_file_path)?;
+    let config = Config::load(&config_file_path)?;
     config.setup_dirs(force)?;
     config.save(&config.output_dir)?;
 
