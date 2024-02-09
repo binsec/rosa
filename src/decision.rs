@@ -22,11 +22,16 @@ pub struct Decision {
 
 impl Decision {
     pub fn load(file: &Path) -> Result<Self, RosaError> {
-        let decision_json = fs::read_to_string(file)
-            .map_err(|err| error!("failed to read decision from file: {}.", err))?;
+        let decision_json = fs::read_to_string(file).map_err(|err| {
+            error!(
+                "could not read decision from file {}: {}.",
+                file.display(),
+                err
+            )
+        })?;
 
         serde_json::from_str(&decision_json)
-            .map_err(|err| error!("failed to deserialize decision JSON: {}.", err))
+            .map_err(|err| error!("could not deserialize decision JSON: {}.", err))
     }
 
     pub fn save(&self, output_dir: &Path) -> Result<(), RosaError> {
