@@ -128,8 +128,8 @@ pub fn load_traces(
                     // Ignore files/dirs we cannot read.
                     .filter_map(|item| item.ok())
                     .map(|item| item.path())
-                    // Only keep files.
-                    .filter(|path| path.is_file())
+                    // Only keep files that do not end in `.trace`.
+                    .filter(|path| path.is_file() && path.extension().is_none())
                     // Only keep new traces.
                     .filter(|path| {
                         let trace_uid = path
@@ -259,12 +259,12 @@ impl fmt::Display for Trace {
         let printable_edges = format!(
             "{} edges ({:.2}%)",
             nb_edges,
-            (nb_edges as f64) / (self.edges.len() as f64)
+            (nb_edges as f64) / (self.edges.len() as f64) * 100.0
         );
         let printable_syscalls = format!(
             "{} syscalls ({:.2}%)",
             nb_syscalls,
-            (nb_syscalls as f64) / (self.syscalls.len() as f64)
+            (nb_syscalls as f64) / (self.syscalls.len() as f64) * 100.0
         );
 
         write!(
