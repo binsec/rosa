@@ -18,3 +18,7 @@ serde_json = "1.0.113"
 [[bin]]
 name = "rosa"
 path = "src/cli/rosa.rs"
+
+[[bin]]
+name = "rosa-evaluate"
+path = "src/cli/rosa_evaluate.rs"
