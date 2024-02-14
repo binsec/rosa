@@ -27,11 +27,21 @@ impl Trace {
         test_input_file: &Path,
         trace_dump_file: &Path,
     ) -> Result<Self, RosaError> {
-        let test_input = fs::read(test_input_file)
-            .map_err(|err| error!("could not read '{}': {}.", test_input_file.display(), err))?;
+        let test_input = fs::read(test_input_file).map_err(|err| {
+            error!(
+                "could not read test input file '{}': {}.",
+                test_input_file.display(),
+                err
+            )
+        })?;
 
-        let mut file = File::open(trace_dump_file)
-            .map_err(|err| error!("could not open '{}': {}.", trace_dump_file.display(), err))?;
+        let mut file = File::open(trace_dump_file).map_err(|err| {
+            error!(
+                "could not open trace dump file '{}': {}.",
+                trace_dump_file.display(),
+                err
+            )
+        })?;
         // Read the length of the edges (64 bytes, so 8 * u8).
         let mut length_buffer = [0u8; 8];
         file.read_exact(&mut length_buffer).map_err(|err| {
