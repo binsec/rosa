@@ -50,16 +50,38 @@ struct Cli {
     )]
     target_program_env: Option<String>,
 
+    /// Print the UIDs of the true positive traces.
+    #[arg(short = 't', long = "true-positives")]
+    print_true_positives: bool,
+
+    /// Print the UIDs of the false positive traces.
+    #[arg(short = 'f', long = "false-positives")]
+    print_false_positives: bool,
+
+    /// Print the UIDs of the true negative traces.
+    #[arg(short = 'T', long = "true-negatives")]
+    print_true_negatives: bool,
+
+    /// Print the UIDs of the false negative traces.
+    #[arg(short = 'F', long = "false-negatives")]
+    print_false_negatives: bool,
+
     /// The trace to evaluate (can be used multiple times).
-    #[arg(short = 't', long = "trace-uid", value_name = "TRACE_UID", action = ArgAction::Append)]
+    #[arg(short = 'u', long = "trace-uid", value_name = "TRACE_UID", action = ArgAction::Append)]
     trace_uids: Vec<String>,
 }
 
-enum Sample {
+#[derive(PartialEq)]
+enum SampleKind {
     TruePositive,
     FalsePositive,
     TrueNegative,
     FalseNegative,
+}
+
+struct Sample {
+    uid: String,
+    kind: SampleKind,
 }
 
 struct Stats {
@@ -79,18 +101,18 @@ impl Stats {
         }
     }
 
-    pub fn add_sample(&mut self, sample: Sample) {
-        match sample {
-            Sample::TruePositive => {
+    pub fn add_sample(&mut self, sample: &Sample) {
+        match sample.kind {
+            SampleKind::TruePositive => {
                 self.true_positives += 1;
             }
-            Sample::FalsePositive => {
+            SampleKind::FalsePositive => {
                 self.false_positives += 1;
             }
-            Sample::TrueNegative => {
+            SampleKind::TrueNegative => {
                 self.true_negatives += 1;
             }
-            Sample::FalseNegative => {
+            SampleKind::FalseNegative => {
                 self.false_negatives += 1;
             }
         }
@@ -135,22 +157,31 @@ fn check_decision(
         .output()
         .map_err(|err| error!("failed to run target program: {}", err))?;
 
-    let backdoor = String::from_utf8(output.stderr)
-        .map_or(false, |stderr| stderr.contains("***BACKDOOR TRIGGERED***"));
+    let backdoor = String::from_utf8_lossy(&output.stderr).contains("***BACKDOOR TRIGGERED***");
 
-    Ok(match (backdoor, decision.is_backdoor) {
-        (true, true) => Sample::TruePositive,
-        (true, false) => Sample::FalseNegative,
-        (false, true) => Sample::FalsePositive,
-        (false, false) => Sample::TrueNegative,
+    let kind = match (backdoor, decision.is_backdoor) {
+        (true, true) => SampleKind::TruePositive,
+        (true, false) => SampleKind::FalseNegative,
+        (false, true) => SampleKind::FalsePositive,
+        (false, false) => SampleKind::TrueNegative,
+    };
+
+    Ok(Sample {
+        uid: decision.trace_uid.clone(),
+        kind,
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run(
     output_dir: &Path,
     target_program_cmd: Option<String>,
     target_program_env: Option<String>,
     trace_uids: &[String],
+    print_true_positives: bool,
+    print_false_positives: bool,
+    print_true_negatives: bool,
+    print_false_negatives: bool,
 ) -> Result<(), RosaError> {
     let config = Config::load(&output_dir.join("config").with_extension("json"))?;
 
@@ -198,18 +229,23 @@ fn run(
         })
         .collect::<Result<Vec<Decision>, RosaError>>()?;
 
-    let stats = decisions
+    let results: Vec<Sample> = decisions
         .iter()
-        .try_fold(Stats::new(), |mut stats, decision| {
-            stats.add_sample(check_decision(
+        .map(|decision| {
+            check_decision(
                 &selected_cmd,
                 &selected_env,
                 &output_dir.join("traces").join(&decision.trace_uid),
                 decision,
-            )?);
+            )
+        })
+        .collect::<Result<Vec<Sample>, RosaError>>()?;
 
-            Ok(stats)
-        })?;
+    let stats = results.iter().try_fold(Stats::new(), |mut stats, sample| {
+        stats.add_sample(sample);
+
+        Ok(stats)
+    })?;
 
     println_info!("{} traces evaluated:", stats.total_samples());
     println_info!(
@@ -248,6 +284,42 @@ fn run(
         }
     );
 
+    if print_true_positives {
+        println_info!("");
+        println_info!("True positive traces:");
+        results
+            .iter()
+            .filter(|result| result.kind == SampleKind::TruePositive)
+            .for_each(|result| println_info!("  {}", result.uid));
+    }
+
+    if print_false_positives {
+        println_info!("");
+        println_info!("False positive traces:");
+        results
+            .iter()
+            .filter(|result| result.kind == SampleKind::FalsePositive)
+            .for_each(|result| println_info!("  {}", result.uid));
+    }
+
+    if print_true_negatives {
+        println_info!("");
+        println_info!("True negative traces:");
+        results
+            .iter()
+            .filter(|result| result.kind == SampleKind::TrueNegative)
+            .for_each(|result| println_info!("  {}", result.uid));
+    }
+
+    if print_false_negatives {
+        println_info!("");
+        println_info!("False negative traces:");
+        results
+            .iter()
+            .filter(|result| result.kind == SampleKind::FalseNegative)
+            .for_each(|result| println_info!("  {}", result.uid));
+    }
+
     Ok(())
 }
 
@@ -259,6 +331,10 @@ fn main() -> ExitCode {
         cli.target_program_cmd,
         cli.target_program_env,
         &cli.trace_uids,
+        cli.print_true_positives,
+        cli.print_false_positives,
+        cli.print_true_negatives,
+        cli.print_false_negatives,
     ) {
         Ok(_) => ExitCode::SUCCESS,
         Err(err) => {
