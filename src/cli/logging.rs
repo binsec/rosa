@@ -10,12 +10,12 @@ macro_rules! rosa_message {
     }
 }
 
-macro_rules! debug_message {
+macro_rules! verbose_message {
     ( $( $arg:tt )* ) => {
         {
             rosa_message!(
                 "{}",
-                format!("DEBUG: {}", format!($( $arg )*)).dimmed()
+                format!("{}", format!($( $arg )*)).dimmed()
             )
         }
     }
@@ -62,10 +62,10 @@ macro_rules! println_info {
     }
 }
 
-macro_rules! println_debug {
+macro_rules! println_verbose {
     ( $( $arg:tt )* ) => {
         {
-            eprintln!("{}", debug_message!($( $arg )*))
+            eprintln!("{}", verbose_message!($( $arg )*))
         }
     }
 }

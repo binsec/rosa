@@ -49,16 +49,6 @@ impl Decision {
     }
 }
 
-impl fmt::Display for Decision {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Decision\n  Is backdoor? {}\n  Reason? {}",
-            self.is_backdoor, self.reason
-        )
-    }
-}
-
 impl fmt::Display for DecisionReason {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(

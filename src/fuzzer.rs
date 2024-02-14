@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    fmt,
     fs::{self, File},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
@@ -101,6 +100,18 @@ impl FuzzerProcess {
             },
         )
     }
+
+    pub fn env_as_string(&self) -> String {
+        self.fuzzer_env
+            .iter()
+            .map(|(key, value)| format!("{}={}", key, value))
+            .collect::<Vec<String>>()
+            .join(" ")
+    }
+
+    pub fn cmd_as_string(&self) -> String {
+        self.fuzzer_cmd.join(" ")
+    }
 }
 
 pub fn fuzzer_found_crashes(crashes_dir: &Path) -> Result<bool, RosaError> {
@@ -114,22 +125,4 @@ pub fn fuzzer_found_crashes(crashes_dir: &Path) -> Result<bool, RosaError> {
         },
         |res| Ok(res.filter_map(|item| item.ok()).next().is_some()),
     )
-}
-
-impl fmt::Display for FuzzerProcess {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let printable_env = &self
-            .fuzzer_env
-            .iter()
-            .map(|(key, value)| format!("{}={}", key, value))
-            .collect::<Vec<String>>()
-            .join(", ");
-        let printable_cmd = &self.fuzzer_cmd.join(" ");
-
-        write!(
-            f,
-            "Fuzzer process:\n  Env: {}\n  Cmd: {}",
-            printable_env, printable_cmd
-        )
-    }
 }

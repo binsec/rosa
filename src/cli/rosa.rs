@@ -45,6 +45,10 @@ struct Cli {
     /// Force the creation of the output directory, potentially overwriting existing results.
     #[arg(short = 'f', long = "force")]
     force: bool,
+
+    /// Be more verbose.
+    #[arg(short = 'v', long = "verbose")]
+    verbose: bool,
 }
 
 macro_rules! with_cleanup {
@@ -56,7 +60,7 @@ macro_rules! with_cleanup {
     }};
 }
 
-fn run(config_file: &str, force: bool) -> Result<(), RosaError> {
+fn run(config_file: &str, force: bool, verbose: bool) -> Result<(), RosaError> {
     // Load the configuration and set up the output directories.
     let config_file_path = PathBuf::from(config_file);
     let config = Config::load(&config_file_path)?;
@@ -96,7 +100,11 @@ fn run(config_file: &str, force: bool) -> Result<(), RosaError> {
 
     // Spawn the fuzzer seed process.
     println_info!("Collecting seed traces...");
-    println_debug!("{}", fuzzer_seed_process);
+    if verbose {
+        println_verbose!("Fuzzer seed process:");
+        println_verbose!("  Env: {}", fuzzer_seed_process.env_as_string());
+        println_verbose!("  Cmd: {}", fuzzer_seed_process.cmd_as_string());
+    }
     fuzzer_seed_process.spawn()?;
 
     // Wait for the fuzzer process (or for a Ctrl-C).
@@ -167,8 +175,13 @@ fn run(config_file: &str, force: bool) -> Result<(), RosaError> {
 
     // Spawn the fuzzer run process.
     println_info!("Starting backdoor detection...");
-    println_debug!("{}", fuzzer_run_process);
+    if verbose {
+        println_verbose!("Fuzzer run process:");
+        println_verbose!("  Env: {}", fuzzer_run_process.env_as_string());
+        println_verbose!("  Cmd: {}", fuzzer_run_process.cmd_as_string());
+    }
     fuzzer_run_process.spawn()?;
+    let mut nb_backdoors = 0;
     // Sleep for 3 seconds to give some time to the fuzzer to get started.
     thread::sleep(time::Duration::from_secs(3));
 
@@ -236,9 +249,21 @@ fn run(config_file: &str, force: bool) -> Result<(), RosaError> {
             })
             .try_for_each(|(trace, decision)| {
                 if decision.is_backdoor {
-                    println_info!("!!!! BACKDOOR FOUND !!!!");
-                    println_debug!("{}", trace);
-                    println_debug!("{}", decision);
+                    nb_backdoors += 1;
+                    println_info!(
+                        "!!!! BACKDOOR FOUND !!!! (backdoors: {} | traces: {})",
+                        nb_backdoors,
+                        known_traces.len()
+                    );
+
+                    if verbose {
+                        println_verbose!("Trace {}:", trace.uid);
+                        println_verbose!("  Test input: {}", trace.printable_test_input());
+                        println_verbose!("  Edges: {}", trace.edges_as_string());
+                        println_verbose!("  Syscalls: {}", trace.syscalls_as_string());
+                        println_verbose!("  Most similar cluster: {}", decision.cluster_uid);
+                        println_verbose!("  Decision reason: {}", decision.reason);
+                    }
 
                     // Save backdoor.
                     with_cleanup!(
@@ -260,7 +285,7 @@ fn run(config_file: &str, force: bool) -> Result<(), RosaError> {
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    match run(&cli.config_file, cli.force) {
+    match run(&cli.config_file, cli.force, cli.verbose) {
         Ok(_) => {
             println_info!("Bye :)");
             ExitCode::SUCCESS
@@ -279,6 +304,6 @@ mod tests {
     #[test]
     fn verify_cli() {
         use clap::CommandFactory;
-        Cli::command().debug_assert()
+        Cli::command().verbose_assert()
     }
 }

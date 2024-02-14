@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    fmt,
     fs::{self, File},
     io::Read,
     path::{Path, PathBuf},
@@ -115,6 +114,34 @@ impl Trace {
             )
             .collect::<Vec<String>>()
             .join("")
+    }
+
+    pub fn edges_as_string(&self) -> String {
+        let nb_edges = self
+            .edges
+            .clone()
+            .into_iter()
+            .fold(0u64, |acc, edge| acc + (edge as u64));
+
+        format!(
+            "{} edges ({:.2}%)",
+            nb_edges,
+            (nb_edges as f64) / (self.edges.len() as f64) * 100.0
+        )
+    }
+
+    pub fn syscalls_as_string(&self) -> String {
+        let nb_syscalls = self
+            .syscalls
+            .clone()
+            .into_iter()
+            .fold(0u64, |acc, syscall| acc + (syscall as u64));
+
+        format!(
+            "{} syscalls ({:.2}%)",
+            nb_syscalls,
+            (nb_syscalls as f64) / (self.syscalls.len() as f64) * 100.0
+        )
     }
 }
 
@@ -251,38 +278,4 @@ fn save_trace_dump(trace: &Trace, output_dir: &Path) -> Result<(), RosaError> {
     })?;
 
     Ok(())
-}
-
-impl fmt::Display for Trace {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let nb_edges = self
-            .edges
-            .clone()
-            .into_iter()
-            .fold(0u64, |acc, edge| acc + (edge as u64));
-        let nb_syscalls = self
-            .syscalls
-            .clone()
-            .into_iter()
-            .fold(0u64, |acc, syscall| acc + (syscall as u64));
-
-        let printable_edges = format!(
-            "{} edges ({:.2}%)",
-            nb_edges,
-            (nb_edges as f64) / (self.edges.len() as f64) * 100.0
-        );
-        let printable_syscalls = format!(
-            "{} syscalls ({:.2}%)",
-            nb_syscalls,
-            (nb_syscalls as f64) / (self.syscalls.len() as f64) * 100.0
-        );
-
-        write!(
-            f,
-            "Trace:\n  Test input: {}\n  Edges {}\n  Syscalls: {}",
-            self.printable_test_input(),
-            printable_edges,
-            printable_syscalls
-        )
-    }
 }
