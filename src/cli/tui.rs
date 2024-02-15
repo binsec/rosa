@@ -40,6 +40,8 @@ struct RosaTuiStats {
     selection_criterion: Criterion,
     edge_tolerance: u64,
     syscall_tolerance: u64,
+    config_file_path: String,
+    output_dir_path: String,
     seed_env: String,
     seed_cmd: String,
     run_env: String,
@@ -48,7 +50,7 @@ struct RosaTuiStats {
 }
 
 impl RosaTuiStats {
-    pub fn new() -> Self {
+    pub fn new(config_path: &Path, output_dir_path: &Path) -> Self {
         Self {
             start_time: None,
             last_backdoor_time: None,
@@ -64,6 +66,8 @@ impl RosaTuiStats {
             selection_criterion: Criterion::EdgesAndSyscalls,
             edge_tolerance: 0,
             syscall_tolerance: 0,
+            config_file_path: config_path.display().to_string(),
+            output_dir_path: output_dir_path.join("").display().to_string(),
             seed_env: "".to_string(),
             seed_cmd: "".to_string(),
             run_env: "".to_string(),
@@ -250,13 +254,13 @@ impl RosaTuiStats {
 
 impl RosaTui {
     const MIN_WIDTH: u16 = 92;
-    const HEIGHT: u16 = 22;
+    const HEIGHT: u16 = 24;
 
-    pub fn new(monitor_dir: &Path) -> Self {
+    pub fn new(config_path: &Path, monitor_dir: &Path) -> Self {
         RosaTui {
             monitor_dir: monitor_dir.to_path_buf(),
             terminal: None,
-            stats: RosaTuiStats::new(),
+            stats: RosaTuiStats::new(config_path, monitor_dir),
         }
     }
 
@@ -483,12 +487,22 @@ impl RosaTui {
         .block(clustering_block);
 
         // Truncate the configuration options if needed, to make sure they fit on the TUI.
+        let mut config_file = stats.config_file_path.clone();
+        let mut output_dir = stats.output_dir_path.clone();
         let mut seed_env = stats.seed_env.clone();
         let mut seed_cmd = stats.seed_cmd.clone();
         let mut run_env = stats.run_env.clone();
         let mut run_cmd = stats.run_cmd.clone();
         // -3 for the borders and left padding.
         let max_text_width = (frame.size().width - 14) as usize;
+        if config_file.len() > max_text_width {
+            config_file.truncate(max_text_width - 3);
+            config_file += "...";
+        }
+        if output_dir.len() > max_text_width {
+            output_dir.truncate(max_text_width - 3);
+            output_dir += "...";
+        }
         if seed_env.len() > max_text_width {
             seed_env.truncate(max_text_width - 3);
             seed_env += "...";
@@ -508,6 +522,14 @@ impl RosaTui {
 
         // Create the configuration info.
         let mut config_lines = vec![
+            Line::from(vec![
+                Span::styled("   config: ", label_style),
+                config_file.into(),
+            ]),
+            Line::from(vec![
+                Span::styled("   output: ", label_style),
+                output_dir.into(),
+            ]),
             Line::from(vec![
                 Span::styled(" seed env: ", label_style),
                 seed_env.into(),

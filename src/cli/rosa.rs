@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::ExitCode,
     sync::mpsc::{self, TryRecvError},
     sync::{
@@ -44,7 +44,7 @@ struct Cli {
         default_value = "config.json",
         value_name = "FILE"
     )]
-    config_file: String,
+    config_file: PathBuf,
 
     /// Force the creation of the output directory, potentially overwriting existing results.
     #[arg(short = 'f', long = "force")]
@@ -68,10 +68,9 @@ macro_rules! with_cleanup {
     }};
 }
 
-fn run(config_file: &str, force: bool, verbose: bool, no_tui: bool) -> Result<(), RosaError> {
+fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(), RosaError> {
     // Load the configuration and set up the output directories.
-    let config_file_path = PathBuf::from(config_file);
-    let config = Config::load(&config_file_path)?;
+    let config = Config::load(config_file)?;
     config.setup_dirs(force)?;
     config.save(&config.output_dir)?;
 
@@ -198,10 +197,11 @@ fn run(config_file: &str, force: bool, verbose: bool, no_tui: bool) -> Result<()
 
     // Start the TUI thread.
     let monitor_dir = config.output_dir.clone();
+    let config_file_path = config_file.to_path_buf();
     let tui_thread_handle = match no_tui {
         true => None,
         false => Some(thread::spawn(move || -> Result<(), RosaError> {
-            let mut tui = RosaTui::new(&monitor_dir);
+            let mut tui = RosaTui::new(&config_file_path, &monitor_dir);
             tui.start()?;
 
             loop {
