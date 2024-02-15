@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     path::PathBuf,
     process::ExitCode,
+    sync::mpsc::{self, TryRecvError},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -21,8 +22,11 @@ use rosa::{
     trace,
 };
 
+use crate::tui::RosaTui;
+
 #[macro_use]
 mod logging;
+mod tui;
 
 #[derive(Parser)]
 #[command(
@@ -49,6 +53,10 @@ struct Cli {
     /// Be more verbose.
     #[arg(short = 'v', long = "verbose")]
     verbose: bool,
+
+    /// Disable the TUI and display more linear output on the console.
+    #[arg(long = "no-tui")]
+    no_tui: bool,
 }
 
 macro_rules! with_cleanup {
@@ -60,7 +68,7 @@ macro_rules! with_cleanup {
     }};
 }
 
-fn run(config_file: &str, force: bool, verbose: bool) -> Result<(), RosaError> {
+fn run(config_file: &str, force: bool, verbose: bool, no_tui: bool) -> Result<(), RosaError> {
     // Load the configuration and set up the output directories.
     let config_file_path = PathBuf::from(config_file);
     let config = Config::load(&config_file_path)?;
@@ -97,6 +105,9 @@ fn run(config_file: &str, force: bool, verbose: bool) -> Result<(), RosaError> {
             .join("fuzzer_run")
             .with_extension("log"),
     )?;
+
+    // Setup communication channel with TUI.
+    let (tx, rx) = mpsc::channel::<()>();
 
     // Spawn the fuzzer seed process.
     println_info!("Collecting seed traces...");
@@ -185,10 +196,39 @@ fn run(config_file: &str, force: bool, verbose: bool) -> Result<(), RosaError> {
     // Sleep for 3 seconds to give some time to the fuzzer to get started.
     thread::sleep(time::Duration::from_secs(3));
 
+    // Start the TUI thread.
+    let monitor_dir = config.output_dir.clone();
+    let tui_thread_handle = match no_tui {
+        true => None,
+        false => Some(thread::spawn(move || -> Result<(), RosaError> {
+            let mut tui = RosaTui::new(&monitor_dir);
+            tui.start()?;
+
+            loop {
+                tui.render()?;
+
+                // Give some time to the renderer to do its job.
+                thread::sleep(time::Duration::from_millis(200));
+
+                // Check for a signal to kill thread.
+                match rx.try_recv() {
+                    Ok(_) | Err(TryRecvError::Disconnected) => {
+                        break;
+                    }
+                    Err(TryRecvError::Empty) => {}
+                }
+            }
+
+            tui.stop()?;
+
+            Ok(())
+        })),
+    };
+
     let mut already_warned_about_crashes = false;
     // Loop until Ctrl-C.
     while !rosa_should_stop.load(Ordering::SeqCst) {
-        if !already_warned_about_crashes {
+        if !already_warned_about_crashes && no_tui {
             // Check for crashes; if some of the inputs crash, the fuzzer will most likely get
             // oriented towards that family of inputs, which decreases the overall chance of
             // finding backdoors.
@@ -249,20 +289,22 @@ fn run(config_file: &str, force: bool, verbose: bool) -> Result<(), RosaError> {
             })
             .try_for_each(|(trace, decision)| {
                 if decision.is_backdoor {
-                    nb_backdoors += 1;
-                    println_info!(
-                        "!!!! BACKDOOR FOUND !!!! (backdoors: {} | traces: {})",
-                        nb_backdoors,
-                        known_traces.len()
-                    );
+                    if no_tui {
+                        nb_backdoors += 1;
+                        println_info!(
+                            "!!!! BACKDOOR FOUND !!!! (backdoors: {} | traces: {})",
+                            nb_backdoors,
+                            known_traces.len()
+                        );
 
-                    if verbose {
-                        println_verbose!("Trace {}:", trace.uid);
-                        println_verbose!("  Test input: {}", trace.printable_test_input());
-                        println_verbose!("  Edges: {}", trace.edges_as_string());
-                        println_verbose!("  Syscalls: {}", trace.syscalls_as_string());
-                        println_verbose!("  Most similar cluster: {}", decision.cluster_uid);
-                        println_verbose!("  Decision reason: {}", decision.reason);
+                        if verbose {
+                            println_verbose!("Trace {}:", trace.uid);
+                            println_verbose!("  Test input: {}", trace.printable_test_input());
+                            println_verbose!("  Edges: {}", trace.edges_as_string());
+                            println_verbose!("  Syscalls: {}", trace.syscalls_as_string());
+                            println_verbose!("  Most similar cluster: {}", decision.cluster_uid);
+                            println_verbose!("  Decision reason: {}", decision.reason);
+                        }
                     }
 
                     // Save backdoor.
@@ -276,6 +318,11 @@ fn run(config_file: &str, force: bool, verbose: bool) -> Result<(), RosaError> {
             })?;
     }
 
+    // Shut down TUI thread.
+    let _ = tx.send(());
+    if let Some(handle) = tui_thread_handle {
+        let _ = handle.join();
+    }
     println_info!("Stopping fuzzer run process.");
     fuzzer_run_process.stop()?;
 
@@ -285,7 +332,7 @@ fn run(config_file: &str, force: bool, verbose: bool) -> Result<(), RosaError> {
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    match run(&cli.config_file, cli.force, cli.verbose) {
+    match run(&cli.config_file, cli.force, cli.verbose, cli.no_tui) {
         Ok(_) => {
             println_info!("Bye :)");
             ExitCode::SUCCESS
