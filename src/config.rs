@@ -127,8 +127,13 @@ impl Config {
     }
 
     pub fn load(file: &Path) -> Result<Self, RosaError> {
-        let config_json = fs::read_to_string(file)
-            .map_err(|err| error!("failed to read configuration from file: {}.", err))?;
+        let config_json = fs::read_to_string(file).map_err(|err| {
+            error!(
+                "failed to read configuration from {}: {}.",
+                file.display(),
+                err
+            )
+        })?;
 
         serde_json::from_str(&config_json)
             .map_err(|err| error!("failed to deserialize config JSON: {}.", err))
