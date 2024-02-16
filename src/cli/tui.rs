@@ -5,10 +5,7 @@ use std::{
     time::Instant,
 };
 
-use crossterm::{
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen},
-    ExecutableCommand,
-};
+use crossterm::{terminal::EnterAlternateScreen, ExecutableCommand};
 use ratatui::{
     prelude::{Color, Constraint, CrosstermBackend, Direction, Layout, Line, Rect, Span, Style},
     style::Stylize,
@@ -266,7 +263,7 @@ impl RosaTui {
 
     pub fn start(&mut self) -> Result<(), RosaError> {
         match &self.terminal {
-            Some(_) => fail!("TUI: could not stop TUI, because it's already running."),
+            Some(_) => fail!("TUI: could not start TUI, because it's already running."),
             None => Ok(()),
         }?;
 
@@ -293,10 +290,6 @@ impl RosaTui {
         self.terminal
             .as_mut()
             .ok_or(error!("TUI: could not stop TUI, because it's not running."))?;
-
-        stdout()
-            .execute(LeaveAlternateScreen)
-            .map_err(|err| error!("TUI: could not leave alternate screen: {}.", err))?;
         self.terminal = None;
 
         Ok(())
