@@ -217,17 +217,31 @@ pub fn load_traces(
         .map(|(trace_uid, test_input_file, trace_dump_file)| {
             match trace_dump_file.is_file() {
                 true => {
-                    let trace = Trace::load(&trace_uid, &test_input_file, &trace_dump_file)?;
-                    // If load was successful, log the trace as a known trace.
-                    known_traces.insert(trace_uid.to_string(), trace.clone());
+                    // Sometimes a trace load might fail because the trace file is still being
+                    // written. In that case, if we're skipping traces anyway, might as well skip
+                    // it here too.
+                    let trace = Trace::load(&trace_uid, &test_input_file, &trace_dump_file);
 
-                    Ok(trace)
+                    match (trace, skip_missing_traces) {
+                        (Ok(trace), _) => {
+                            // If load was successful, log the trace as a known trace.
+                            known_traces.insert(trace_uid.to_string(), trace.clone());
+
+                            Ok(Some(trace))
+                        }
+                        // Load was unsuccessful, but we're skipping traces so it's fine.
+                        (Err(_), true) => Ok(None),
+                        // Load was unsuccessful, and we're not skipping traces: not fine.
+                        (Err(err), false) => Err(err),
+                    }
                 }
                 false => {
                     fail!("missing trace dump file for trace '{}'.", trace_uid)
                 }
             }
         })
+        // Filter out the skipped traces.
+        .filter_map(|trace| trace.transpose())
         .collect()
 }
 
