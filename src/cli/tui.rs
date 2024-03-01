@@ -5,7 +5,6 @@ use std::{
     time::Instant,
 };
 
-use crossterm::{terminal::EnterAlternateScreen, ExecutableCommand};
 use ratatui::{
     prelude::{Color, Constraint, CrosstermBackend, Direction, Layout, Line, Rect, Span, Style},
     style::Stylize,
@@ -267,9 +266,6 @@ impl RosaTui {
             None => Ok(()),
         }?;
 
-        stdout()
-            .execute(EnterAlternateScreen)
-            .map_err(|err| error!("TUI: could not enter alternate screen: {}.", err))?;
         self.terminal = Some(
             Terminal::new(CrosstermBackend::new(stdout()))
                 .map_err(|err| error!("TUI: could not create new terminal: {}.", err))?,
