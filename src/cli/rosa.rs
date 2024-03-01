@@ -130,7 +130,7 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
         seed_phase_fuzzer_processes
             .iter()
             .for_each(|fuzzer_process| {
-                println_verbose!("  Fuzzer process");
+                println_verbose!("  Fuzzer process:");
                 println_verbose!("    Env: {}", fuzzer_process.env_as_string());
                 println_verbose!("    Cmd: {}", fuzzer_process.cmd_as_string());
             });
@@ -197,6 +197,7 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
             .iter()
             .try_fold(Vec::new(), |mut traces, fuzzer_config| {
                 let mut new_traces = trace::load_traces(
+                    &fuzzer_config.name,
                     &fuzzer_config.test_input_dir,
                     &fuzzer_config.trace_dump_dir,
                     &mut known_traces,
@@ -323,6 +324,7 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
                 Vec::new(),
                 |mut new_traces, fuzzer_config| {
                     let mut traces = trace::load_traces(
+                        &fuzzer_config.name,
                         &fuzzer_config.test_input_dir,
                         &fuzzer_config.trace_dump_dir,
                         &mut known_traces,

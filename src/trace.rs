@@ -146,6 +146,7 @@ impl Trace {
 }
 
 pub fn load_traces(
+    fuzzer_instance_name: &str,
     test_input_dir: &Path,
     trace_dump_dir: &Path,
     known_traces: &mut HashMap<String, Trace>,
@@ -188,12 +189,16 @@ pub fn load_traces(
         // Get the UID of the trace from the name of the test input file.
         .map(|test_input_file| {
             (
-                test_input_file
-                    .file_name()
-                    .expect("failed to get basename for test input file.")
-                    .to_os_string()
-                    .into_string()
-                    .expect("failed to convert basename to string."),
+                format!(
+                    "{}__{}",
+                    fuzzer_instance_name,
+                    test_input_file
+                        .file_name()
+                        .expect("failed to get basename for test input file.")
+                        .to_os_string()
+                        .into_string()
+                        .expect("failed to convert basename to string."),
+                ),
                 test_input_file,
             )
         })
