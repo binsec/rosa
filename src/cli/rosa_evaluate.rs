@@ -7,6 +7,7 @@ use std::{
 
 use clap::{ArgAction, Parser};
 use colored::Colorize;
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 
 use rosa::error;
 use rosa::{
@@ -241,7 +242,7 @@ fn run(
         .collect::<Result<Vec<TimedDecision>, RosaError>>()?;
 
     let samples: Vec<Sample> = timed_decisions
-        .iter()
+        .par_iter()
         .map(|timed_decision| {
             check_decision(
                 &selected_cmd,
