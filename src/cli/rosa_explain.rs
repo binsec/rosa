@@ -9,7 +9,7 @@ use colored::Colorize;
 use itertools::Itertools;
 
 use rosa::error;
-use rosa::{config::Config, decision::Decision, error::RosaError, trace::Trace};
+use rosa::{config::Config, decision::TimedDecision, error::RosaError, trace::Trace};
 
 #[macro_use]
 #[allow(unused_macros)]
@@ -38,12 +38,13 @@ struct Cli {
 
 fn run(output_dir: &Path, trace_uid: &str) -> Result<(), RosaError> {
     let config = Config::load(&output_dir.join("config").with_extension("json"))?;
-    let decision = Decision::load(
+    let timed_decision = TimedDecision::load(
         &output_dir
             .join("decisions")
             .join(trace_uid)
             .with_extension("json"),
     )?;
+    let decision = timed_decision.decision;
     let trace = Trace::load(
         trace_uid,
         &output_dir.join("traces").join(trace_uid),

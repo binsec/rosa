@@ -7,7 +7,8 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    thread, time,
+    thread,
+    time::{Duration, Instant},
 };
 
 use clap::Parser;
@@ -16,7 +17,7 @@ use colored::Colorize;
 use rosa::{
     clustering,
     config::Config,
-    decision::{Decision, DecisionReason},
+    decision::{Decision, DecisionReason, TimedDecision},
     error::RosaError,
     fuzzer::{self, FuzzerProcess},
     trace,
@@ -172,11 +173,14 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
     // Save the decisions for the seed traces too, even though we know what they're gonna be.
     clusters.iter().try_for_each(|cluster| {
         cluster.traces.iter().try_for_each(|trace| {
-            let decision = Decision {
-                trace_uid: trace.uid.clone(),
-                cluster_uid: cluster.uid.clone(),
-                is_backdoor: false,
-                reason: DecisionReason::Seed,
+            let decision = TimedDecision {
+                decision: Decision {
+                    trace_uid: trace.uid.clone(),
+                    cluster_uid: cluster.uid.clone(),
+                    is_backdoor: false,
+                    reason: DecisionReason::Seed,
+                },
+                seconds: 0,
             };
 
             decision.save(&config.decisions_dir())
@@ -193,7 +197,7 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
     fuzzer_run_process.spawn()?;
     let mut nb_backdoors = 0;
     // Sleep for 3 seconds to give some time to the fuzzer to get started.
-    thread::sleep(time::Duration::from_secs(3));
+    thread::sleep(Duration::from_secs(3));
 
     // Start the TUI thread.
     let monitor_dir = config.output_dir.clone();
@@ -208,7 +212,7 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
                 tui.render()?;
 
                 // Give some time to the renderer to do its job.
-                thread::sleep(time::Duration::from_millis(200));
+                thread::sleep(Duration::from_millis(200));
 
                 // Check for a signal to kill thread.
                 match rx.try_recv() {
@@ -224,6 +228,9 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
             Ok(())
         })),
     };
+
+    // Start the time counter.
+    let detection_start_time = Instant::now();
 
     let mut already_warned_about_crashes = false;
     // Loop until Ctrl-C.
@@ -314,7 +321,15 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
                     )?;
                 }
 
-                with_cleanup!(decision.save(&config.decisions_dir()), fuzzer_run_process)
+                let timed_decision = TimedDecision {
+                    decision,
+                    seconds: detection_start_time.elapsed().as_secs(),
+                };
+
+                with_cleanup!(
+                    timed_decision.save(&config.decisions_dir()),
+                    fuzzer_run_process
+                )
             })?;
     }
 

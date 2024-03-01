@@ -20,7 +20,13 @@ pub struct Decision {
     pub reason: DecisionReason,
 }
 
-impl Decision {
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TimedDecision {
+    pub decision: Decision,
+    pub seconds: u64,
+}
+
+impl TimedDecision {
     pub fn load(file: &Path) -> Result<Self, RosaError> {
         let decision_json = fs::read_to_string(file).map_err(|err| {
             error!(
@@ -37,7 +43,9 @@ impl Decision {
     pub fn save(&self, output_dir: &Path) -> Result<(), RosaError> {
         let decision_json =
             serde_json::to_string_pretty(&self).expect("failed to serialize decision JSON.");
-        let decision_file = output_dir.join(&self.trace_uid).with_extension("json");
+        let decision_file = output_dir
+            .join(&self.decision.trace_uid)
+            .with_extension("json");
 
         fs::write(&decision_file, decision_json).map_err(|err| {
             error!(

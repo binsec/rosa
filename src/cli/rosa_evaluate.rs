@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    fs::File,
+    fs::{self, File},
     path::{Path, PathBuf},
     process::{Command, ExitCode, Stdio},
 };
@@ -9,7 +9,12 @@ use clap::{ArgAction, Parser};
 use colored::Colorize;
 
 use rosa::error;
-use rosa::{config::Config, decision::Decision, error::RosaError, trace};
+use rosa::{
+    config::Config,
+    decision::{Decision, TimedDecision},
+    error::RosaError,
+    trace,
+};
 
 #[macro_use]
 #[allow(unused_macros)]
@@ -69,6 +74,10 @@ struct Cli {
     /// The trace to evaluate (can be used multiple times).
     #[arg(short = 'u', long = "trace-uid", value_name = "TRACE_UID", action = ArgAction::Append)]
     trace_uids: Vec<String>,
+
+    /// Path to a CSV file containing all the results of the evaluation.
+    #[arg(short = 'c', long = "csv-file", value_name = "FILE")]
+    csv_file: Option<PathBuf>,
 }
 
 #[derive(PartialEq)]
@@ -182,6 +191,7 @@ fn run(
     print_false_positives: bool,
     print_true_negatives: bool,
     print_false_negatives: bool,
+    csv_file: Option<PathBuf>,
 ) -> Result<(), RosaError> {
     let config = Config::load(&output_dir.join("config").with_extension("json"))?;
 
@@ -217,35 +227,65 @@ fn run(
     };
 
     println_info!("Evaluating {} traces...", selected_trace_uids.len());
-    let decisions: Vec<Decision> = selected_trace_uids
+    let timed_decisions: Vec<TimedDecision> = selected_trace_uids
         .iter()
         .map(|trace_uid| {
-            Decision::load(
+            TimedDecision::load(
                 &output_dir
                     .join("decisions")
                     .join(trace_uid)
                     .with_extension("json"),
             )
         })
-        .collect::<Result<Vec<Decision>, RosaError>>()?;
+        .collect::<Result<Vec<TimedDecision>, RosaError>>()?;
 
-    let results: Vec<Sample> = decisions
+    let samples: Vec<Sample> = timed_decisions
         .iter()
-        .map(|decision| {
+        .map(|timed_decision| {
             check_decision(
                 &selected_cmd,
                 &selected_env,
-                &output_dir.join("traces").join(&decision.trace_uid),
-                decision,
+                &output_dir
+                    .join("traces")
+                    .join(&timed_decision.decision.trace_uid),
+                &timed_decision.decision,
             )
         })
         .collect::<Result<Vec<Sample>, RosaError>>()?;
 
-    let stats = results.iter().try_fold(Stats::new(), |mut stats, sample| {
+    let stats = samples.iter().try_fold(Stats::new(), |mut stats, sample| {
         stats.add_sample(sample);
 
         Ok(stats)
     })?;
+
+    let seconds_to_first_backdoor = samples
+        .iter()
+        .find(|sample| sample.kind == SampleKind::TruePositive)
+        .map_or("N/A".to_string(), |sample| {
+            timed_decisions
+                .iter()
+                .find(|timed_decision| timed_decision.decision.trace_uid == sample.uid)
+                .map(|timed_decision| timed_decision.seconds.to_string())
+                .expect("failed to get seconds for first backdoor.")
+        });
+
+    if let Some(csv_file) = csv_file {
+        fs::write(
+            &csv_file,
+            format!(
+                "true_positives, false_positives, true_negatives, false_negatives, \
+                seconds_to_first_backdoor\n\
+                {}, {}, {}, {}, {}\n",
+                stats.true_positives,
+                stats.false_positives,
+                stats.true_negatives,
+                stats.false_negatives,
+                seconds_to_first_backdoor,
+            ),
+        )
+        .map_err(|err| error!("could not write to {}: {}.", csv_file.display(), err))?;
+    }
 
     println_info!("{} traces evaluated:", stats.total_samples());
     println_info!(
@@ -283,11 +323,15 @@ fn run(
             None => "N/A".to_string(),
         }
     );
+    println_info!(
+        "  Seconds until first backdoor: {}",
+        seconds_to_first_backdoor
+    );
 
     if print_true_positives {
         println_info!("");
         println_info!("True positive traces:");
-        results
+        samples
             .iter()
             .filter(|result| result.kind == SampleKind::TruePositive)
             .for_each(|result| println_info!("  {}", result.uid));
@@ -296,7 +340,7 @@ fn run(
     if print_false_positives {
         println_info!("");
         println_info!("False positive traces:");
-        results
+        samples
             .iter()
             .filter(|result| result.kind == SampleKind::FalsePositive)
             .for_each(|result| println_info!("  {}", result.uid));
@@ -305,7 +349,7 @@ fn run(
     if print_true_negatives {
         println_info!("");
         println_info!("True negative traces:");
-        results
+        samples
             .iter()
             .filter(|result| result.kind == SampleKind::TrueNegative)
             .for_each(|result| println_info!("  {}", result.uid));
@@ -314,7 +358,7 @@ fn run(
     if print_false_negatives {
         println_info!("");
         println_info!("False negative traces:");
-        results
+        samples
             .iter()
             .filter(|result| result.kind == SampleKind::FalseNegative)
             .for_each(|result| println_info!("  {}", result.uid));
@@ -335,6 +379,7 @@ fn main() -> ExitCode {
         cli.print_false_positives,
         cli.print_true_negatives,
         cli.print_false_negatives,
+        cli.csv_file,
     ) {
         Ok(_) => ExitCode::SUCCESS,
         Err(err) => {
