@@ -175,6 +175,13 @@ pub fn load_traces(
                             .expect("failed to get basename for path.")
                             .to_str()
                             .expect("failed to convert basename to str.");
+                        // Namespace trace UID with the fuzzer instance's name.
+                        let trace_uid = match fuzzer_instance_name {
+                            Some(fuzzer_instance_name) => {
+                                format!("{}__{}", fuzzer_instance_name, trace_uid)
+                            }
+                            None => trace_uid.to_string(),
+                        };
                         !known_traces.contains_key(&trace_uid.to_string())
                     }))
             },
