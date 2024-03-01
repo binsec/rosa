@@ -29,3 +29,7 @@ path = "src/cli/rosa_evaluate.rs"
 [[bin]]
 name = "rosa-explain"
 path = "src/cli/rosa_explain.rs"
+
+[[bin]]
+name = "rosa-trace-dist"
+path = "src/cli/rosa_trace_dist.rs"
