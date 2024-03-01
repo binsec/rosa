@@ -1,5 +1,5 @@
 use std::{
-    fs::{self},
+    fs,
     path::{Path, PathBuf},
     process::ExitCode,
 };
