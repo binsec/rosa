@@ -1,8 +1,1 @@
-- Add a "discriminator mode":
-    - This is mostly for analysis. It would be nice to have some way of telling which
-      discriminators (i.e. edges/syscalls) caused a trace to be flagged as (non-)backdoor.
-
-
-- Regarding slow execution for AFL_TIMEOUTS_ARE_OK for `yes`:
-    - Some of the afl-qemu-trace instances are not killed; we're not handling something...
-    - src/afl-fuzz-bitmap.c:save_if_interesting() is slowing us down
+- Add documentation & examples
