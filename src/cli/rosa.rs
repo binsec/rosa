@@ -197,9 +197,9 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
             .iter()
             .try_fold(Vec::new(), |mut traces, fuzzer_config| {
                 let mut new_traces = trace::load_traces(
-                    &fuzzer_config.name,
                     &fuzzer_config.test_input_dir,
                     &fuzzer_config.trace_dump_dir,
+                    Some(&fuzzer_config.name),
                     &mut known_traces,
                     false,
                 )?;
@@ -324,9 +324,9 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
                 Vec::new(),
                 |mut new_traces, fuzzer_config| {
                     let mut traces = trace::load_traces(
-                        &fuzzer_config.name,
                         &fuzzer_config.test_input_dir,
                         &fuzzer_config.trace_dump_dir,
+                        Some(&fuzzer_config.name),
                         &mut known_traces,
                         // Skip missing traces, because the fuzzer is continually producing new
                         // ones, and we might miss some because of the timing of the writes; it's

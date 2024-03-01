@@ -146,9 +146,9 @@ impl Trace {
 }
 
 pub fn load_traces(
-    fuzzer_instance_name: &str,
     test_input_dir: &Path,
     trace_dump_dir: &Path,
+    fuzzer_instance_name: Option<&str>,
     known_traces: &mut HashMap<String, Trace>,
     skip_missing_traces: bool,
 ) -> Result<Vec<Trace>, RosaError> {
@@ -189,16 +189,12 @@ pub fn load_traces(
         // Get the UID of the trace from the name of the test input file.
         .map(|test_input_file| {
             (
-                format!(
-                    "{}__{}",
-                    fuzzer_instance_name,
-                    test_input_file
-                        .file_name()
-                        .expect("failed to get basename for test input file.")
-                        .to_os_string()
-                        .into_string()
-                        .expect("failed to convert basename to string."),
-                ),
+                test_input_file
+                    .file_name()
+                    .expect("failed to get basename for test input file.")
+                    .to_os_string()
+                    .into_string()
+                    .expect("failed to convert basename to string."),
                 test_input_file,
             )
         })
@@ -220,6 +216,11 @@ pub fn load_traces(
         .into_iter()
         // Attempt to load the trace.
         .map(|(trace_uid, test_input_file, trace_dump_file)| {
+            // Namespace trace UID with the fuzzer instance's name.
+            let trace_uid = match fuzzer_instance_name {
+                Some(fuzzer_instance_name) => format!("{}__{}", fuzzer_instance_name, trace_uid),
+                None => trace_uid.to_string(),
+            };
             match trace_dump_file.is_file() {
                 true => {
                     // Sometimes a trace load might fail because the trace file is still being

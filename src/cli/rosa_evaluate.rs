@@ -197,9 +197,9 @@ fn run(
 
     let mut known_traces = HashMap::new();
     let all_traces = trace::load_traces(
-        "common",
         &output_dir.join("traces"),
         &output_dir.join("traces"),
+        None,
         &mut known_traces,
         true,
     )?;
