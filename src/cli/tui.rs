@@ -38,10 +38,8 @@ struct RosaTuiStats {
     syscall_tolerance: u64,
     config_file_path: String,
     output_dir_path: String,
-    seed_env: String,
-    seed_cmd: String,
-    run_env: String,
-    run_cmd: String,
+    seed_phase_fuzzers: u64,
+    run_phase_fuzzers: u64,
     crash_warning: bool,
 }
 
@@ -64,10 +62,8 @@ impl RosaTuiStats {
             syscall_tolerance: 0,
             config_file_path: config_path.display().to_string(),
             output_dir_path: output_dir_path.join("").display().to_string(),
-            seed_env: "".to_string(),
-            seed_cmd: "".to_string(),
-            run_env: "".to_string(),
-            run_cmd: "".to_string(),
+            seed_phase_fuzzers: 0,
+            run_phase_fuzzers: 0,
             crash_warning: false,
         }
     }
@@ -82,20 +78,8 @@ impl RosaTuiStats {
         self.edge_tolerance = config.cluster_formation_edge_tolerance;
         self.syscall_tolerance = config.cluster_formation_syscall_tolerance;
 
-        self.seed_env = config
-            .fuzzer_seed_env
-            .iter()
-            .map(|(key, value)| format!("{}={}", key, value))
-            .collect::<Vec<String>>()
-            .join(" ");
-        self.seed_cmd = config.fuzzer_seed_cmd.join(" ");
-        self.run_env = config
-            .fuzzer_run_env
-            .iter()
-            .map(|(key, value)| format!("{}={}", key, value))
-            .collect::<Vec<String>>()
-            .join(" ");
-        self.run_cmd = config.fuzzer_run_cmd.join(" ");
+        self.seed_phase_fuzzers = config.seed_phase_fuzzers.len() as u64;
+        self.run_phase_fuzzers = config.run_phase_fuzzers.len() as u64;
 
         let cluster_files: Vec<PathBuf> = fs::read_dir(config.clusters_dir())
             .map_or_else(
@@ -196,7 +180,12 @@ impl RosaTuiStats {
 
         // Check for crashes.
         if !self.crash_warning {
-            self.crash_warning = fuzzer::fuzzer_found_crashes(&config.crashes_dir)?;
+            let found_crashes: Vec<bool> = config
+                .run_phase_fuzzers
+                .iter()
+                .map(|fuzzer_config| fuzzer::fuzzer_found_crashes(&fuzzer_config.crashes_dir))
+                .collect::<Result<Vec<bool>, RosaError>>()?;
+            self.crash_warning = found_crashes.iter().any(|found_crashes| *found_crashes);
         }
 
         Ok(())
@@ -478,10 +467,6 @@ impl RosaTui {
         // Truncate the configuration options if needed, to make sure they fit on the TUI.
         let mut config_file = stats.config_file_path.clone();
         let mut output_dir = stats.output_dir_path.clone();
-        let mut seed_env = stats.seed_env.clone();
-        let mut seed_cmd = stats.seed_cmd.clone();
-        let mut run_env = stats.run_env.clone();
-        let mut run_cmd = stats.run_cmd.clone();
         // -3 for the borders and left padding.
         let max_text_width = (frame.size().width - 14) as usize;
         if config_file.len() > max_text_width {
@@ -492,48 +477,24 @@ impl RosaTui {
             output_dir.truncate(max_text_width - 3);
             output_dir += "...";
         }
-        if seed_env.len() > max_text_width {
-            seed_env.truncate(max_text_width - 3);
-            seed_env += "...";
-        }
-        if seed_cmd.len() > max_text_width {
-            seed_cmd.truncate(max_text_width - 3);
-            seed_cmd += "...";
-        }
-        if run_env.len() > max_text_width {
-            run_env.truncate(max_text_width - 3);
-            run_env += "...";
-        }
-        if run_cmd.len() > max_text_width {
-            run_cmd.truncate(max_text_width - 3);
-            run_cmd += "...";
-        }
 
         // Create the configuration info.
         let mut config_lines = vec![
             Line::from(vec![
-                Span::styled("   config: ", label_style),
+                Span::styled("             config: ", label_style),
                 config_file.into(),
             ]),
             Line::from(vec![
-                Span::styled("   output: ", label_style),
+                Span::styled("             output: ", label_style),
                 output_dir.into(),
             ]),
             Line::from(vec![
-                Span::styled(" seed env: ", label_style),
-                seed_env.into(),
+                Span::styled(" seed phase fuzzers: ", label_style),
+                stats.seed_phase_fuzzers.to_string().into(),
             ]),
             Line::from(vec![
-                Span::styled(" seed cmd: ", label_style),
-                seed_cmd.into(),
-            ]),
-            Line::from(vec![
-                Span::styled("  run env: ", label_style),
-                run_env.into(),
-            ]),
-            Line::from(vec![
-                Span::styled("  run cmd: ", label_style),
-                run_cmd.into(),
+                Span::styled("  run phase fuzzers: ", label_style),
+                stats.run_phase_fuzzers.to_string().into(),
             ]),
             Line::from(vec![]),
         ];

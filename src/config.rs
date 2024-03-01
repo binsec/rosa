@@ -11,16 +11,22 @@ use crate::{
     criterion::Criterion, distance_metric::DistanceMetric, error::RosaError, oracle::Oracle,
 };
 
-#[derive(Builder, Serialize, Deserialize, Debug)]
-pub struct Config {
-    pub output_dir: PathBuf,
-    pub fuzzer_seed_cmd: Vec<String>,
-    pub fuzzer_seed_env: HashMap<String, String>,
-    pub fuzzer_run_cmd: Vec<String>,
-    pub fuzzer_run_env: HashMap<String, String>,
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FuzzerConfig {
+    pub name: String,
+    pub env: HashMap<String, String>,
+    pub cmd: Vec<String>,
     pub test_input_dir: PathBuf,
     pub trace_dump_dir: PathBuf,
     pub crashes_dir: PathBuf,
+}
+
+#[derive(Builder, Serialize, Deserialize, Debug)]
+pub struct Config {
+    pub output_dir: PathBuf,
+
+    pub seed_phase_fuzzers: Vec<FuzzerConfig>,
+    pub run_phase_fuzzers: Vec<FuzzerConfig>,
 
     #[serde(default = "Config::default_cluster_formation_criterion")]
     pub cluster_formation_criterion: Criterion,

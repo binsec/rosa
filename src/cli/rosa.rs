@@ -61,9 +61,11 @@ struct Cli {
 }
 
 macro_rules! with_cleanup {
-    ( $action:expr, $fuzzer_process:tt ) => {{
+    ( $action:expr, $fuzzer_processes:expr ) => {{
         $action.or_else(|err| {
-            $fuzzer_process.stop()?;
+            $fuzzer_processes
+                .iter_mut()
+                .try_for_each(|fuzzer_process| fuzzer_process.stop())?;
             Err(err)
         })
     }};
@@ -86,25 +88,37 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
     // Set up a hashmap to keep track of known traces via their UIDs.
     let mut known_traces = HashMap::new();
 
-    // Set up both fuzzer processes.
-    let mut fuzzer_seed_process = FuzzerProcess::create(
-        config.fuzzer_seed_cmd.clone(),
-        config.fuzzer_seed_env.clone(),
-        config
-            .logs_dir()
-            .clone()
-            .join("fuzzer_seed")
-            .with_extension("log"),
-    )?;
-    let mut fuzzer_run_process = FuzzerProcess::create(
-        config.fuzzer_run_cmd.clone(),
-        config.fuzzer_run_env.clone(),
-        config
-            .logs_dir()
-            .clone()
-            .join("fuzzer_run")
-            .with_extension("log"),
-    )?;
+    // Set up fuzzer processes.
+    let mut seed_phase_fuzzer_processes: Vec<FuzzerProcess> = config
+        .seed_phase_fuzzers
+        .iter()
+        .map(|fuzzer_config| {
+            FuzzerProcess::create(
+                fuzzer_config.cmd.clone(),
+                fuzzer_config.env.clone(),
+                config
+                    .logs_dir()
+                    .clone()
+                    .join(format!("seed_phase_fuzzer_{}", fuzzer_config.name))
+                    .with_extension("log"),
+            )
+        })
+        .collect::<Result<Vec<FuzzerProcess>, RosaError>>()?;
+    let mut run_phase_fuzzer_processes: Vec<FuzzerProcess> = config
+        .run_phase_fuzzers
+        .iter()
+        .map(|fuzzer_config| {
+            FuzzerProcess::create(
+                fuzzer_config.cmd.clone(),
+                fuzzer_config.env.clone(),
+                config
+                    .logs_dir()
+                    .clone()
+                    .join(format!("run_phase_fuzzer_{}", fuzzer_config.name))
+                    .with_extension("log"),
+            )
+        })
+        .collect::<Result<Vec<FuzzerProcess>, RosaError>>()?;
 
     // Setup communication channel with TUI.
     let (tx, rx) = mpsc::channel::<()>();
@@ -112,48 +126,86 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
     // Spawn the fuzzer seed process.
     println_info!("Collecting seed traces...");
     if verbose {
-        println_verbose!("Fuzzer seed process:");
-        println_verbose!("  Env: {}", fuzzer_seed_process.env_as_string());
-        println_verbose!("  Cmd: {}", fuzzer_seed_process.cmd_as_string());
+        println_verbose!("Fuzzer seed processes:");
+        seed_phase_fuzzer_processes
+            .iter()
+            .for_each(|fuzzer_process| {
+                println_verbose!("  Fuzzer process");
+                println_verbose!("    Env: {}", fuzzer_process.env_as_string());
+                println_verbose!("    Cmd: {}", fuzzer_process.cmd_as_string());
+            });
     }
-    fuzzer_seed_process.spawn()?;
+    seed_phase_fuzzer_processes
+        .iter_mut()
+        .try_for_each(|fuzzer_process| fuzzer_process.spawn())?;
 
     // Wait for the fuzzer process (or for a Ctrl-C).
-    while fuzzer_seed_process.is_running()? && !rosa_should_stop.load(Ordering::Acquire) {}
+    while seed_phase_fuzzer_processes
+        .iter_mut()
+        .any(|fuzzer_process| fuzzer_process.is_running().unwrap_or(false))
+        && !rosa_should_stop.load(Ordering::Acquire)
+    {}
 
     // Check to see if we received a Ctrl-C while waiting.
-    if fuzzer_seed_process.is_running()? && rosa_should_stop.load(Ordering::Acquire) {
-        println_info!("Stopping fuzzer seed process.");
-        fuzzer_seed_process.stop()?;
+    if seed_phase_fuzzer_processes
+        .iter_mut()
+        .any(|fuzzer_process| fuzzer_process.is_running().unwrap_or(false))
+        && rosa_should_stop.load(Ordering::Acquire)
+    {
+        println_info!("Stopping seed phase fuzzer processes.");
+        seed_phase_fuzzer_processes
+            .iter_mut()
+            .try_for_each(|fuzzer_process| fuzzer_process.stop())?;
         return Ok(());
     }
 
     // Check the exit code of the fuzzer seed process.
-    fuzzer_seed_process.check_success().map_err(|err| {
-        rosa::error!(
-            "fuzzer seed command failed: {}. See {}.",
-            err,
-            fuzzer_seed_process.log_file.display()
-        )
-    })?;
+    seed_phase_fuzzer_processes
+        .iter_mut()
+        .try_for_each(|fuzzer_process| {
+            fuzzer_process.check_success().map_err(|err| {
+                rosa::error!(
+                    "seed phase fuzzer command failed: {}. See {}.",
+                    err,
+                    fuzzer_process.log_file.display()
+                )
+            })
+        })?;
 
     // Check for crashes; if some of the inputs crash, the fuzzer will most likely get oriented
     // towards that family of inputs, which decreases the overall chance of finding backdoors.
-    if fuzzer::fuzzer_found_crashes(&config.crashes_dir)? {
-        println_warning!(
-            "the fuzzer has detected one or more crashes in {}. This is probably hindering the \
-            thorough exploration of the binary; it is recommended that you fix the crashes and \
-            try again.",
-            &config.crashes_dir.display()
-        );
-    }
+    config
+        .seed_phase_fuzzers
+        .iter()
+        .try_for_each(|fuzzer_config| {
+            if fuzzer::fuzzer_found_crashes(&fuzzer_config.crashes_dir)? {
+                println_warning!(
+                    "the fuzzer '{}' has detected one or more crashes in {}. This is probably \
+                hindering the thorough exploration of the binary; it is recommended that you fix \
+                the crashes and try again.",
+                    fuzzer_config.name,
+                    &fuzzer_config.crashes_dir.display(),
+                )
+            }
+
+            Ok(())
+        })?;
     // Collect seed traces.
-    let seed_traces = trace::load_traces(
-        &config.test_input_dir,
-        &config.trace_dump_dir,
-        &mut known_traces,
-        false,
-    )?;
+    let seed_traces =
+        config
+            .seed_phase_fuzzers
+            .iter()
+            .try_fold(Vec::new(), |mut traces, fuzzer_config| {
+                let mut new_traces = trace::load_traces(
+                    &fuzzer_config.test_input_dir,
+                    &fuzzer_config.trace_dump_dir,
+                    &mut known_traces,
+                    false,
+                )?;
+
+                traces.append(&mut new_traces);
+                Ok(traces)
+            })?;
     // Save traces to output dir for later inspection.
     trace::save_traces(&seed_traces, &config.traces_dir())?;
     println_info!("Collected {} seed traces.", seed_traces.len());
@@ -190,13 +242,20 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
     // Spawn the fuzzer run process.
     println_info!("Starting backdoor detection...");
     if verbose {
-        println_verbose!("Fuzzer run process:");
-        println_verbose!("  Env: {}", fuzzer_run_process.env_as_string());
-        println_verbose!("  Cmd: {}", fuzzer_run_process.cmd_as_string());
+        println_verbose!("Fuzzer run processes:");
+        run_phase_fuzzer_processes
+            .iter()
+            .for_each(|fuzzer_process| {
+                println_verbose!("  Fuzzer process:");
+                println_verbose!("    Env: {}", fuzzer_process.env_as_string());
+                println_verbose!("    Cmd: {}", fuzzer_process.cmd_as_string());
+            });
     }
-    fuzzer_run_process.spawn()?;
+    run_phase_fuzzer_processes
+        .iter_mut()
+        .try_for_each(|fuzzer_process| fuzzer_process.spawn())?;
     let mut nb_backdoors = 0;
-    // Sleep for 3 seconds to give some time to the fuzzer to get started.
+    // Sleep for 3 seconds to give some time to the fuzzers to get started.
     thread::sleep(Duration::from_secs(3));
 
     // Start the TUI thread.
@@ -239,34 +298,50 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
             // Check for crashes; if some of the inputs crash, the fuzzer will most likely get
             // oriented towards that family of inputs, which decreases the overall chance of
             // finding backdoors.
-            if fuzzer::fuzzer_found_crashes(&config.crashes_dir)? {
-                println_warning!(
-                    "the fuzzer has detected one or more crashes in {}. This is probably \
-                    hindering the thorough exploration of the binary; it is recommended that you \
-                    fix the crashes and try again.",
-                    &config.crashes_dir.display()
-                );
-                already_warned_about_crashes = true;
-            }
+            config
+                .run_phase_fuzzers
+                .iter()
+                .try_for_each(|fuzzer_config| {
+                    if fuzzer::fuzzer_found_crashes(&fuzzer_config.crashes_dir)? {
+                        println_warning!(
+                        "the fuzzer '{}' has detected one or more crashes in {}. This is probably \
+                        hindering the thorough exploration of the binary; it is recommended that \
+                        you fix the crashes and try again.",
+                        fuzzer_config.name,
+                        &fuzzer_config.crashes_dir.display()
+                    );
+                        already_warned_about_crashes = true;
+                    }
+
+                    Ok(())
+                })?;
         }
 
         // Collect new traces.
         let new_traces = with_cleanup!(
-            trace::load_traces(
-                &config.test_input_dir,
-                &config.trace_dump_dir,
-                &mut known_traces,
-                // Skip missing traces, because the fuzzer is continually producing new ones, and
-                // we might miss some because of the timing of the writes; it's okay, we'll pick
-                // them up on the next iteration.
-                true,
+            config.run_phase_fuzzers.iter().try_fold(
+                Vec::new(),
+                |mut new_traces, fuzzer_config| {
+                    let mut traces = trace::load_traces(
+                        &fuzzer_config.test_input_dir,
+                        &fuzzer_config.trace_dump_dir,
+                        &mut known_traces,
+                        // Skip missing traces, because the fuzzer is continually producing new
+                        // ones, and we might miss some because of the timing of the writes; it's
+                        // okay, we'll pick them up on the next iteration.
+                        true,
+                    )?;
+
+                    new_traces.append(&mut traces);
+                    Ok(new_traces)
+                }
             ),
-            fuzzer_run_process
+            run_phase_fuzzer_processes
         )?;
         // Save traces to output dir for later inspection.
         with_cleanup!(
             trace::save_traces(&new_traces, &config.traces_dir()),
-            fuzzer_run_process
+            run_phase_fuzzer_processes
         )?;
 
         new_traces
@@ -317,7 +392,7 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
                     // Save backdoor.
                     with_cleanup!(
                         trace::save_trace_test_input(trace, &config.backdoors_dir()),
-                        fuzzer_run_process
+                        run_phase_fuzzer_processes
                     )?;
                 }
 
@@ -328,7 +403,7 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
 
                 with_cleanup!(
                     timed_decision.save(&config.decisions_dir()),
-                    fuzzer_run_process
+                    run_phase_fuzzer_processes
                 )
             })?;
     }
@@ -338,8 +413,10 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
     if let Some(handle) = tui_thread_handle {
         let _ = handle.join();
     }
-    println_info!("Stopping fuzzer run process.");
-    fuzzer_run_process.stop()?;
+    println_info!("Stopping run phase fuzzer processes.");
+    run_phase_fuzzer_processes
+        .iter_mut()
+        .try_for_each(|fuzzer_process| fuzzer_process.stop())?;
 
     Ok(())
 }
