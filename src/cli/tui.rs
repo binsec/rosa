@@ -239,7 +239,7 @@ impl RosaTuiStats {
 
 impl RosaTui {
     const MIN_WIDTH: u16 = 92;
-    const HEIGHT: u16 = 24;
+    const HEIGHT: u16 = 22;
 
     pub fn new(config_path: &Path, monitor_dir: &Path) -> Self {
         RosaTui {
