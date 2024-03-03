@@ -91,7 +91,6 @@ impl Oracle {
     ///         DistanceMetric::Hamming
     ///     ).is_backdoor
     /// );
-    ///
     /// ```
     pub fn decide(
         &self,
