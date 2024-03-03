@@ -277,7 +277,7 @@ impl Trace {
 ///   as a prefix/namespace to the trace UID, to ensure that no collisions are possible.
 /// * `known_traces` - A [HashMap] of known traces. This is used as a filter, to avoid loading
 ///   already seen traces; any trace UIDs contained in the [HashMap] will **not** be loaded.
-/// * `skip_missing_traces` - If `true`, missing or incomplete traces will be skipped, otherwise an
+/// * `skip_missing_traces` - If [true], missing or incomplete traces will be skipped, otherwise an
 ///   error will be returned. This is used when "hot"-loading, as we may come across incomplete or
 ///   missing trace dump files; we can ignore them and let some future invocation pick them up.
 ///
