@@ -1,10 +1,15 @@
+//! ROSA-related errors and error macros.
+
 use std::{error, fmt};
 
+/// A ROSA error.
 #[derive(Debug, Clone)]
 pub struct RosaError {
-    pub function: String,
+    /// The line where the error was produced.
     pub line: u32,
+    /// The file where the error was produced.
     pub file: String,
+    /// The error message.
     pub message: String,
 }
 
@@ -15,18 +20,19 @@ impl fmt::Display for RosaError {
     }
 }
 
+/// Produce a [RosaError] on a given line, in a given file.
 #[macro_export]
 macro_rules! error {
     ( $( $arg:expr ),+ ) => {{
         RosaError {
             message: format!($( $arg ),+),
-            function: module_path!().to_string(),
             file: file!().to_string(),
             line: line!(),
         }
     }};
 }
 
+/// Produce a [RosaError] wrapped in an [Err].
 #[macro_export]
 macro_rules! fail {
     ( $( $arg:expr ),+ ) => {{
