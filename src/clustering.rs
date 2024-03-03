@@ -1,3 +1,7 @@
+//! Cluster definitions & algorithms.
+//!
+//! This module describes trace clusters and provides clustering/cluster similarity algorithms.
+
 use std::{cmp, fs, path::Path};
 
 use crate::{
@@ -21,6 +25,94 @@ pub struct Cluster {
     pub max_syscall_distance: u64,
 }
 
+/// Get the most similar cluster to a trace, given a collection of clusters.
+///
+/// The most similar cluster is chosen given a criterion and a distance metric; the distance metric
+/// is used to determine similarity, while the criterion is used to decide how similarity will be
+/// measured in terms of the components of the traces. See [Criterion] and [DistanceMetric].
+///
+/// # Arguments
+/// * `trace` - The trace for which to get the most similar cluster.
+/// * `clusters` - The collection of available clusters to choose from.
+/// * `criterion` - The criterion to use.
+/// * `distance_metric` - The distance metric to use.
+///
+/// # Examples
+/// ```
+/// use rosa::{
+///     clustering::{self, Cluster},
+///     criterion::Criterion,
+///     distance_metric::DistanceMetric,
+///     trace::Trace,
+/// };
+///
+/// // Dummy clusters to demonstrate function use.
+/// // Test inputs are not taken into account when choosing the most similar cluster. In fact,
+/// // we'll only use edges to make the example simpler.
+/// let clusters = vec![
+///     Cluster {
+///         uid: "cluster_1".to_string(),
+///         traces: vec![
+///             Trace {
+///                 uid: "trace_1".to_string(),
+///                 test_input: vec![],
+///                 edges: vec![0, 1, 1, 0],
+///                 syscalls: vec![],
+///             },
+///             Trace {
+///                 uid: "trace_2".to_string(),
+///                 test_input: vec![],
+///                 edges: vec![0, 1, 0, 0],
+///                 syscalls: vec![],
+///             },
+///         ],
+///         min_edge_distance: 1,
+///         max_edge_distance: 1,
+///         min_syscall_distance: 0,
+///         max_syscall_distance: 0,
+///     },
+///     Cluster {
+///         uid: "cluster_2".to_string(),
+///         traces: vec![
+///             Trace {
+///                 uid: "trace_3".to_string(),
+///                 test_input: vec![],
+///                 edges: vec![0, 0, 1, 1],
+///                 syscalls: vec![],
+///             },
+///             Trace {
+///                 uid: "trace_4".to_string(),
+///                 test_input: vec![],
+///                 edges: vec![0, 0, 0, 1],
+///                 syscalls: vec![],
+///             },
+///         ],
+///         min_edge_distance: 1,
+///         max_edge_distance: 1,
+///         min_syscall_distance: 0,
+///         max_syscall_distance: 0,
+///     },
+/// ];
+///
+/// // Dummy trace for which to get the most similar cluster. It's identical to `trace_2` in
+/// // cluster `cluster_1`.
+/// let candidate_trace = Trace {
+///     uid: "candidate".to_string(),
+///     test_input: vec![],
+///     edges: vec![0, 1, 0, 0],
+///     syscalls: vec![],
+/// };
+///
+/// assert_eq!(
+///     clustering::get_most_similar_cluster(
+///         &candidate_trace,
+///         &clusters,
+///         Criterion::EdgesOnly,
+///         DistanceMetric::Hamming,
+///     ).unwrap().uid,
+///     clusters[0].uid,
+/// );
+/// ```
 pub fn get_most_similar_cluster<'a>(
     trace: &Trace,
     clusters: &'a [Cluster],
@@ -84,6 +176,67 @@ pub fn get_most_similar_cluster<'a>(
     cluster_index.map(|index| &clusters[index])
 }
 
+/// Group traces into clusters, based on similarity.
+///
+/// This is a naive clustering algorithm; it tries to put a trace into the most similar existing
+/// cluster if it fits the criterion and the tolerances, otherwise it creates a new cluster
+/// containing the trace.
+///
+/// # Arguments
+/// * `traces` - The traces to group into clusters.
+/// * `criterion` - The criterion to use.
+/// * `distance_metric` - The distance metric to use.
+/// * `edge_tolerance` - The tolerance to consider in terms of edges. Essentially, for a tolerance
+///   `t`, a difference of up to `t` edges will be tolerated within the same cluster.
+/// * `syscall_tolerance` - The tolerance to consider in terms of syscalls. Essentially, for a
+///   tolerance `t`, a difference of up to `t` syscalls will be tolerated within the same cluster.
+///
+/// # Examples
+/// ```
+/// use rosa::{
+///     clustering::{self, Cluster},
+///     criterion::Criterion,
+///     distance_metric::DistanceMetric,
+///     trace::Trace,
+/// };
+///
+/// // A dummy collection of traces to demonstrate the function.
+/// // Test input is not taken into account during clustering so it doesn't matter here.
+/// // In fact, to simplify the example, only the edges will be taken into account.
+/// let traces = vec![
+///     Trace {
+///         uid: "trace_1".to_string(),
+///         test_input: vec![],
+///         edges: vec![0, 1, 0, 1],
+///         syscalls: vec![],
+///     },
+///     Trace {
+///         uid: "trace_2".to_string(),
+///         test_input: vec![],
+///         edges: vec![0, 1, 0, 0],
+///         syscalls: vec![],
+///     },
+/// ];
+///
+/// // With zero edge tolerance, the two different traces will be put into two different clusters.
+/// let strict_clusters = clustering::cluster_traces(
+///     &traces, Criterion::EdgesOnly, DistanceMetric::Hamming, 0, 0
+/// );
+/// assert_eq!(strict_clusters.len(), 2);
+/// assert_eq!(strict_clusters[0].traces.len(), 1);
+/// assert_eq!(strict_clusters[1].traces.len(), 1);
+/// assert_eq!(strict_clusters[0].traces[0].uid, "trace_1".to_string());
+/// assert_eq!(strict_clusters[1].traces[0].uid, "trace_2".to_string());
+///
+/// // With some tolerance, both traces will be grouped into the same cluster.
+/// let relaxed_clusters = clustering::cluster_traces(
+///     &traces, Criterion::EdgesOnly, DistanceMetric::Hamming, 1, 0
+/// );
+/// assert_eq!(relaxed_clusters.len(), 1);
+/// assert_eq!(relaxed_clusters[0].traces.len(), 2);
+/// assert_eq!(relaxed_clusters[0].traces[0].uid, "trace_1".to_string());
+/// assert_eq!(relaxed_clusters[0].traces[1].uid, "trace_2".to_string());
+/// ```
 pub fn cluster_traces(
     traces: &[Trace],
     criterion: Criterion,
@@ -182,6 +335,52 @@ pub fn cluster_traces(
     })
 }
 
+/// Save clusters to file.
+///
+/// This function provides a way to dump clusters into `.txt` files in order to understand which
+/// trace is in which cluster. Each cluster file is a simple `.txt` file, containing the UIDs of
+/// all the traces within the cluster, with one UID per line.
+///
+/// # Arguments
+/// * `clusters` - The clusters to save.
+/// * `output_dir` - The directory in which to save the clusters. One file will be created per
+///   cluster; the file's name will be the cluster's UID.
+///
+/// # Examples
+/// ```
+/// use std::path::Path;
+/// use rosa::{
+///     clustering::{self, Cluster},
+///     trace::Trace,
+/// };
+///
+/// // Dummy clusters to demonstrate function use.
+/// let clusters = vec![
+///     Cluster {
+///         uid: "cluster_1".to_string(),
+///         traces: vec![
+///             Trace {
+///                 uid: "trace_1".to_string(),
+///                 test_input: vec![],
+///                 edges: vec![],
+///                 syscalls: vec![],
+///             },
+///             Trace {
+///                 uid: "trace_2".to_string(),
+///                 test_input: vec![],
+///                 edges: vec![],
+///                 syscalls: vec![],
+///             },
+///         ],
+///         min_edge_distance: 1,
+///         max_edge_distance: 1,
+///         min_syscall_distance: 0,
+///         max_syscall_distance: 0,
+///     },
+/// ];
+///
+/// clustering::save_clusters(&clusters, &Path::new("/path/to/clusters_dir/"));
+/// ```
 pub fn save_clusters(clusters: &[Cluster], output_dir: &Path) -> Result<(), RosaError> {
     clusters.iter().try_for_each(|cluster| {
         let trace_uids: Vec<&str> = cluster
