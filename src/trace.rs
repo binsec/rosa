@@ -1,3 +1,7 @@
+//! Runtime trace definition & utilities.
+//!
+//! This module describes runtime traces and provides different utilities, such as IO.
+
 use std::{
     collections::HashMap,
     fs::{self, File},
@@ -8,19 +12,68 @@ use std::{
 use crate::error::RosaError;
 
 /// Runtime trace definition.
+///
+/// A runtime trace is produced by a _test input_ fed to a _target program_. Its full description
+/// thus contains both the test input that produced it, as well as the runtime components (edges &
+/// syscalls) of the trace.
 #[derive(Debug, Clone)]
 pub struct Trace {
     /// The unique ID of the trace.
     pub uid: String,
     /// The test input associated with the trace.
     pub test_input: Vec<u8>,
-    /// The edges found in the trace (existential vector).
+    /// The edges found in the trace.
+    ///
+    /// The edges are in the form of an _existential vector_; this means that the vector simply
+    /// records the presence (`1`) or absence (`0`) of an edge in the trace. Multiple occurrences
+    /// of an edge will still result in the same vector: `1` marks the presence, not the number of
+    /// occurrences.
     pub edges: Vec<u8>,
-    /// The syscalls found in the trace (existential vector).
+    /// The syscalls found in the trace.
+    ///
+    /// The syscalls are in the form of an _existential vector_; this means that the vector simply
+    /// records the presence (`1`) or absence (`0`) of a syscall in the trace. Multiple occurrences
+    /// of a syscall will still result in the same vector: `1` marks the presence, not the number
+    /// of occurrences.
     pub syscalls: Vec<u8>,
 }
 
 impl Trace {
+    /// Loads a runtime trace from file.
+    ///
+    /// A runtime trace is composed of an associated test input (the test input that produced it)
+    /// and a trace dump, containing the components of the runtime trace (edges and syscalls). In
+    /// order to make dealing with traces easier, we assign a unique ID to each of them.
+    ///
+    /// # Arguments
+    /// * `uid` - The unique ID associated with the trace. This is mostly used to distinguish
+    ///   between traces.
+    /// * `test_input_file` - The path to the (binary) file containing the raw test input that
+    ///   generated the trace.
+    /// * `trace_dump_file` - The path to the (binary) file containing the trace dump associated
+    ///   with the trace. We expect the trace dump file to have the following format:
+    ///   ```text
+    ///   <nb_edges: u64><nb_syscalls: u64><edges: [u8]><syscalls: [u8]>
+    ///   ```
+    ///
+    /// # Examples
+    /// ```
+    /// use std::path::Path;
+    /// use rosa::trace::Trace;
+    ///
+    /// let trace = Trace::load(
+    ///     "my_trace",
+    ///     &Path::new("/path/to/test_input_file"),
+    ///     &Path::new("/path/to/trace_file.trace"),
+    /// );
+    ///
+    /// // With AFL/AFL++, traces would usually be in these dirs:
+    /// let afl_trace = Trace::load(
+    ///     "afl_trace",
+    ///     &Path::new("fuzzer_out/queue/id_000000"),
+    ///     &Path::new("fuzzer_out/trace_dumps/id_000000.trace"),
+    /// );
+    /// ```
     pub fn load(
         uid: &str,
         test_input_file: &Path,
@@ -102,6 +155,27 @@ impl Trace {
         })
     }
 
+    /// Get a printable version of the test input.
+    ///
+    /// In order to be able to see every byte of the test input without having any junk
+    /// non-printable characters, the non-printable ones are converted to `\xYY` hexadecimal form,
+    /// to be easier to read.
+    ///
+    /// # Examples
+    /// ```
+    /// use rosa::trace::Trace;
+    ///
+    /// // Dummy trace to test with.
+    /// let trace = Trace {
+    ///     uid: "my_trace".to_string(),
+    ///     test_input: vec![0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0xde, 0xad, 0xbe, 0xef],
+    ///     edges: vec![],
+    ///     syscalls: vec![],
+    /// };
+    ///
+    /// // Should get "hello \xde\xad\xbe\xef".
+    /// assert_eq!(trace.printable_test_input(), "hello \\xde\\xad\\xbe\\xef".to_string());
+    /// ```
     pub fn printable_test_input(&self) -> String {
         self.test_input
             .clone()
@@ -116,6 +190,26 @@ impl Trace {
             .join("")
     }
 
+    /// Convert the edges vector to a printable string.
+    ///
+    /// This is mostly for stats/debugging; since in most cases the full vector is too big to
+    /// show on screen, we simply return the number of edges and the percentage of coverage they
+    /// correspond to (i.e. how many `1`s compared to the vector's length).
+    ///
+    /// # Examples
+    /// ```
+    /// use rosa::trace::Trace;
+    ///
+    /// // Dummy trace to test with.
+    /// let trace = Trace {
+    ///     uid: "my_trace".to_string(),
+    ///     test_input: vec![],
+    ///     edges: vec![0, 1, 1, 0],
+    ///     syscalls: vec![],
+    /// };
+    ///
+    /// assert_eq!(trace.edges_as_string(), "2 edges (50.00%)".to_string());
+    /// ```
     pub fn edges_as_string(&self) -> String {
         let nb_edges = self
             .edges
@@ -130,6 +224,26 @@ impl Trace {
         )
     }
 
+    /// Convert the syscalls vector to a printable string.
+    ///
+    /// This is mostly for stats/debugging; since in most cases the full vector is too big to
+    /// show on screen, we simply return the number of syscalls and the percentage of coverage they
+    /// correspond to (i.e. how many `1`s compared to the vector's length).
+    ///
+    /// # Examples
+    /// ```
+    /// use rosa::trace::Trace;
+    ///
+    /// // Dummy trace to test with.
+    /// let trace = Trace {
+    ///     uid: "my_trace".to_string(),
+    ///     test_input: vec![],
+    ///     edges: vec![],
+    ///     syscalls: vec![0, 0, 1, 0],
+    /// };
+    ///
+    /// assert_eq!(trace.syscalls_as_string(), "1 syscalls (25.00%)".to_string());
+    /// ```
     pub fn syscalls_as_string(&self) -> String {
         let nb_syscalls = self
             .syscalls
@@ -145,6 +259,54 @@ impl Trace {
     }
 }
 
+/// Load multiple traces from file.
+///
+/// This function is used to load a lot of traces in bulk, while filtering some of them out
+/// depending on different criteria. It's the function to use when "hot"-loading, i.e. loading
+/// while the fuzzer is actively producing new traces.
+///
+/// For each test input file `X` discovered in `test_input_dir`, exactly one trace dump file
+/// `X.trace` is expected to be found in `trace_dump_dir`. Whether this will provoke an error or
+/// not is determined by the `skip_missing_traces` argument (see below).
+///
+/// # Arguments
+/// * `test_input_dir` - The directory containing the test inputs to be loaded.
+/// * `trace_dump_dir` - The directory containing the trace dumps to be loaded.
+/// * `fuzzer_instance_name` - If [Some], this is the name that's going to be used to namespace the
+///   trace. This is useful when performing parallel fuzzing, as each fuzzer's unique name is used
+///   as a prefix/namespace to the trace UID, to ensure that no collisions are possible.
+/// * `known_traces` - A [HashMap] of known traces. This is used as a filter, to avoid loading
+///   already seen traces; any trace UIDs contained in the [HashMap] will **not** be loaded.
+/// * `skip_missing_traces` - If `true`, missing or incomplete traces will be skipped, otherwise an
+///   error will be returned. This is used when "hot"-loading, as we may come across incomplete or
+///   missing trace dump files; we can ignore them and let some future invocation pick them up.
+///
+/// # Examples
+/// ```
+/// use std::{path::Path, collections::HashMap};
+/// use rosa::trace;
+///
+/// let mut known_traces = HashMap::new();
+/// let traces = trace::load_traces(
+///     &Path::new("/path/to/test_input_dir/"),
+///     &Path::new("/path/to/trace_dump_dir/"),
+///     Some("main"),
+///     &mut known_traces,
+///     // Will skip any incomplete/missing trace dumps.
+///     false,
+/// );
+///
+/// // The previous call populated the `known_traces` hash map, which means that this call will
+/// // only pick up traces that the previous one did not.
+/// let new_traces = trace::load_traces(
+///     &Path::new("/path/to/test_input_dir/"),
+///     &Path::new("/path/to/trace_dump_dir/"),
+///     Some("main"),
+///     &mut known_traces,
+///     // Will expect every trace dump to be present & complete.
+///     true,
+/// );
+/// ```
 pub fn load_traces(
     test_input_dir: &Path,
     trace_dump_dir: &Path,
@@ -258,12 +420,58 @@ pub fn load_traces(
         .collect()
 }
 
+/// Save a collection of traces to an output directory.
+///
+/// Specifically, create two files per trace:
+/// - A file containing the **test input** of the trace;
+/// - A file containing the **trace dump** of the trace.
+///
+/// # Arguments
+/// * `traces` - The collection of traces to save.
+/// * `output_dir` - The output directory where we should save the traces.
+///
+/// # Examples
+/// ```
+/// use std::path::Path;
+/// use rosa::trace::{self, Trace};
+///
+/// let my_traces = vec![
+///     Trace {
+///         uid: "trace1".to_string(), test_input: vec![0x01], edges: vec![], syscalls: vec![]
+///     },
+///     Trace {
+///         uid: "trace2".to_string(), test_input: vec![0x02], edges: vec![], syscalls: vec![]
+///     },
+/// ];
+///
+/// trace::save_traces(&my_traces, &Path::new("/path/to/traces_dir/"));
+/// ```
 pub fn save_traces(traces: &[Trace], output_dir: &Path) -> Result<(), RosaError> {
     traces.iter().try_for_each(|trace| {
         save_trace_test_input(trace, output_dir).and_then(|()| save_trace_dump(trace, output_dir))
     })
 }
 
+/// Save the test input of a trace to a file.
+///
+/// # Arguments
+/// * `trace` - The trace whose test input we should save.
+/// * `output_dir` - The output directory where we should save the trace input.
+///
+/// # Examples
+/// ```
+/// use std::path::Path;
+/// use rosa::trace::{self, Trace};
+///
+/// let my_trace = Trace {
+///     uid: "my_trace".to_string(),
+///     test_input: vec![0x01, 0x02, 0x03, 0x04],
+///     edges: vec![],
+///     syscalls: vec![],
+/// };
+///
+/// trace::save_trace_test_input(&my_trace, &Path::new("/path/to/my_trace"));
+/// ```
 pub fn save_trace_test_input(trace: &Trace, output_dir: &Path) -> Result<(), RosaError> {
     let trace_test_input_file = output_dir.join(&trace.uid);
     fs::write(&trace_test_input_file, &trace.test_input).map_err(|err| {
@@ -276,7 +484,32 @@ pub fn save_trace_test_input(trace: &Trace, output_dir: &Path) -> Result<(), Ros
     Ok(())
 }
 
-fn save_trace_dump(trace: &Trace, output_dir: &Path) -> Result<(), RosaError> {
+/// Save the runtime representation (trace dump) of a trace to a file.
+///
+/// Just like in [Trace::load], we will maintain the expected format of a binary trace dump:
+///   ```text
+///   <nb_edges: u64><nb_syscalls: u64><edges: [u8]><syscalls: [u8]>
+///   ```
+///
+/// # Arguments
+/// * `trace` - The trace whose runtime representation we should save
+/// * `output_dir` - The output directory where we should save the trace dump.
+///
+/// # Examples
+/// ```
+/// use std::path::Path;
+/// use rosa::trace::{self, Trace};
+///
+/// let my_trace = Trace {
+///     uid: "my_trace".to_string(),
+///     test_input: vec![],
+///     edges: vec![1, 0, 1, 0],
+///     syscalls: vec![0, 1, 0, 1],
+/// };
+///
+/// trace::save_trace_dump(&my_trace, &Path::new("/path/to/my_trace.trace"));
+/// ```
+pub fn save_trace_dump(trace: &Trace, output_dir: &Path) -> Result<(), RosaError> {
     let mut output = vec![];
     let edges_length: u64 = trace
         .edges
