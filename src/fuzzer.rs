@@ -1,3 +1,8 @@
+//! Fuzzer-handling utilities.
+//!
+//! This module contains utilities to create, spawn and stop fuzzer processes, as well as some
+//! fuzzer-monitoring utilities.
+
 use std::{
     collections::HashMap,
     fs::{self, File},
@@ -7,15 +12,47 @@ use std::{
 
 use crate::error::RosaError;
 
+/// A fuzzer process.
 pub struct FuzzerProcess {
+    /// The command used to run the fuzzer.
     fuzzer_cmd: Vec<String>,
+    /// The environment passed to the fuzzer process.
     fuzzer_env: HashMap<String, String>,
+    /// The log file that holds the fuzzer's output (`stdout` & `stderr`).
     pub log_file: PathBuf,
+    /// The [Command] of the fuzzer process.
     command: Command,
+    /// The fuzzer process.
     process: Option<Child>,
 }
 
 impl FuzzerProcess {
+    /// Create a new fuzzer process (without spawning it).
+    ///
+    /// # Arguments
+    /// * `fuzzer_cmd` - The command used to run the fuzzer.
+    /// * `fuzzer_env` - Any environment variables to be passed to the fuzzer process.
+    /// * `log_file` - The log file to use to store the fuzzer's output (`stdout` & `stderr`).
+    ///
+    /// # Examples
+    /// ```
+    /// use std::{path::PathBuf, collections::HashMap};
+    /// use rosa::fuzzer::FuzzerProcess;
+    ///
+    /// let fuzzer_process = FuzzerProcess::create(
+    ///     vec![
+    ///         "afl-fuzz".to_string(),
+    ///         "-i".to_string(),
+    ///         "in".to_string(),
+    ///         "-o".to_string(),
+    ///         "out".to_string(),
+    ///         "--".to_string(),
+    ///         "./target".to_string(),
+    ///     ],
+    ///     HashMap::from([("AFL_DEBUG".to_string(), "1".to_string())]),
+    ///     PathBuf::from("/path/to/log_file.log"),
+    /// );
+    /// ```
     pub fn create(
         fuzzer_cmd: Vec<String>,
         fuzzer_env: HashMap<String, String>,
@@ -48,6 +85,7 @@ impl FuzzerProcess {
         })
     }
 
+    /// Spawn (start) the fuzzer process.
     pub fn spawn(&mut self) -> Result<(), RosaError> {
         match &self.process {
             Some(_) => fail!("could not start fuzzer process; process is already running."),
@@ -63,6 +101,7 @@ impl FuzzerProcess {
         Ok(())
     }
 
+    /// Check if the fuzzer process is running.
     pub fn is_running(&mut self) -> Result<bool, RosaError> {
         self.process
             .as_mut()
@@ -77,6 +116,7 @@ impl FuzzerProcess {
             ))
     }
 
+    /// Stop the fuzzer process (via `SIGINT`).
     pub fn stop(&mut self) -> Result<(), RosaError> {
         self.process.as_mut().map_or_else(
             || fail!("could not stop process; process is not spawned."),
@@ -87,6 +127,9 @@ impl FuzzerProcess {
         )
     }
 
+    /// Check the success of the fuzzer process.
+    ///
+    /// If the fuzzer process returned anything other than `0`, it's considered unsuccessful.
     pub fn check_success(&mut self) -> Result<(), RosaError> {
         self.process.as_mut().map_or_else(
             || fail!("could not check for success of fuzzer process; process is not spawned."),
@@ -101,6 +144,7 @@ impl FuzzerProcess {
         )
     }
 
+    /// Get the environment passed to the fuzzer in string form.
     pub fn env_as_string(&self) -> String {
         self.fuzzer_env
             .iter()
@@ -109,11 +153,20 @@ impl FuzzerProcess {
             .join(" ")
     }
 
+    /// Get the command used to run the fuzzer in string form.
     pub fn cmd_as_string(&self) -> String {
         self.fuzzer_cmd.join(" ")
     }
 }
 
+/// Check if the fuzzer has found any crashes.
+///
+/// Most fuzzers are optimized to find crashes; if a crash is found, the fuzzer will generate more
+/// test inputs that explore that crash. This might bias the exploration of the target program, so
+/// it is useful to know if it has happened.
+///
+/// # Arguments
+/// * `crashes_dir` - The directory where the fuzzer would store any discovered crashes.
 pub fn fuzzer_found_crashes(crashes_dir: &Path) -> Result<bool, RosaError> {
     fs::read_dir(crashes_dir).map_or_else(
         |err| {
