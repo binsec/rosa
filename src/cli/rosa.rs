@@ -445,6 +445,6 @@ mod tests {
     #[test]
     fn verify_cli() {
         use clap::CommandFactory;
-        Cli::command().verbose_assert()
+        Cli::command().debug_assert()
     }
 }
