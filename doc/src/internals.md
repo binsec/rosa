@@ -1,0 +1,3 @@
+# How ROSA works
+
+TODO
