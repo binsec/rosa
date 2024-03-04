@@ -21,11 +21,13 @@ use crate::{
 /// The available oracle algorithms.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub enum Oracle {
-    /// The CompMinMax oracle.
+    /// The CompMinMax oracle algorithm.
     ///
-    /// This oracle determines that a given trace is a backdoor, if the **maximum distance**
-    /// between the **trace and the cluster** is **greater** than the **minimum internal distance**
-    /// of the cluster.
+    /// Two sets of distances are computed:
+    /// - D_t: the distances between the trace and every trace in the cluster;
+    /// - D_c: the distances between every pair of traces within the cluster.
+    ///
+    /// If `min(D_t) > max(D_c)`, the trace is considered to correspond to a backdoor.
     CompMinMax,
 }
 
