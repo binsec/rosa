@@ -24,8 +24,8 @@ pub enum Oracle {
     /// The CompMinMax oracle algorithm.
     ///
     /// Two sets of distances are computed:
-    /// - D_t: the distances between the trace and every trace in the cluster;
-    /// - D_c: the distances between every pair of traces within the cluster.
+    /// - `D_t`: the distances between the trace and every trace in the cluster;
+    /// - `D_c`: the distances between every pair of traces within the cluster.
     ///
     /// If `min(D_t) > max(D_c)`, the trace is considered to correspond to a backdoor.
     CompMinMax,
