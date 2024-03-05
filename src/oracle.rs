@@ -44,7 +44,7 @@ impl Oracle {
     /// # Example
     /// ```
     /// use rosa::{
-    ///     clustering::{self, Cluster},
+    ///     clustering::Cluster,
     ///     criterion::Criterion,
     ///     distance_metric::DistanceMetric,
     ///     oracle::Oracle,

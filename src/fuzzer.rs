@@ -39,7 +39,7 @@ impl FuzzerProcess {
     /// use std::{path::PathBuf, collections::HashMap};
     /// use rosa::fuzzer::FuzzerProcess;
     ///
-    /// let fuzzer_process = FuzzerProcess::create(
+    /// let _fuzzer_process = FuzzerProcess::create(
     ///     vec![
     ///         "afl-fuzz".to_string(),
     ///         "-i".to_string(),

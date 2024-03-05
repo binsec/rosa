@@ -61,14 +61,14 @@ impl Trace {
     /// use std::path::Path;
     /// use rosa::trace::Trace;
     ///
-    /// let trace = Trace::load(
+    /// let _trace = Trace::load(
     ///     "my_trace",
     ///     &Path::new("/path/to/test_input_file"),
     ///     &Path::new("/path/to/trace_file.trace"),
     /// );
     ///
     /// // With AFL/AFL++, traces would usually be in these dirs:
-    /// let afl_trace = Trace::load(
+    /// let _afl_trace = Trace::load(
     ///     "afl_trace",
     ///     &Path::new("fuzzer_out/queue/id_000000"),
     ///     &Path::new("fuzzer_out/trace_dumps/id_000000.trace"),
@@ -287,7 +287,7 @@ impl Trace {
 /// use rosa::trace;
 ///
 /// let mut known_traces = HashMap::new();
-/// let traces = trace::load_traces(
+/// let _traces = trace::load_traces(
 ///     &Path::new("/path/to/test_input_dir/"),
 ///     &Path::new("/path/to/trace_dump_dir/"),
 ///     Some("main"),
@@ -298,7 +298,7 @@ impl Trace {
 ///
 /// // The previous call populated the `known_traces` hash map, which means that this call will
 /// // only pick up traces that the previous one did not.
-/// let new_traces = trace::load_traces(
+/// let _new_traces = trace::load_traces(
 ///     &Path::new("/path/to/test_input_dir/"),
 ///     &Path::new("/path/to/trace_dump_dir/"),
 ///     Some("main"),
@@ -444,7 +444,7 @@ pub fn load_traces(
 ///     },
 /// ];
 ///
-/// trace::save_traces(&my_traces, &Path::new("/path/to/traces_dir/"));
+/// let _ = trace::save_traces(&my_traces, &Path::new("/path/to/traces_dir/"));
 /// ```
 pub fn save_traces(traces: &[Trace], output_dir: &Path) -> Result<(), RosaError> {
     traces.iter().try_for_each(|trace| {
@@ -470,7 +470,7 @@ pub fn save_traces(traces: &[Trace], output_dir: &Path) -> Result<(), RosaError>
 ///     syscalls: vec![],
 /// };
 ///
-/// trace::save_trace_test_input(&my_trace, &Path::new("/path/to/my_trace"));
+/// let _ = trace::save_trace_test_input(&my_trace, &Path::new("/path/to/my_trace"));
 /// ```
 pub fn save_trace_test_input(trace: &Trace, output_dir: &Path) -> Result<(), RosaError> {
     let trace_test_input_file = output_dir.join(&trace.uid);
@@ -507,7 +507,7 @@ pub fn save_trace_test_input(trace: &Trace, output_dir: &Path) -> Result<(), Ros
 ///     syscalls: vec![0, 1, 0, 1],
 /// };
 ///
-/// trace::save_trace_dump(&my_trace, &Path::new("/path/to/my_trace.trace"));
+/// let _ = trace::save_trace_dump(&my_trace, &Path::new("/path/to/my_trace.trace"));
 /// ```
 pub fn save_trace_dump(trace: &Trace, output_dir: &Path) -> Result<(), RosaError> {
     let mut output = vec![];

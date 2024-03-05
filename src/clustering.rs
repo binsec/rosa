@@ -194,7 +194,7 @@ pub fn get_most_similar_cluster<'a>(
 /// # Examples
 /// ```
 /// use rosa::{
-///     clustering::{self, Cluster},
+///     clustering,
 ///     criterion::Criterion,
 ///     distance_metric::DistanceMetric,
 ///     trace::Trace,
@@ -379,7 +379,7 @@ pub fn cluster_traces(
 ///     },
 /// ];
 ///
-/// clustering::save_clusters(&clusters, &Path::new("/path/to/clusters_dir/"));
+/// let _ = clustering::save_clusters(&clusters, &Path::new("/path/to/clusters_dir/"));
 /// ```
 pub fn save_clusters(clusters: &[Cluster], output_dir: &Path) -> Result<(), RosaError> {
     clusters.iter().try_for_each(|cluster| {
