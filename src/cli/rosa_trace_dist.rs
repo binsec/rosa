@@ -1,3 +1,8 @@
+//! Show the distances between two traces
+//!
+//! Sometimes it is useful to be able to quickly know the distances (in terms of both edges &
+//! syscalls) between two traces; this is what this tool is for.
+
 use std::{
     path::{Path, PathBuf},
     process::ExitCode,
@@ -40,6 +45,13 @@ struct Cli {
     distance_metric: String,
 }
 
+/// Run the distance calculation tool.
+///
+/// # Arguments
+/// * `output_dir` - Path to the output directory where ROSA's findings are stored.
+/// * `trace1_uid` - The unique ID of the first trace.
+/// * `trace2_uid` - The unique ID of the second trace.
+/// * `distance_metric` - The distance metric to use when calculating distances.
 fn run(
     output_dir: &Path,
     trace1_uid: &str,

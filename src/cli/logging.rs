@@ -1,3 +1,8 @@
+//! Logging macros.
+//!
+//! These are use to pretty-print messages to the terminal. They are used by all the CLI binaries.
+
+/// Format a generic ROSA message (prefixed by ROSA's identifier).
 macro_rules! rosa_message {
     ( $( $arg:tt )* ) => {
         {
@@ -10,6 +15,7 @@ macro_rules! rosa_message {
     }
 }
 
+/// Format a verbose ROSA message.
 macro_rules! verbose_message {
     ( $( $arg:tt )* ) => {
         {
@@ -21,6 +27,7 @@ macro_rules! verbose_message {
     }
 }
 
+/// Format an information message (the "default" message kind).
 macro_rules! info_message {
     ( $( $arg:tt )* ) => {
         {
@@ -32,6 +39,7 @@ macro_rules! info_message {
     }
 }
 
+/// Format a warning message.
 macro_rules! warning_message {
     ( $( $arg:tt )* ) => {
         {
@@ -43,6 +51,7 @@ macro_rules! warning_message {
     }
 }
 
+/// Format an error message.
 macro_rules! error_message {
     ( $file:expr, $line:expr, $message:expr ) => {{
         rosa_message!(
@@ -54,6 +63,7 @@ macro_rules! error_message {
     }};
 }
 
+/// Print an information message (terminated by a newline).
 macro_rules! println_info {
     ( $( $arg:tt )* ) => {
         {
@@ -62,6 +72,7 @@ macro_rules! println_info {
     }
 }
 
+/// Print a verbose message (terminated by a newline).
 macro_rules! println_verbose {
     ( $( $arg:tt )* ) => {
         {
@@ -70,6 +81,7 @@ macro_rules! println_verbose {
     }
 }
 
+/// Print a warning message (terminated by a newline).
 macro_rules! println_warning {
     ( $( $arg:tt )* ) => {
         {
@@ -78,6 +90,7 @@ macro_rules! println_warning {
     }
 }
 
+/// Print an error message (terminated by a newline).
 macro_rules! println_error {
     ( $error:expr ) => {{
         eprintln!(

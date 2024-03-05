@@ -17,6 +17,7 @@ pub enum DistanceMetric {
     ///
     /// This distance metric simply implements the [Hamming distance](
     /// https://en.wikipedia.org/wiki/Hamming_distance).
+    #[serde(rename = "hamming")]
     Hamming,
 }
 

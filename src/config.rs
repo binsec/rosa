@@ -135,7 +135,7 @@ impl Config {
         "- traces: contains all the test inputs and trace dumps corresponding to the traces",
         "  that have been evaluated so far",
         "",
-        "It also contains the `config.json` file, which describes the configuration parameters",
+        "It also contains the `config.toml` file, which describes the configuration parameters",
         "used in order to produce these results.",
         "",
     ];
@@ -146,8 +146,8 @@ impl Config {
         "as those used by the fuzzer that discovered it. You can find the parameters used by the",
         "fuzzer in the following files:",
         "",
-        "    ../config.json",
-        "    ../decisions/<BACKDOOR_INPUT>.json",
+        "    ../config.toml",
+        "    ../decisions/<BACKDOOR_INPUT>.toml",
         "",
     ];
     /// The README to put in the `clusters` directory in the output directory.
@@ -194,13 +194,12 @@ impl Config {
     ///
     /// # Arguments
     /// * `output_dir` - The directory in which to save the configuration file. The file will be
-    ///   titled `config.json`.
+    ///   titled `config.toml`.
     pub fn save(&self, output_dir: &Path) -> Result<(), RosaError> {
-        let config_json =
-            serde_json::to_string_pretty(&self).expect("failed to serialize config JSON.");
-        let config_file = output_dir.join("config").with_extension("json");
+        let config_toml = toml::to_string(&self).expect("failed to serialize config TOML.");
+        let config_file = output_dir.join("config").with_extension("toml");
 
-        fs::write(&config_file, config_json).map_err(|err| {
+        fs::write(&config_file, config_toml).map_err(|err| {
             error!(
                 "could not save config to file {}: {}.",
                 config_file.display(),
@@ -214,7 +213,7 @@ impl Config {
     /// # Arguments
     /// * `file` - The file to load the configuration from.
     pub fn load(file: &Path) -> Result<Self, RosaError> {
-        let config_json = fs::read_to_string(file).map_err(|err| {
+        let config_toml = fs::read_to_string(file).map_err(|err| {
             error!(
                 "failed to read configuration from {}: {}.",
                 file.display(),
@@ -222,8 +221,8 @@ impl Config {
             )
         })?;
 
-        serde_json::from_str(&config_json)
-            .map_err(|err| error!("failed to deserialize config JSON: {}.", err))
+        toml::from_str(&config_toml)
+            .map_err(|err| error!("failed to deserialize config TOML: {}.", err))
     }
 
     /// Set up ROSA's output directories.

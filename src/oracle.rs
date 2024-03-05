@@ -28,6 +28,7 @@ pub enum Oracle {
     /// - `D_c`: the distances between every pair of traces within the cluster.
     ///
     /// If `min(D_t) > max(D_c)`, the trace is considered to correspond to a backdoor.
+    #[serde(rename = "comp-min-max")]
     CompMinMax,
 }
 
@@ -113,7 +114,7 @@ impl fmt::Display for Oracle {
             f,
             "{}",
             match self {
-                Self::CompMinMax => "comp_min_max",
+                Self::CompMinMax => "comp-min-max",
             }
         )
     }
@@ -124,7 +125,7 @@ impl str::FromStr for Oracle {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "comp_min_max" => Ok(Self::CompMinMax),
+            "comp-min-max" => Ok(Self::CompMinMax),
             unknown => fail!("invalid oracle '{}'.", unknown),
         }
     }

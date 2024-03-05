@@ -1,3 +1,10 @@
+//! Evaluate ROSA's findings using "ground-truth" programs.
+//!
+//! In order to confidently evaluate the quality of ROSA's findings (e.g. how many "backdoors" in
+//! its findings are actually backdoors?), we need a **ground-truth** version of the target
+//! program. This version should print the string `***BACKDOOR TRIGGERED***` in `stderr` for every
+//! triggered backdoor, so that this tool can confidently say if a backdoor has been reached.
+
 use std::{
     collections::HashMap,
     fs::{self, File},
@@ -81,27 +88,41 @@ struct Cli {
     csv_file: Option<PathBuf>,
 }
 
+/// A kind of sample/finding.
 #[derive(PartialEq)]
 enum SampleKind {
+    /// The sample is _marked_ as a backdoor and actually _is_ a backdoor.
     TruePositive,
+    /// The sample is _marked_ as a backdoor but actually _is not_ a backdoor.
     FalsePositive,
+    /// The sample is _not marked_ as a backdoor and actually _is not_ a backdoor.
     TrueNegative,
+    /// The sample is _not marked_ as a backdoor but actually _is_ a backdoor.
     FalseNegative,
 }
 
+/// A sample from ROSA's findings.
 struct Sample {
+    /// The unique ID of the sample.
     uid: String,
+    /// The kind of the sample.
     kind: SampleKind,
 }
 
+/// The stats obtained from evaluating ROSA's findings.
 struct Stats {
+    /// The number of true positives.
     true_positives: u64,
+    /// The number of false positives.
     false_positives: u64,
+    /// The number of true negatives.
     true_negatives: u64,
+    /// The number of false negatives.
     false_negatives: u64,
 }
 
 impl Stats {
+    /// Create a new stats record.
     pub fn new() -> Self {
         Stats {
             true_positives: 0,
@@ -111,6 +132,10 @@ impl Stats {
         }
     }
 
+    /// Add a sample to the record.
+    ///
+    /// # Arguments
+    /// * `sample` - The sample to add.
     pub fn add_sample(&mut self, sample: &Sample) {
         match sample.kind {
             SampleKind::TruePositive => {
@@ -128,10 +153,12 @@ impl Stats {
         }
     }
 
+    /// Count the total number of samples in the record.
     pub fn total_samples(&self) -> u64 {
         self.true_positives + self.false_positives + self.true_negatives + self.false_negatives
     }
 
+    /// Get the current precision of the record.
     pub fn precision(&self) -> Option<f64> {
         match self.true_positives + self.false_positives {
             0 => None,
@@ -139,6 +166,7 @@ impl Stats {
         }
     }
 
+    /// Get the current recall of the record.
     pub fn recall(&self) -> Option<f64> {
         match self.true_positives + self.false_negatives {
             0 => None,
@@ -147,6 +175,11 @@ impl Stats {
     }
 }
 
+/// Check a ROSA decision.
+///
+/// As explained in the module-level doc, the decision's test input will be fed to the
+/// **ground-truth** program, and we'll check if the string `***BACKDOOR TRIGGERED***` appears in
+/// `stderr`.
 fn check_decision(
     cmd: &[String],
     env: &HashMap<String, String>,
@@ -182,6 +215,18 @@ fn check_decision(
     })
 }
 
+/// Run the evaluation of ROSA's findings.
+///
+/// # Arguments
+/// * `output_dir` - Path to the output directory where ROSA's findings are stored.
+/// * `target_program_cmd` - The command to use to run the "ground-truth" program.
+/// * `target_program_env` - The environment to pass to the "ground-truth" program.
+/// * `trace_uids` - The unique IDs of the traces to evaluate (if empty, all traces are evaluated).
+/// * `print_true_positives` - Print the unique IDs of true positive traces.
+/// * `print_false_positives` - Print the unique IDs of false positive traces.
+/// * `print_true_negatives` - Print the unique IDs of true negative traces.
+/// * `print_false_negatives` - Print the unique IDs of false negative traces.
+/// * `csv_file` - Path to a CSV file in which to store the resulting stats.
 #[allow(clippy::too_many_arguments)]
 fn run(
     output_dir: &Path,
@@ -194,7 +239,7 @@ fn run(
     print_false_negatives: bool,
     csv_file: Option<PathBuf>,
 ) -> Result<(), RosaError> {
-    let config = Config::load(&output_dir.join("config").with_extension("json"))?;
+    let config = Config::load(&output_dir.join("config").with_extension("toml"))?;
 
     let mut known_traces = HashMap::new();
     let all_traces = trace::load_traces(
@@ -236,11 +281,12 @@ fn run(
                 &output_dir
                     .join("decisions")
                     .join(trace_uid)
-                    .with_extension("json"),
+                    .with_extension("toml"),
             )
         })
         .collect::<Result<Vec<TimedDecision>, RosaError>>()?;
 
+    // We can run the evaluations in parallel, since they're all independent.
     let samples: Vec<Sample> = timed_decisions
         .par_iter()
         .map(|timed_decision| {

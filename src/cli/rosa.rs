@@ -1,3 +1,7 @@
+//! Detect backdoors in binary programs.
+//!
+//! This is the main ROSA binary; it can be used directly for backdoor detection.
+
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -42,7 +46,7 @@ struct Cli {
     #[arg(
         short = 'c',
         long = "config-file",
-        default_value = "config.json",
+        default_value = "config.toml",
         value_name = "FILE"
     )]
     config_file: PathBuf,
@@ -71,6 +75,13 @@ macro_rules! with_cleanup {
     }};
 }
 
+/// Run the backdoor detection tool.
+///
+/// # Arguments
+/// * `config_file` - Path to the configuration file.
+/// * `force` - Force the overwrite of the output directory if it exists.
+/// * `verbose` - Display verbose messages.
+/// * `no_tui` - Disable the TUI.
 fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(), RosaError> {
     // Load the configuration and set up the output directories.
     let config = Config::load(config_file)?;

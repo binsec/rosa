@@ -14,16 +14,20 @@ use crate::error::RosaError;
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub enum Criterion {
     /// Only the edge component of the runtime trace is taken into account.
+    #[serde(rename = "edges-only")]
     EdgesOnly,
     /// Only the syscall component of the runtime trace is taken into account.
+    #[serde(rename = "syscalls-only")]
     SyscallsOnly,
     /// Either the edge or the syscall component of the runtime trace is taken into account.
     /// The meaning of this criterion depends on the application; in general, you should think of
     /// it as a _logical OR_ between [Criterion::EdgesOnly] and [Criterion::SyscallsOnly].
+    #[serde(rename = "edges-or-syscalls")]
     EdgesOrSyscalls,
     /// Both the edge and the syscall components of the runtime trace are taken into account.
     /// The meaning of this criterion depends on the application; in general, you should think of
     /// it as a _logical AND_ between [Criterion::EdgesOnly] and [Criterion::SyscallsOnly].
+    #[serde(rename = "edges-and-syscalls")]
     EdgesAndSyscalls,
 }
 

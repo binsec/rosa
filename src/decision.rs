@@ -15,12 +15,16 @@ use crate::error::RosaError;
 pub enum DecisionReason {
     /// The decision was made because the trace was a seed trace (i.e. it originated from the seed
     /// phase).
+    #[serde(rename = "seed")]
     Seed,
     /// The decision was made because of the edges of the trace.
+    #[serde(rename = "edges")]
     Edges,
     /// The decision was made because of the syscalls of the trace.
+    #[serde(rename = "syscalls")]
     Syscalls,
     /// The decision was made because of both the edges and the syscalls of the trace.
+    #[serde(rename = "edges-and-syscalls")]
     EdgesAndSyscalls,
 }
 
@@ -54,7 +58,7 @@ impl TimedDecision {
     /// # Arguments
     /// * `file` - The file to load the decision from.
     pub fn load(file: &Path) -> Result<Self, RosaError> {
-        let decision_json = fs::read_to_string(file).map_err(|err| {
+        let decision_toml = fs::read_to_string(file).map_err(|err| {
             error!(
                 "could not read decision from file {}: {}.",
                 file.display(),
@@ -62,23 +66,22 @@ impl TimedDecision {
             )
         })?;
 
-        serde_json::from_str(&decision_json)
-            .map_err(|err| error!("could not deserialize decision JSON: {}.", err))
+        toml::from_str(&decision_toml)
+            .map_err(|err| error!("could not deserialize decision TOML: {}.", err))
     }
 
     /// Save the decision to a file.
     ///
     /// # Arguments
     /// * `output_dir` - The output directory in which to save the decision file. The decision
-    ///   file's name will be the UID of the trace it's associated with (e.g. `id_000000.json`).
+    ///   file's name will be the UID of the trace it's associated with (e.g. `id_000000.toml`).
     pub fn save(&self, output_dir: &Path) -> Result<(), RosaError> {
-        let decision_json =
-            serde_json::to_string_pretty(&self).expect("failed to serialize decision JSON.");
+        let decision_toml = toml::to_string(&self).expect("failed to serialize decision TOML.");
         let decision_file = output_dir
             .join(&self.decision.trace_uid)
-            .with_extension("json");
+            .with_extension("toml");
 
-        fs::write(&decision_file, decision_json).map_err(|err| {
+        fs::write(&decision_file, decision_toml).map_err(|err| {
             error!(
                 "could not save decision to file {}: {}.",
                 decision_file.display(),

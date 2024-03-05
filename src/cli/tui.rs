@@ -69,7 +69,7 @@ impl RosaTuiStats {
     }
 
     pub fn load_config(&mut self, monitor_dir: &Path) -> Result<(), RosaError> {
-        let config = Config::load(&monitor_dir.join("config").with_extension("json"))?;
+        let config = Config::load(&monitor_dir.join("config").with_extension("toml"))?;
 
         self.oracle = config.oracle;
         self.oracle_criterion = config.oracle_criterion;
@@ -122,7 +122,7 @@ impl RosaTuiStats {
     }
 
     pub fn update(&mut self, monitor_dir: &Path) -> Result<(), RosaError> {
-        let config = Config::load(&monitor_dir.join("config").with_extension("json"))?;
+        let config = Config::load(&monitor_dir.join("config").with_extension("toml"))?;
 
         // Check for new traces.
         let current_traces = fs::read_dir(config.traces_dir())

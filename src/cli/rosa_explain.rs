@@ -1,3 +1,10 @@
+//! Explain a ROSA finding.
+//!
+//! Sometimes, it is useful to go beyond the _reason_ of a decision made by the metamorphic oracle;
+//! this little program allows us to do so by printing all the remarkable differences between a
+//! given trace and its cluster. That might shed some more light into why something was or wasn't
+//! classified as a backdoor.
+
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -36,13 +43,18 @@ struct Cli {
     trace_uid: String,
 }
 
+/// Run the explanation tool.
+///
+/// # Arguments
+/// * `output_dir` - Path to the output directory where ROSA's findings are stored.
+/// * `trace_uid` - The unique ID of the trace we want to get explanations for.
 fn run(output_dir: &Path, trace_uid: &str) -> Result<(), RosaError> {
-    let config = Config::load(&output_dir.join("config").with_extension("json"))?;
+    let config = Config::load(&output_dir.join("config").with_extension("toml"))?;
     let timed_decision = TimedDecision::load(
         &output_dir
             .join("decisions")
             .join(trace_uid)
-            .with_extension("json"),
+            .with_extension("toml"),
     )?;
     let decision = timed_decision.decision;
     let trace = Trace::load(
