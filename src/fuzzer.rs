@@ -14,6 +14,8 @@ use crate::error::RosaError;
 
 /// A fuzzer process.
 pub struct FuzzerProcess {
+    /// The name of the fuzzer process.
+    pub name: String,
     /// The command used to run the fuzzer.
     fuzzer_cmd: Vec<String>,
     /// The environment passed to the fuzzer process.
@@ -40,6 +42,7 @@ impl FuzzerProcess {
     /// use rosa::fuzzer::FuzzerProcess;
     ///
     /// let _fuzzer_process = FuzzerProcess::create(
+    ///     "my_fuzzer".to_string(),
     ///     vec![
     ///         "afl-fuzz".to_string(),
     ///         "-i".to_string(),
@@ -54,6 +57,7 @@ impl FuzzerProcess {
     /// );
     /// ```
     pub fn create(
+        name: String,
         fuzzer_cmd: Vec<String>,
         fuzzer_env: HashMap<String, String>,
         log_file: PathBuf,
@@ -77,6 +81,7 @@ impl FuzzerProcess {
             .stderr(Stdio::from(log_stderr));
 
         Ok(FuzzerProcess {
+            name,
             fuzzer_cmd,
             fuzzer_env,
             log_file,
@@ -124,7 +129,11 @@ impl FuzzerProcess {
                 libc::kill(process.id() as i32, libc::SIGINT);
                 Ok(())
             },
-        )
+        )?;
+
+        self.process = None;
+
+        Ok(())
     }
 
     /// Check the success of the fuzzer process.
@@ -178,4 +187,86 @@ pub fn fuzzer_found_crashes(crashes_dir: &Path) -> Result<bool, RosaError> {
         },
         |res| Ok(res.filter_map(|item| item.ok()).next().is_some()),
     )
+}
+
+/// Get the PID of a fuzzer from its output dir.
+///
+/// **NOTE: this only works for AFL++.**
+///
+/// AFL++ fuzzers leave a `fuzzer_stats` file in their output directory, that contains the PID of
+/// the fuzzer instance.
+///
+/// # Arguments
+/// * `fuzzer_dir` - The output directory of the fuzzer instance.
+fn get_fuzzer_pid(fuzzer_dir: &Path) -> Result<String, RosaError> {
+    let fuzzer_stats_file = fuzzer_dir.join("fuzzer_stats");
+    fs::read_to_string(&fuzzer_stats_file).map_or_else(
+        |err| {
+            fail!(
+                "could not read fuzzer stats file ('{}') to get PID: {}.",
+                fuzzer_stats_file.display(),
+                err
+            )
+        },
+        |raw_stats| {
+            let fuzzer_pid_index = raw_stats
+                .match_indices("fuzzer_pid")
+                .next()
+                .ok_or(error!(
+                    "could not find \"fuzzer_pid\" in '{}'.",
+                    fuzzer_stats_file.display()
+                ))?
+                .0;
+            let pid_start_index = fuzzer_pid_index
+                + raw_stats[fuzzer_pid_index..]
+                    .match_indices(':')
+                    .next()
+                    .ok_or(error!(
+                        "could not find PID value start index in '{}'.",
+                        fuzzer_stats_file.display()
+                    ))?
+                    .0
+                // +1 to move past the colon.
+                + 1;
+            let pid_stop_index = pid_start_index
+                + raw_stats[pid_start_index..]
+                    .match_indices('\n')
+                    .next()
+                    // Just in case we hit the end of the string.
+                    .unwrap_or((raw_stats.len(), ""))
+                    .0;
+
+            Ok(raw_stats[pid_start_index..pid_stop_index]
+                .trim()
+                .to_string())
+        },
+    )
+}
+
+/// Check if a fuzzer is alive (running).
+///
+/// **NOTE: this only works for AFL++.**
+///
+/// # Arguments
+/// * `fuzzer_dir` - The output directory of the fuzzer instance.
+///
+/// # Examples
+/// ```
+/// use std::path::PathBuf;
+/// use rosa::fuzzer;
+///
+/// let fuzzer_dir = PathBuf::from("/path/to/fuzzer_out/main");
+/// let _ = fuzzer::is_fuzzer_alive(&fuzzer_dir);
+/// ```
+pub fn is_fuzzer_alive(fuzzer_dir: &Path) -> Result<bool, RosaError> {
+    let pid = get_fuzzer_pid(fuzzer_dir)?;
+    let proc_dir = PathBuf::from("/proc").join(pid);
+
+    proc_dir.try_exists().map_err(|err| {
+        error!(
+            "could not check process directory '{}': {}.",
+            proc_dir.display(),
+            err
+        )
+    })
 }

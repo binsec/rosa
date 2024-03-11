@@ -38,8 +38,10 @@ struct RosaTuiStats {
     syscall_tolerance: u64,
     config_file_path: String,
     output_dir_path: String,
-    seed_phase_fuzzers: u64,
-    run_phase_fuzzers: u64,
+    total_seed_phase_fuzzers: u64,
+    run_phase_fuzzer_dirs: Vec<PathBuf>,
+    alive_run_phase_fuzzers: u64,
+    total_run_phase_fuzzers: u64,
     crash_warning: bool,
 }
 
@@ -62,8 +64,10 @@ impl RosaTuiStats {
             syscall_tolerance: 0,
             config_file_path: config_path.display().to_string(),
             output_dir_path: output_dir_path.join("").display().to_string(),
-            seed_phase_fuzzers: 0,
-            run_phase_fuzzers: 0,
+            total_seed_phase_fuzzers: 0,
+            run_phase_fuzzer_dirs: vec![],
+            alive_run_phase_fuzzers: 0,
+            total_run_phase_fuzzers: 0,
             crash_warning: false,
         }
     }
@@ -78,8 +82,19 @@ impl RosaTuiStats {
         self.edge_tolerance = config.cluster_formation_edge_tolerance;
         self.syscall_tolerance = config.cluster_formation_syscall_tolerance;
 
-        self.seed_phase_fuzzers = config.seed_phase_fuzzers.len() as u64;
-        self.run_phase_fuzzers = config.run_phase_fuzzers.len() as u64;
+        self.total_seed_phase_fuzzers = config.seed_phase_fuzzers.len() as u64;
+        self.total_run_phase_fuzzers = config.run_phase_fuzzers.len() as u64;
+        self.run_phase_fuzzer_dirs = config
+            .run_phase_fuzzers
+            .iter()
+            .map(|fuzzer_config| {
+                fuzzer_config
+                    .test_input_dir
+                    .parent()
+                    .expect("failed to get parent directory of fuzzer test input dir.")
+                    .to_path_buf()
+            })
+            .collect();
 
         let cluster_files: Vec<PathBuf> = fs::read_dir(config.clusters_dir())
             .map_or_else(
@@ -187,6 +202,17 @@ impl RosaTuiStats {
                 .collect::<Result<Vec<bool>, RosaError>>()?;
             self.crash_warning = found_crashes.iter().any(|found_crashes| *found_crashes);
         }
+
+        // Check for how many run phase fuzzers are alive.
+        self.alive_run_phase_fuzzers =
+            self.run_phase_fuzzer_dirs
+                .iter()
+                .try_fold(0, |acc, fuzzer_dir| {
+                    Ok(match fuzzer::is_fuzzer_alive(fuzzer_dir)? {
+                        true => acc + 1,
+                        false => acc,
+                    })
+                })?;
 
         Ok(())
     }
@@ -361,6 +387,7 @@ impl RosaTui {
         // Give everything a uniform style, for labels and for block titles.
         let block_title_style = Style::reset().bold().italic().fg(Color::Rgb(229, 220, 137));
         let label_style = Style::reset().bold().dim();
+        let warning_style = Style::reset().bold().fg(Color::Rgb(255, 111, 0));
 
         // Create the different blocks.
         let time_stats_block = Block::bordered()
@@ -467,6 +494,16 @@ impl RosaTui {
         // Truncate the configuration options if needed, to make sure they fit on the TUI.
         let mut config_file = stats.config_file_path.clone();
         let mut output_dir = stats.output_dir_path.clone();
+        let seed_phase_fuzzers = format!("{} (stopped)", stats.total_seed_phase_fuzzers);
+        let run_phase_fuzzers = format!(
+            "{}/{}",
+            stats.alive_run_phase_fuzzers, stats.total_run_phase_fuzzers
+        );
+        let run_phase_fuzzers_style =
+            match stats.alive_run_phase_fuzzers < stats.total_run_phase_fuzzers {
+                true => warning_style,
+                false => Style::reset(),
+            };
         // -3 for the borders and left padding.
         let max_text_width = (frame.size().width - 14) as usize;
         if config_file.len() > max_text_width {
@@ -490,11 +527,11 @@ impl RosaTui {
             ]),
             Line::from(vec![
                 Span::styled(" seed phase fuzzers: ", label_style),
-                stats.seed_phase_fuzzers.to_string().into(),
+                seed_phase_fuzzers.into(),
             ]),
             Line::from(vec![
                 Span::styled("  run phase fuzzers: ", label_style),
-                stats.run_phase_fuzzers.to_string().into(),
+                Span::styled(run_phase_fuzzers, run_phase_fuzzers_style),
             ]),
             Line::from(vec![]),
         ];
@@ -507,7 +544,7 @@ impl RosaTui {
                     backdoor detection!"
                         .into(),
                 ])
-                .style(Style::reset().bold().fg(Color::Rgb(255, 111, 0))),
+                .style(warning_style),
             )
         }
 

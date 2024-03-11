@@ -105,6 +105,7 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
         .iter()
         .map(|fuzzer_config| {
             FuzzerProcess::create(
+                fuzzer_config.name.clone(),
                 fuzzer_config.cmd.clone(),
                 fuzzer_config.env.clone(),
                 config
@@ -120,6 +121,7 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
         .iter()
         .map(|fuzzer_config| {
             FuzzerProcess::create(
+                fuzzer_config.name.clone(),
                 fuzzer_config.cmd.clone(),
                 fuzzer_config.env.clone(),
                 config
@@ -141,7 +143,7 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
         seed_phase_fuzzer_processes
             .iter()
             .for_each(|fuzzer_process| {
-                println_verbose!("  Fuzzer process:");
+                println_verbose!("  Fuzzer process '{}':", fuzzer_process.name);
                 println_verbose!("    Env: {}", fuzzer_process.env_as_string());
                 println_verbose!("    Cmd: {}", fuzzer_process.cmd_as_string());
             });
@@ -258,7 +260,7 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
         run_phase_fuzzer_processes
             .iter()
             .for_each(|fuzzer_process| {
-                println_verbose!("  Fuzzer process:");
+                println_verbose!("  Fuzzer process '{}':", fuzzer_process.name);
                 println_verbose!("    Env: {}", fuzzer_process.env_as_string());
                 println_verbose!("    Cmd: {}", fuzzer_process.cmd_as_string());
             });
@@ -304,8 +306,57 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
     let detection_start_time = Instant::now();
 
     let mut already_warned_about_crashes = false;
+    // Keep a record of respawn delays to give fuzzers that need to be respawned.
+    // This is just a hashmap, mapping fuzzer names to delay times (in seconds).
+    // All fuzzers will get an initial respawn delay of 3 seconds (i.e., 3 seconds to get started).
+    // If the respawn is hit again, it means that it didn't work, and that the fuzzer probably
+    // needs more time; in that case, the respawn delay will be doubled for that fuzzer.
+    let mut respawn_delays: HashMap<String, u64> = config
+        .run_phase_fuzzers
+        .iter()
+        .map(|fuzzer_config| (fuzzer_config.name.clone(), 3))
+        .collect();
     // Loop until Ctrl-C.
     while !rosa_should_stop.load(Ordering::SeqCst) {
+        if no_tui {
+            // Check how many fuzzers are alive; if some have crashed/not started, let the user
+            // know.
+            config
+                .run_phase_fuzzers
+                .iter()
+                .try_for_each(|fuzzer_config| {
+                    if !with_cleanup!(
+                        fuzzer::is_fuzzer_alive(fuzzer_config.test_input_dir.parent().expect(
+                            "failed to get parent directory for fuzzer test input directory."
+                        )),
+                        run_phase_fuzzer_processes
+                    )? {
+                        let respawn_delay = *respawn_delays
+                            .get(&fuzzer_config.name)
+                            .expect("failed to get respawn delay.");
+                        respawn_delays.insert(fuzzer_config.name.clone(), respawn_delay * 2);
+
+                        println_warning!(
+                            "the fuzzer '{}' is not running; attempting to respawn, giving it {} \
+                            seconds...",
+                            fuzzer_config.name,
+                            respawn_delay,
+                        );
+                        let dead_fuzzer_process: &mut FuzzerProcess = run_phase_fuzzer_processes
+                            .iter_mut()
+                            .find(|fuzzer_process| fuzzer_process.name == fuzzer_config.name)
+                            .expect("failed to get fuzzer process when attempting to respawn it.");
+
+                        dead_fuzzer_process.stop()?;
+                        dead_fuzzer_process.spawn()?;
+
+                        thread::sleep(Duration::from_secs(respawn_delay));
+                    }
+
+                    Ok(())
+                })?;
+        }
+
         if !already_warned_about_crashes && no_tui {
             // Check for crashes; if some of the inputs crash, the fuzzer will most likely get
             // oriented towards that family of inputs, which decreases the overall chance of
@@ -314,7 +365,10 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
                 .run_phase_fuzzers
                 .iter()
                 .try_for_each(|fuzzer_config| {
-                    if fuzzer::fuzzer_found_crashes(&fuzzer_config.crashes_dir)? {
+                    if with_cleanup!(
+                        fuzzer::fuzzer_found_crashes(&fuzzer_config.crashes_dir),
+                        run_phase_fuzzer_processes
+                    )? {
                         println_warning!(
                         "the fuzzer '{}' has detected one or more crashes in {}. This is probably \
                         hindering the thorough exploration of the binary; it is recommended that \
