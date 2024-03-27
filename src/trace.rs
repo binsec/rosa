@@ -5,9 +5,12 @@
 use std::{
     collections::HashMap,
     fs::{self, File},
+    hash::{DefaultHasher, Hash, Hasher},
     io::Read,
     path::{Path, PathBuf},
 };
+
+use itertools::Itertools;
 
 use crate::error::RosaError;
 
@@ -18,8 +21,10 @@ use crate::error::RosaError;
 /// syscalls) of the trace.
 #[derive(Debug, Clone)]
 pub struct Trace {
-    /// The unique ID of the trace.
-    pub uid: String,
+    /// The name of the trace.
+    ///
+    /// This is usually the name given (to the input that produced the trace) by the fuzzer.
+    pub name: String,
     /// The test input associated with the trace.
     pub test_input: Vec<u8>,
     /// The edges found in the trace.
@@ -38,6 +43,13 @@ pub struct Trace {
     pub syscalls: Vec<u8>,
 }
 
+impl Hash for Trace {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.edges.hash(state);
+        self.syscalls.hash(state);
+    }
+}
+
 impl Trace {
     /// Loads a runtime trace from file.
     ///
@@ -46,7 +58,7 @@ impl Trace {
     /// order to make dealing with traces easier, we assign a unique ID to each of them.
     ///
     /// # Arguments
-    /// * `uid` - The unique ID associated with the trace. This is mostly used to distinguish
+    /// * `name` - The unique ID associated with the trace. This is mostly used to distinguish
     ///   between traces.
     /// * `test_input_file` - The path to the (binary) file containing the raw test input that
     ///   generated the trace.
@@ -75,7 +87,7 @@ impl Trace {
     /// );
     /// ```
     pub fn load(
-        uid: &str,
+        name: &str,
         test_input_file: &Path,
         trace_dump_file: &Path,
     ) -> Result<Self, RosaError> {
@@ -148,7 +160,7 @@ impl Trace {
         })?;
 
         Ok(Trace {
-            uid: uid.to_string(),
+            name: name.to_string(),
             test_input,
             edges,
             syscalls,
@@ -167,7 +179,7 @@ impl Trace {
     ///
     /// // Dummy trace to test with.
     /// let trace = Trace {
-    ///     uid: "my_trace".to_string(),
+    ///     name: "my_trace".to_string(),
     ///     test_input: vec![0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0xde, 0xad, 0xbe, 0xef],
     ///     edges: vec![],
     ///     syscalls: vec![],
@@ -202,7 +214,7 @@ impl Trace {
     ///
     /// // Dummy trace to test with.
     /// let trace = Trace {
-    ///     uid: "my_trace".to_string(),
+    ///     name: "my_trace".to_string(),
     ///     test_input: vec![],
     ///     edges: vec![0, 1, 1, 0],
     ///     syscalls: vec![],
@@ -236,7 +248,7 @@ impl Trace {
     ///
     /// // Dummy trace to test with.
     /// let trace = Trace {
-    ///     uid: "my_trace".to_string(),
+    ///     name: "my_trace".to_string(),
     ///     test_input: vec![],
     ///     edges: vec![],
     ///     syscalls: vec![0, 0, 1, 0],
@@ -257,6 +269,145 @@ impl Trace {
             (nb_syscalls as f64) / (self.syscalls.len() as f64) * 100.0
         )
     }
+
+    /// Get the unique ID of the trace in terms of edges and syscalls in base 64.
+    ///
+    /// This ID is computed using a simple hash: each vector is split into 64-bit chunks (padded if
+    /// necessary), which are XORed together to produce a value. Two values are produced (one for
+    /// the edges and one of the syscalls), so the final result is a string of the format
+    /// "fffffffffffffffff-fffffffffffffffff" (the first part is the edges, and the second is the
+    /// syscalls).
+    ///
+    /// TODO examples
+    pub fn uid(&self) -> String {
+        // With the default AFL++ names, sadly we cannot simply base the UID on the "id:XXXXXX"
+        // part. This is because when resuming or importing inputs from other fuzzer instances, a
+        // fuzzer will rename them. However, we can indeed find the original name from parts of the
+        // new name the fuzzer gives to an input.
+        //
+        // The general forms are (with [...] marking a part of the name we don't care about):
+        // - Input from seed: `id:XXXXXX,[...],orig:SEED_NAME`
+        // - Input loaded from previous run: `id:XXXXXX,[...],orig:id:YYYYYY[...]` (this `YYYYYY`
+        //   part is the "true" ID before it got renamed by the fuzzer)
+        // - Input synced from other fuzzer instance:
+        //   `id:XXXXXX,[...],orig:id:YYYYYY,[...],sync:FUZZER_NAME[...]`
+        //
+        // In order to not confuse names, we'll name the traces as follows:
+        // - In case the `id:YYYYYY` part exists: `FUZZER_NAME__YYYYYY`
+        // - Otherwise: `FUZZER_NAME__XXXXXX`
+        //
+        // For the main fuzzer, `FUZZER_NAME` will be `main`.
+
+        // let (fuzzer_name, trace_id) = match self.name.find("orig:") {
+        //     Some(index) => {
+        //         // This is either an imported trace, or a seed trace. Either way, the ID is at the
+        //         // beginning.
+
+        //         // Skip the "orig:" part.
+        //         let name = &self.name[index + 5..];
+        //         let trace_id = name.split(',').next().unwrap().replace("id:", "");
+        //         let fuzzer_name = match name.find("sync:") {
+        //             // Skip the "sync:" part.
+        //             Some(index) => name[index + 5..].split(',').next().unwrap(),
+        //             None => "main",
+        //         };
+
+        //         (fuzzer_name, trace_id)
+        //     }
+        //     None => {
+        //         // This is a freshly generated trace, generated by the main fuzzer. We can simply
+        //         // get the `id:XXXXXX` part at the start.
+        //         (
+        //             "main",
+        //             self.name.split(',').next().unwrap().replace("id:", ""),
+        //         )
+        //     }
+        // };
+
+        // // TODO: we still use the name and not the UID everywhere else. Maybe discuss that in the
+        // // binaries.
+        // format!("{}__{}", fuzzer_name, trace_id)
+        let mut s = DefaultHasher::new();
+        self.hash(&mut s);
+
+        format!("{:016x}", s.finish())
+    }
+}
+
+/// Get all the test input files from a directory.
+///
+/// Input files are expected to be any files that do not have the extension `.trace`.
+///
+/// # Arguments
+/// * `test_input_dir` - The directory to load test input files from.
+fn get_test_input_files(test_input_dir: &Path) -> Result<Vec<PathBuf>, RosaError> {
+    fs::read_dir(test_input_dir).map_or_else(
+        |err| {
+            fail!(
+                "invalid test input directory '{}': {}.",
+                test_input_dir.display(),
+                err
+            )
+        },
+        |res| {
+            Ok(res
+                // Ignore files/dirs we cannot read.
+                .filter_map(|item| item.ok())
+                .map(|item| item.path())
+                // Only keep files that do not end in `.trace`.
+                .filter(|path| {
+                    path.is_file()
+                        && !path
+                            .extension()
+                            .is_some_and(|extension| extension == "trace")
+                })
+                .collect())
+        },
+    )
+}
+
+/// Get the full trace info needed to load traces.
+///
+/// This function returns a 3-tuple `(trace_name, trace_test_input_file, trace_dump_file)` for each
+/// corresponding test input file passed to it. That is later used to load traces.
+///
+/// # Arguments
+/// * `test_input_files` - The test input files to load the corresponding trace info for.
+/// * `trace_dump_dir` - The directory in which to look for trace dump files (ending in `.trace`).
+/// * `skip_missing_traces` - If [true], traces for which the trace dump file is missing will be
+///   skipped.
+fn get_trace_info(
+    test_input_files: Vec<PathBuf>,
+    trace_dump_dir: &Path,
+    skip_missing_traces: bool,
+) -> Vec<(String, PathBuf, PathBuf)> {
+    test_input_files
+        .into_iter()
+        // Get the name of the trace from the name of the test input file.
+        .map(|test_input_file| {
+            (
+                test_input_file
+                    .file_name()
+                    .expect("failed to get basename for test input file.")
+                    .to_os_string()
+                    .into_string()
+                    .expect("failed to convert basename to string."),
+                test_input_file,
+            )
+        })
+        // Get the name of the trace dump file, potentially skipping if it doesn't exist.
+        .filter_map(|(trace_name, test_input_file)| {
+            let trace_dump_file = trace_dump_dir.join(&trace_name).with_extension("trace");
+
+            // If the trace dump file does not exist and we're skipping incomplete traces, we'll
+            // simply let the map filter it out. Otherwise, we will put it in; if it doesn't exist,
+            // the error will get detected when we try to read the file.
+            match !trace_dump_file.is_file() && skip_missing_traces {
+                true => None,
+                false => Some((trace_name, test_input_file.to_path_buf(), trace_dump_file)),
+            }
+        })
+        .collect()
 }
 
 /// Load multiple traces from file.
@@ -272,9 +423,6 @@ impl Trace {
 /// # Arguments
 /// * `test_input_dir` - The directory containing the test inputs to be loaded.
 /// * `trace_dump_dir` - The directory containing the trace dumps to be loaded.
-/// * `fuzzer_instance_name` - If [Some], this is the name that's going to be used to namespace the
-///   trace. This is useful when performing parallel fuzzing, as each fuzzer's unique name is used
-///   as a prefix/namespace to the trace UID, to ensure that no collisions are possible.
 /// * `known_traces` - A [HashMap] of known traces. This is used as a filter, to avoid loading
 ///   already seen traces; any trace UIDs contained in the [HashMap] will **not** be loaded.
 /// * `skip_missing_traces` - If [true], missing or incomplete traces will be skipped, otherwise an
@@ -290,7 +438,6 @@ impl Trace {
 /// let _traces = trace::load_traces(
 ///     &Path::new("/path/to/test_input_dir/"),
 ///     &Path::new("/path/to/trace_dump_dir/"),
-///     Some("main"),
 ///     &mut known_traces,
 ///     // Will skip any incomplete/missing trace dumps.
 ///     false,
@@ -301,7 +448,6 @@ impl Trace {
 /// let _new_traces = trace::load_traces(
 ///     &Path::new("/path/to/test_input_dir/"),
 ///     &Path::new("/path/to/trace_dump_dir/"),
-///     Some("main"),
 ///     &mut known_traces,
 ///     // Will expect every trace dump to be present & complete.
 ///     true,
@@ -310,100 +456,28 @@ impl Trace {
 pub fn load_traces(
     test_input_dir: &Path,
     trace_dump_dir: &Path,
-    fuzzer_instance_name: Option<&str>,
     known_traces: &mut HashMap<String, Trace>,
     skip_missing_traces: bool,
 ) -> Result<Vec<Trace>, RosaError> {
-    let mut test_inputs: Vec<PathBuf> = fs::read_dir(test_input_dir)
-        .map_or_else(
-            |err| {
-                fail!(
-                    "invalid test input directory '{}': {}.",
-                    test_input_dir.display(),
-                    err
-                )
-            },
-            |res| {
-                Ok(res
-                    // Ignore files/dirs we cannot read.
-                    .filter_map(|item| item.ok())
-                    .map(|item| item.path())
-                    // Only keep files that do not end in `.trace`.
-                    .filter(|path| path.is_file() && path.extension().is_none())
-                    // Only keep new traces.
-                    .filter(|path| {
-                        let trace_uid = path
-                            .file_name()
-                            .expect("failed to get basename for path.")
-                            .to_str()
-                            .expect("failed to convert basename to str.");
-                        // Namespace trace UID with the fuzzer instance's name.
-                        let trace_uid = match fuzzer_instance_name {
-                            Some(fuzzer_instance_name) => {
-                                format!("{}__{}", fuzzer_instance_name, trace_uid)
-                            }
-                            None => trace_uid.to_string(),
-                        };
-                        !known_traces.contains_key(&trace_uid.to_string())
-                    }))
-            },
-        )?
-        .collect();
-
+    let mut test_inputs = get_test_input_files(test_input_dir)?;
     // Make sure the test input names are sorted so that we have consistency when loading.
     test_inputs.sort();
+    let trace_info = get_trace_info(test_inputs, trace_dump_dir, skip_missing_traces);
 
-    let trace_info: Vec<(String, PathBuf, PathBuf)> = test_inputs
-        .into_iter()
-        // Get the UID of the trace from the name of the test input file.
-        .map(|test_input_file| {
-            (
-                test_input_file
-                    .file_name()
-                    .expect("failed to get basename for test input file.")
-                    .to_os_string()
-                    .into_string()
-                    .expect("failed to convert basename to string."),
-                test_input_file,
-            )
-        })
-        // Get the name of the trace dump file, potentially skipping if it doesn't exist.
-        .filter_map(|(trace_uid, test_input_file)| {
-            let trace_dump_file = trace_dump_dir.join(&trace_uid).with_extension("trace");
-
-            // If the trace dump file does not exist and we're skipping incomplete traces, we'll
-            // simply let the map filter it out. Otherwise, we will put it in; if it doesn't exist,
-            // the error will get detected when we try to read the file.
-            match !trace_dump_file.is_file() && skip_missing_traces {
-                true => None,
-                false => Some((trace_uid, test_input_file, trace_dump_file)),
-            }
-        })
-        .collect();
-
-    trace_info
+    let all_traces: Vec<Trace> = trace_info
         .into_iter()
         // Attempt to load the trace.
-        .map(|(trace_uid, test_input_file, trace_dump_file)| {
-            // Namespace trace UID with the fuzzer instance's name.
-            let trace_uid = match fuzzer_instance_name {
-                Some(fuzzer_instance_name) => format!("{}__{}", fuzzer_instance_name, trace_uid),
-                None => trace_uid.to_string(),
-            };
+        .map(|(trace_name, test_input_file, trace_dump_file)| {
             match trace_dump_file.is_file() {
                 true => {
                     // Sometimes a trace load might fail because the trace file is still being
                     // written. In that case, if we're skipping traces anyway, might as well skip
                     // it here too.
-                    let trace = Trace::load(&trace_uid, &test_input_file, &trace_dump_file);
+                    let trace = Trace::load(&trace_name, &test_input_file, &trace_dump_file);
 
                     match (trace, skip_missing_traces) {
-                        (Ok(trace), _) => {
-                            // If load was successful, log the trace as a known trace.
-                            known_traces.insert(trace_uid.to_string(), trace.clone());
-
-                            Ok(Some(trace))
-                        }
+                        // If load was successful, then the trace is ok.
+                        (Ok(trace), _) => Ok(Some(trace)),
                         // Load was unsuccessful, but we're skipping traces so it's fine.
                         (Err(_), true) => Ok(None),
                         // Load was unsuccessful, and we're not skipping traces: not fine.
@@ -411,13 +485,25 @@ pub fn load_traces(
                     }
                 }
                 false => {
-                    fail!("missing trace dump file for trace '{}'.", trace_uid)
+                    fail!("missing trace dump file for trace '{}'.", trace_name)
                 }
             }
         })
         // Filter out the skipped traces.
         .filter_map(|trace| trace.transpose())
-        .collect()
+        .collect::<Result<Vec<Trace>, RosaError>>()?;
+
+    let new_traces: Vec<Trace> = all_traces
+        .into_iter()
+        .unique_by(|trace| trace.uid())
+        .filter(|trace| !known_traces.contains_key(&trace.uid()))
+        .collect();
+
+    new_traces.iter().for_each(|trace| {
+        known_traces.insert(trace.uid(), trace.clone());
+    });
+
+    Ok(new_traces)
 }
 
 /// Save a collection of traces to an output directory.
@@ -437,10 +523,10 @@ pub fn load_traces(
 ///
 /// let my_traces = vec![
 ///     Trace {
-///         uid: "trace1".to_string(), test_input: vec![0x01], edges: vec![], syscalls: vec![]
+///         name: "trace1".to_string(), test_input: vec![0x01], edges: vec![], syscalls: vec![]
 ///     },
 ///     Trace {
-///         uid: "trace2".to_string(), test_input: vec![0x02], edges: vec![], syscalls: vec![]
+///         name: "trace2".to_string(), test_input: vec![0x02], edges: vec![], syscalls: vec![]
 ///     },
 /// ];
 ///
@@ -464,7 +550,7 @@ pub fn save_traces(traces: &[Trace], output_dir: &Path) -> Result<(), RosaError>
 /// use rosa::trace::{self, Trace};
 ///
 /// let my_trace = Trace {
-///     uid: "my_trace".to_string(),
+///     name: "my_trace".to_string(),
 ///     test_input: vec![0x01, 0x02, 0x03, 0x04],
 ///     edges: vec![],
 ///     syscalls: vec![],
@@ -473,7 +559,7 @@ pub fn save_traces(traces: &[Trace], output_dir: &Path) -> Result<(), RosaError>
 /// let _ = trace::save_trace_test_input(&my_trace, &Path::new("/path/to/my_trace"));
 /// ```
 pub fn save_trace_test_input(trace: &Trace, output_dir: &Path) -> Result<(), RosaError> {
-    let trace_test_input_file = output_dir.join(&trace.uid);
+    let trace_test_input_file = output_dir.join(trace.uid());
     fs::write(&trace_test_input_file, &trace.test_input).map_err(|err| {
         error!(
             "could not write trace test input to {}: {}.",
@@ -501,7 +587,7 @@ pub fn save_trace_test_input(trace: &Trace, output_dir: &Path) -> Result<(), Ros
 /// use rosa::trace::{self, Trace};
 ///
 /// let my_trace = Trace {
-///     uid: "my_trace".to_string(),
+///     name: "my_trace".to_string(),
 ///     test_input: vec![],
 ///     edges: vec![1, 0, 1, 0],
 ///     syscalls: vec![0, 1, 0, 1],
@@ -528,7 +614,7 @@ pub fn save_trace_dump(trace: &Trace, output_dir: &Path) -> Result<(), RosaError
     output.extend(&trace.syscalls);
 
     // Write the result to a file.
-    let trace_dump_file = output_dir.join(&trace.uid).with_extension("trace");
+    let trace_dump_file = output_dir.join(trace.uid()).with_extension("trace");
     fs::write(&trace_dump_file, &output).map_err(|err| {
         error!(
             "could not write trace dump to {}: {}.",
@@ -538,4 +624,15 @@ pub fn save_trace_dump(trace: &Trace, output_dir: &Path) -> Result<(), RosaError
     })?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test that the UID of a trace (hash of its edges and syscalls) is computed correctly.
+    #[test]
+    fn test_trace_uid() {
+        // TODO
+    }
 }

@@ -295,4 +295,20 @@ impl Config {
     pub fn traces_dir(&self) -> PathBuf {
         self.output_dir.join("traces")
     }
+
+    /// Get the main fuzzer from the seed phase.
+    pub fn main_seed_phase_fuzzer(&self) -> Result<&FuzzerConfig, RosaError> {
+        self.seed_phase_fuzzers
+            .iter()
+            .find(|fuzzer_config| fuzzer_config.name == "main")
+            .ok_or(error!("No 'main' fuzzer found in the seed phase fuzzers."))
+    }
+
+    /// Get the main fuzzer from the run phase.
+    pub fn main_run_phase_fuzzer(&self) -> Result<&FuzzerConfig, RosaError> {
+        self.run_phase_fuzzers
+            .iter()
+            .find(|fuzzer_config| fuzzer_config.name == "main")
+            .ok_or(error!("No 'main' fuzzer found in the run phase fuzzers."))
+    }
 }

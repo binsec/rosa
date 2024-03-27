@@ -204,22 +204,12 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
             Ok(())
         })?;
     // Collect seed traces.
-    let seed_traces =
-        config
-            .seed_phase_fuzzers
-            .iter()
-            .try_fold(Vec::new(), |mut traces, fuzzer_config| {
-                let mut new_traces = trace::load_traces(
-                    &fuzzer_config.test_input_dir,
-                    &fuzzer_config.trace_dump_dir,
-                    Some(&fuzzer_config.name),
-                    &mut known_traces,
-                    false,
-                )?;
-
-                traces.append(&mut new_traces);
-                Ok(traces)
-            })?;
+    let seed_traces = trace::load_traces(
+        &config.main_seed_phase_fuzzer()?.test_input_dir,
+        &config.main_seed_phase_fuzzer()?.trace_dump_dir,
+        &mut known_traces,
+        false,
+    )?;
     // Save traces to output dir for later inspection.
     trace::save_traces(&seed_traces, &config.traces_dir())?;
     println_info!("Collected {} seed traces.", seed_traces.len());
@@ -241,7 +231,8 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
         cluster.traces.iter().try_for_each(|trace| {
             let decision = TimedDecision {
                 decision: Decision {
-                    trace_uid: trace.uid.clone(),
+                    trace_uid: trace.uid(),
+                    trace_name: trace.name.clone(),
                     cluster_uid: cluster.uid.clone(),
                     is_backdoor: false,
                     reason: DecisionReason::Seed,
@@ -385,23 +376,14 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
 
         // Collect new traces.
         let new_traces = with_cleanup!(
-            config.run_phase_fuzzers.iter().try_fold(
-                Vec::new(),
-                |mut new_traces, fuzzer_config| {
-                    let mut traces = trace::load_traces(
-                        &fuzzer_config.test_input_dir,
-                        &fuzzer_config.trace_dump_dir,
-                        Some(&fuzzer_config.name),
-                        &mut known_traces,
-                        // Skip missing traces, because the fuzzer is continually producing new
-                        // ones, and we might miss some because of the timing of the writes; it's
-                        // okay, we'll pick them up on the next iteration.
-                        true,
-                    )?;
-
-                    new_traces.append(&mut traces);
-                    Ok(new_traces)
-                }
+            trace::load_traces(
+                &config.main_run_phase_fuzzer()?.test_input_dir,
+                &config.main_run_phase_fuzzer()?.trace_dump_dir,
+                &mut known_traces,
+                // Skip missing traces, because the fuzzer is continually producing new
+                // ones, and we might miss some because of the timing of the writes; it's
+                // okay, we'll pick them up on the next iteration.
+                true,
             ),
             run_phase_fuzzer_processes
         )?;
@@ -447,7 +429,7 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
                         );
 
                         if verbose {
-                            println_verbose!("Trace {}:", trace.uid);
+                            println_verbose!("Trace {}:", trace.uid());
                             println_verbose!("  Test input: {}", trace.printable_test_input());
                             println_verbose!("  Edges: {}", trace.edges_as_string());
                             println_verbose!("  Syscalls: {}", trace.syscalls_as_string());

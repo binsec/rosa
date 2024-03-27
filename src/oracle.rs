@@ -56,13 +56,13 @@ impl Oracle {
     ///     uid: "cluster_1".to_string(),
     ///     traces: vec![
     ///         Trace {
-    ///             uid: "trace_1".to_string(),
+    ///             name: "trace_1".to_string(),
     ///             test_input: vec![],
     ///             edges: vec![1, 0, 0, 0],
     ///             syscalls: vec![],
     ///         },
     ///         Trace {
-    ///             uid: "trace_2".to_string(),
+    ///             name: "trace_2".to_string(),
     ///             test_input: vec![],
     ///             edges: vec![1, 1, 0, 0],
     ///             syscalls: vec![],
@@ -77,7 +77,7 @@ impl Oracle {
     /// // The trace to examine.
     /// // Notice how its edges are quite different from the cluster.
     /// let trace = Trace {
-    ///     uid: "new_trace".to_string(),
+    ///     name: "new_trace".to_string(),
     ///     test_input: vec![],
     ///     edges: vec![1, 1, 1, 1],
     ///     syscalls: vec![],
@@ -192,7 +192,8 @@ fn comp_min_max_oracle(
     };
 
     Decision {
-        trace_uid: trace.uid.clone(),
+        trace_uid: trace.uid(),
+        trace_name: trace.name.clone(),
         cluster_uid: cluster.uid.clone(),
         is_backdoor,
         reason,

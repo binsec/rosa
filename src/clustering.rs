@@ -54,13 +54,13 @@ pub struct Cluster {
 ///         uid: "cluster_1".to_string(),
 ///         traces: vec![
 ///             Trace {
-///                 uid: "trace_1".to_string(),
+///                 name: "trace_1".to_string(),
 ///                 test_input: vec![],
 ///                 edges: vec![0, 1, 1, 0],
 ///                 syscalls: vec![],
 ///             },
 ///             Trace {
-///                 uid: "trace_2".to_string(),
+///                 name: "trace_2".to_string(),
 ///                 test_input: vec![],
 ///                 edges: vec![0, 1, 0, 0],
 ///                 syscalls: vec![],
@@ -75,13 +75,13 @@ pub struct Cluster {
 ///         uid: "cluster_2".to_string(),
 ///         traces: vec![
 ///             Trace {
-///                 uid: "trace_3".to_string(),
+///                 name: "trace_3".to_string(),
 ///                 test_input: vec![],
 ///                 edges: vec![0, 0, 1, 1],
 ///                 syscalls: vec![],
 ///             },
 ///             Trace {
-///                 uid: "trace_4".to_string(),
+///                 name: "trace_4".to_string(),
 ///                 test_input: vec![],
 ///                 edges: vec![0, 0, 0, 1],
 ///                 syscalls: vec![],
@@ -97,7 +97,7 @@ pub struct Cluster {
 /// // Dummy trace for which to get the most similar cluster. It's identical to `trace_2` in
 /// // cluster `cluster_1`.
 /// let candidate_trace = Trace {
-///     uid: "candidate".to_string(),
+///     name: "candidate".to_string(),
 ///     test_input: vec![],
 ///     edges: vec![0, 1, 0, 0],
 ///     syscalls: vec![],
@@ -205,13 +205,13 @@ pub fn get_most_similar_cluster<'a>(
 /// // In fact, to simplify the example, only the edges will be taken into account.
 /// let traces = vec![
 ///     Trace {
-///         uid: "trace_1".to_string(),
+///         name: "trace_1".to_string(),
 ///         test_input: vec![],
 ///         edges: vec![0, 1, 0, 1],
 ///         syscalls: vec![],
 ///     },
 ///     Trace {
-///         uid: "trace_2".to_string(),
+///         name: "trace_2".to_string(),
 ///         test_input: vec![],
 ///         edges: vec![0, 1, 0, 0],
 ///         syscalls: vec![],
@@ -225,8 +225,8 @@ pub fn get_most_similar_cluster<'a>(
 /// assert_eq!(strict_clusters.len(), 2);
 /// assert_eq!(strict_clusters[0].traces.len(), 1);
 /// assert_eq!(strict_clusters[1].traces.len(), 1);
-/// assert_eq!(strict_clusters[0].traces[0].uid, "trace_1".to_string());
-/// assert_eq!(strict_clusters[1].traces[0].uid, "trace_2".to_string());
+/// assert_eq!(strict_clusters[0].traces[0].name, "trace_1".to_string());
+/// assert_eq!(strict_clusters[1].traces[0].name, "trace_2".to_string());
 ///
 /// // With some tolerance, both traces will be grouped into the same cluster.
 /// let relaxed_clusters = clustering::cluster_traces(
@@ -234,8 +234,8 @@ pub fn get_most_similar_cluster<'a>(
 /// );
 /// assert_eq!(relaxed_clusters.len(), 1);
 /// assert_eq!(relaxed_clusters[0].traces.len(), 2);
-/// assert_eq!(relaxed_clusters[0].traces[0].uid, "trace_1".to_string());
-/// assert_eq!(relaxed_clusters[0].traces[1].uid, "trace_2".to_string());
+/// assert_eq!(relaxed_clusters[0].traces[0].name, "trace_1".to_string());
+/// assert_eq!(relaxed_clusters[0].traces[1].name, "trace_2".to_string());
 /// ```
 pub fn cluster_traces(
     traces: &[Trace],
@@ -360,13 +360,13 @@ pub fn cluster_traces(
 ///         uid: "cluster_1".to_string(),
 ///         traces: vec![
 ///             Trace {
-///                 uid: "trace_1".to_string(),
+///                 name: "trace_1".to_string(),
 ///                 test_input: vec![],
 ///                 edges: vec![],
 ///                 syscalls: vec![],
 ///             },
 ///             Trace {
-///                 uid: "trace_2".to_string(),
+///                 name: "trace_2".to_string(),
 ///                 test_input: vec![],
 ///                 edges: vec![],
 ///                 syscalls: vec![],
@@ -383,11 +383,7 @@ pub fn cluster_traces(
 /// ```
 pub fn save_clusters(clusters: &[Cluster], output_dir: &Path) -> Result<(), RosaError> {
     clusters.iter().try_for_each(|cluster| {
-        let trace_uids: Vec<&str> = cluster
-            .traces
-            .iter()
-            .map(|trace| trace.uid.as_ref())
-            .collect();
+        let trace_uids: Vec<String> = cluster.traces.iter().map(|trace| trace.uid()).collect();
         let cluster_file = output_dir.join(&cluster.uid).with_extension("txt");
         fs::write(&cluster_file, format!("{}\n", trace_uids.join("\n"))).map_err(|err| {
             error!(
