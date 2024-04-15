@@ -232,12 +232,20 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
 
             Ok(())
         })?;
-    // Collect seed traces.
-    let seed_traces = trace::load_traces(
-        &config.main_seed_phase_fuzzer()?.test_input_dir,
-        &config.main_seed_phase_fuzzer()?.trace_dump_dir,
-        &mut known_traces,
-        false,
+    // Collect seed traces from all fuzzers.
+    let seed_traces = config.seed_phase_fuzzers.iter().try_fold(
+        Vec::new(),
+        |mut new_traces, fuzzer_config| {
+            let mut traces = trace::load_traces(
+                &fuzzer_config.test_input_dir,
+                &fuzzer_config.trace_dump_dir,
+                &mut known_traces,
+                false,
+            )?;
+
+            new_traces.append(&mut traces);
+            Ok(new_traces)
+        },
     )?;
     // Save traces to output dir for later inspection.
     trace::save_traces(&seed_traces, &config.traces_dir())?;
@@ -382,14 +390,22 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
 
         // Collect new traces.
         let new_traces = with_cleanup!(
-            trace::load_traces(
-                &config.main_detection_phase_fuzzer()?.test_input_dir,
-                &config.main_detection_phase_fuzzer()?.trace_dump_dir,
-                &mut known_traces,
-                // Skip missing traces, because the fuzzer is continually producing new
-                // ones, and we might miss some because of the timing of the writes; it's
-                // okay, we'll pick them up on the next iteration.
-                true,
+            config.detection_phase_fuzzers.iter().try_fold(
+                Vec::new(),
+                |mut new_traces, fuzzer_config| {
+                    let mut traces = trace::load_traces(
+                        &fuzzer_config.test_input_dir,
+                        &fuzzer_config.trace_dump_dir,
+                        &mut known_traces,
+                        // Skip missing traces, because the fuzzer is continually producing new
+                        // ones, and we might miss some because of the timing of the writes; it's
+                        // okay, we'll pick them up on the next iteration.
+                        true,
+                    )?;
+
+                    new_traces.append(&mut traces);
+                    Ok(new_traces)
+                }
             ),
             detection_phase_fuzzer_processes
         )?;
