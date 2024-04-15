@@ -271,7 +271,7 @@ impl RosaTuiStats {
 
 impl RosaTui {
     const MIN_WIDTH: u16 = 92;
-    const HEIGHT: u16 = 22;
+    const MIN_HEIGHT: u16 = 22;
 
     pub fn new(config_path: &Path, monitor_dir: &Path) -> Self {
         RosaTui {
@@ -332,13 +332,13 @@ impl RosaTui {
 
     fn ui(stats: &RosaTuiStats, frame: &mut Frame) {
         // Check that the TUI fits first, and emit a warning if it doesn't.
-        if frame.size().width < Self::MIN_WIDTH || frame.size().height < Self::HEIGHT {
+        if frame.size().width < Self::MIN_WIDTH || frame.size().height < Self::MIN_HEIGHT {
             frame.render_widget(
                 Paragraph::new(format!(
                     "The terminal is too small to render the TUI; please resize to at least \
                         {}x{} or run with `--no-tui`.",
                     Self::MIN_WIDTH,
-                    Self::HEIGHT
+                    Self::MIN_HEIGHT
                 ))
                 .bold()
                 .wrap(Wrap { trim: true }),
@@ -350,10 +350,10 @@ impl RosaTui {
 
         // Create the area occupied by the TUI.
         let main_area = Rect::new(
-            0,
-            (frame.size().height / 2) - (Self::HEIGHT / 2),
-            frame.size().width,
-            Self::HEIGHT,
+            (frame.size().width / 2) - (Self::MIN_WIDTH / 2),
+            (frame.size().height / 2) - (Self::MIN_HEIGHT / 2),
+            Self::MIN_WIDTH,
+            Self::MIN_HEIGHT,
         );
         // We'll split the main area in 2, one for the title and the rest for the stats.
         let main_layout = Layout::new(
