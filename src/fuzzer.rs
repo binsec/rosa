@@ -16,6 +16,8 @@ use crate::error::RosaError;
 pub struct FuzzerProcess {
     /// The name of the fuzzer process.
     pub name: String,
+    /// The directory used by the fuzzer process.
+    pub working_dir: PathBuf,
     /// The command used to run the fuzzer.
     fuzzer_cmd: Vec<String>,
     /// The environment passed to the fuzzer process.
@@ -43,6 +45,7 @@ impl FuzzerProcess {
     ///
     /// let _fuzzer_process = FuzzerProcess::create(
     ///     "my_fuzzer".to_string(),
+    ///     PathBuf::from("/path/to/my_fuzzer"),
     ///     vec![
     ///         "afl-fuzz".to_string(),
     ///         "-i".to_string(),
@@ -58,6 +61,7 @@ impl FuzzerProcess {
     /// ```
     pub fn create(
         name: String,
+        working_dir: PathBuf,
         fuzzer_cmd: Vec<String>,
         fuzzer_env: HashMap<String, String>,
         log_file: PathBuf,
@@ -82,6 +86,7 @@ impl FuzzerProcess {
 
         Ok(FuzzerProcess {
             name,
+            working_dir,
             fuzzer_cmd,
             fuzzer_env,
             log_file,
@@ -243,30 +248,61 @@ fn get_fuzzer_pid(fuzzer_dir: &Path) -> Result<String, RosaError> {
     )
 }
 
-/// Check if a fuzzer is alive (running).
+/// Possible states a fuzzer can be in.
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum FuzzerStatus {
+    /// The fuzzer is running nominally.
+    Running,
+    /// The fuzzer is **not** running.
+    Stopped,
+    /// The fuzzer is starting up, but is not yet running nominally.
+    Starting,
+}
+
+/// Get the status of a fuzzer.
 ///
 /// **NOTE: this only works for AFL++.**
 ///
 /// # Arguments
 /// * `fuzzer_dir` - The output directory of the fuzzer instance.
-///
-/// # Examples
-/// ```
-/// use std::path::PathBuf;
-/// use rosa::fuzzer;
-///
-/// let fuzzer_dir = PathBuf::from("/path/to/fuzzer_out/main");
-/// let _ = fuzzer::is_fuzzer_alive(&fuzzer_dir);
-/// ```
-pub fn is_fuzzer_alive(fuzzer_dir: &Path) -> Result<bool, RosaError> {
-    let pid = get_fuzzer_pid(fuzzer_dir)?;
-    let proc_dir = PathBuf::from("/proc").join(pid);
+pub fn get_fuzzer_status(fuzzer_dir: &Path) -> Result<FuzzerStatus, RosaError> {
+    fuzzer_dir
+        .is_dir()
+        .then(|| {
+            let fuzzer_setup_file = fuzzer_dir.join("fuzzer_setup");
+            let fuzzer_stats_file = fuzzer_dir.join("fuzzer_stats");
 
-    proc_dir.try_exists().map_err(|err| {
-        error!(
-            "could not check process directory '{}': {}.",
-            proc_dir.display(),
-            err
-        )
-    })
+            let fuzzer_setup_metadata = fuzzer_setup_file.metadata();
+            let fuzzer_stats_metadata = fuzzer_stats_file.metadata();
+
+            match (fuzzer_setup_metadata, fuzzer_stats_metadata) {
+                (Ok(setup_metadata), Ok(stats_metadata)) => {
+                    // From `afl-whatsup`: if `fuzzer_setup` is newer than `fuzzer_stats`, then the
+                    // fuzzer is still starting up.
+                    match setup_metadata.modified().unwrap() > stats_metadata.modified().unwrap() {
+                        true => FuzzerStatus::Starting,
+                        false => {
+                            // Since we have access to `fuzzer_stats`, we can simply check the PID
+                            // contained within to see if the process is running.
+                            let pid = get_fuzzer_pid(fuzzer_dir).unwrap();
+                            let proc_dir = PathBuf::from("/proc").join(pid);
+
+                            match proc_dir.exists() {
+                                true => FuzzerStatus::Running,
+                                false => FuzzerStatus::Stopped,
+                            }
+                        }
+                    }
+                }
+                // If we have `fuzzer_setup` but not `fuzzer_stats`, the fuzzer probably hasn't
+                // created it yet because it's starting up.
+                (Ok(_), Err(_)) => FuzzerStatus::Starting,
+                // In any other case, it's safe to assume that the fuzzer is not going to start.
+                (_, _) => FuzzerStatus::Stopped,
+            }
+        })
+        .ok_or(error!(
+            "could not check fuzzer directory '{}'.",
+            fuzzer_dir.display()
+        ))
 }

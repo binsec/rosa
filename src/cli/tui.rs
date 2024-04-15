@@ -12,7 +12,13 @@ use ratatui::{
     Frame, Terminal,
 };
 
-use rosa::{config::Config, criterion::Criterion, error::RosaError, fuzzer, oracle::Oracle};
+use rosa::{
+    config::Config,
+    criterion::Criterion,
+    error::RosaError,
+    fuzzer::{self, FuzzerStatus},
+    oracle::Oracle,
+};
 use rosa::{error, fail};
 
 pub struct RosaTui {
@@ -39,9 +45,9 @@ struct RosaTuiStats {
     config_file_path: String,
     output_dir_path: String,
     total_seed_phase_fuzzers: u64,
-    run_phase_fuzzer_dirs: Vec<PathBuf>,
-    alive_run_phase_fuzzers: u64,
-    total_run_phase_fuzzers: u64,
+    detection_phase_fuzzer_dirs: Vec<PathBuf>,
+    alive_detection_phase_fuzzers: u64,
+    total_detection_phase_fuzzers: u64,
     crash_warning: bool,
 }
 
@@ -65,9 +71,9 @@ impl RosaTuiStats {
             config_file_path: config_path.display().to_string(),
             output_dir_path: output_dir_path.join("").display().to_string(),
             total_seed_phase_fuzzers: 0,
-            run_phase_fuzzer_dirs: vec![],
-            alive_run_phase_fuzzers: 0,
-            total_run_phase_fuzzers: 0,
+            detection_phase_fuzzer_dirs: vec![],
+            alive_detection_phase_fuzzers: 0,
+            total_detection_phase_fuzzers: 0,
             crash_warning: false,
         }
     }
@@ -83,9 +89,9 @@ impl RosaTuiStats {
         self.syscall_tolerance = config.cluster_formation_syscall_tolerance;
 
         self.total_seed_phase_fuzzers = config.seed_phase_fuzzers.len() as u64;
-        self.total_run_phase_fuzzers = config.run_phase_fuzzers.len() as u64;
-        self.run_phase_fuzzer_dirs = config
-            .run_phase_fuzzers
+        self.total_detection_phase_fuzzers = config.detection_phase_fuzzers.len() as u64;
+        self.detection_phase_fuzzer_dirs = config
+            .detection_phase_fuzzers
             .iter()
             .map(|fuzzer_config| {
                 fuzzer_config
@@ -196,21 +202,21 @@ impl RosaTuiStats {
         // Check for crashes.
         if !self.crash_warning {
             let found_crashes: Vec<bool> = config
-                .run_phase_fuzzers
+                .detection_phase_fuzzers
                 .iter()
                 .map(|fuzzer_config| fuzzer::fuzzer_found_crashes(&fuzzer_config.crashes_dir))
                 .collect::<Result<Vec<bool>, RosaError>>()?;
             self.crash_warning = found_crashes.iter().any(|found_crashes| *found_crashes);
         }
 
-        // Check for how many run phase fuzzers are alive.
-        self.alive_run_phase_fuzzers =
-            self.run_phase_fuzzer_dirs
+        // Check for how many detection phase fuzzers are alive.
+        self.alive_detection_phase_fuzzers =
+            self.detection_phase_fuzzer_dirs
                 .iter()
                 .try_fold(0, |acc, fuzzer_dir| {
-                    Ok(match fuzzer::is_fuzzer_alive(fuzzer_dir)? {
-                        true => acc + 1,
-                        false => acc,
+                    Ok(match fuzzer::get_fuzzer_status(fuzzer_dir)? {
+                        FuzzerStatus::Running => acc + 1,
+                        _ => acc,
                     })
                 })?;
 
@@ -495,12 +501,12 @@ impl RosaTui {
         let mut config_file = stats.config_file_path.clone();
         let mut output_dir = stats.output_dir_path.clone();
         let seed_phase_fuzzers = format!("{} (stopped)", stats.total_seed_phase_fuzzers);
-        let run_phase_fuzzers = format!(
+        let detection_phase_fuzzers = format!(
             "{}/{}",
-            stats.alive_run_phase_fuzzers, stats.total_run_phase_fuzzers
+            stats.alive_detection_phase_fuzzers, stats.total_detection_phase_fuzzers
         );
-        let run_phase_fuzzers_style =
-            match stats.alive_run_phase_fuzzers < stats.total_run_phase_fuzzers {
+        let detection_phase_fuzzers_style =
+            match stats.alive_detection_phase_fuzzers < stats.total_detection_phase_fuzzers {
                 true => warning_style,
                 false => Style::reset(),
             };
@@ -518,20 +524,20 @@ impl RosaTui {
         // Create the configuration info.
         let mut config_lines = vec![
             Line::from(vec![
-                Span::styled("             config: ", label_style),
+                Span::styled("                  config: ", label_style),
                 config_file.into(),
             ]),
             Line::from(vec![
-                Span::styled("             output: ", label_style),
+                Span::styled("                  output: ", label_style),
                 output_dir.into(),
             ]),
             Line::from(vec![
-                Span::styled(" seed phase fuzzers: ", label_style),
+                Span::styled("      seed phase fuzzers: ", label_style),
                 seed_phase_fuzzers.into(),
             ]),
             Line::from(vec![
-                Span::styled("  run phase fuzzers: ", label_style),
-                Span::styled(run_phase_fuzzers, run_phase_fuzzers_style),
+                Span::styled(" detection phase fuzzers: ", label_style),
+                Span::styled(detection_phase_fuzzers, detection_phase_fuzzers_style),
             ]),
             Line::from(vec![]),
         ];

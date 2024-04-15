@@ -23,7 +23,7 @@ use rosa::{
     config::Config,
     decision::{Decision, DecisionReason, TimedDecision},
     error::RosaError,
-    fuzzer::{self, FuzzerProcess},
+    fuzzer::{self, FuzzerProcess, FuzzerStatus},
     trace,
 };
 
@@ -75,6 +75,40 @@ macro_rules! with_cleanup {
     }};
 }
 
+/// Helper function to start a fuzzer process.
+///
+/// Whenever we start up a fuzzer, we should make sure to wait for it to fully stabilize before
+/// continuing; especially when loading multiple seed inputs, the fuzzer might take a moment to
+/// start. This function blocks until the fuzzer has fully started running.
+///
+/// TODO arguments & examples
+fn start_fuzzer_process(
+    fuzzer_process: &mut FuzzerProcess,
+    verbose: bool,
+) -> Result<(), RosaError> {
+    if verbose {
+        println_verbose!("  Fuzzer process '{}':", fuzzer_process.name);
+        println_verbose!("    Env: {}", fuzzer_process.env_as_string());
+        println_verbose!("    Cmd: {}", fuzzer_process.cmd_as_string());
+    }
+
+    fuzzer_process.spawn()?;
+
+    // Give the process 200 ms to get up and running.
+    thread::sleep(Duration::from_millis(200));
+
+    if fuzzer::get_fuzzer_status(&fuzzer_process.working_dir)? == FuzzerStatus::Starting {
+        // Wait until fuzzer is up and running.
+        while fuzzer::get_fuzzer_status(&fuzzer_process.working_dir)? != FuzzerStatus::Running {
+            if fuzzer::get_fuzzer_status(&fuzzer_process.working_dir)? == FuzzerStatus::Stopped {
+                break;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Run the backdoor detection tool.
 ///
 /// # Arguments
@@ -106,6 +140,7 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
         .map(|fuzzer_config| {
             FuzzerProcess::create(
                 fuzzer_config.name.clone(),
+                fuzzer_config.test_input_dir.parent().unwrap().to_path_buf(),
                 fuzzer_config.cmd.clone(),
                 fuzzer_config.env.clone(),
                 config
@@ -116,18 +151,19 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
             )
         })
         .collect::<Result<Vec<FuzzerProcess>, RosaError>>()?;
-    let mut run_phase_fuzzer_processes: Vec<FuzzerProcess> = config
-        .run_phase_fuzzers
+    let mut detection_phase_fuzzer_processes: Vec<FuzzerProcess> = config
+        .detection_phase_fuzzers
         .iter()
         .map(|fuzzer_config| {
             FuzzerProcess::create(
                 fuzzer_config.name.clone(),
+                fuzzer_config.test_input_dir.parent().unwrap().to_path_buf(),
                 fuzzer_config.cmd.clone(),
                 fuzzer_config.env.clone(),
                 config
                     .logs_dir()
                     .clone()
-                    .join(format!("run_phase_fuzzer_{}", fuzzer_config.name))
+                    .join(format!("detection_phase_fuzzer_{}", fuzzer_config.name))
                     .with_extension("log"),
             )
         })
@@ -140,17 +176,10 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
     println_info!("Collecting seed traces...");
     if verbose {
         println_verbose!("Fuzzer seed processes:");
-        seed_phase_fuzzer_processes
-            .iter()
-            .for_each(|fuzzer_process| {
-                println_verbose!("  Fuzzer process '{}':", fuzzer_process.name);
-                println_verbose!("    Env: {}", fuzzer_process.env_as_string());
-                println_verbose!("    Cmd: {}", fuzzer_process.cmd_as_string());
-            });
     }
     seed_phase_fuzzer_processes
         .iter_mut()
-        .try_for_each(|fuzzer_process| fuzzer_process.spawn())?;
+        .try_for_each(|fuzzer_process| start_fuzzer_process(fuzzer_process, verbose))?;
 
     // Wait for the fuzzer process (or for a Ctrl-C).
     while seed_phase_fuzzer_processes
@@ -244,24 +273,15 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
         })
     })?;
 
-    // Spawn the fuzzer run process.
+    // Spawn the fuzzer detection processes.
     println_info!("Starting backdoor detection...");
     if verbose {
-        println_verbose!("Fuzzer run processes:");
-        run_phase_fuzzer_processes
-            .iter()
-            .for_each(|fuzzer_process| {
-                println_verbose!("  Fuzzer process '{}':", fuzzer_process.name);
-                println_verbose!("    Env: {}", fuzzer_process.env_as_string());
-                println_verbose!("    Cmd: {}", fuzzer_process.cmd_as_string());
-            });
+        println_verbose!("Fuzzer detection processes:");
     }
-    run_phase_fuzzer_processes
+    detection_phase_fuzzer_processes
         .iter_mut()
-        .try_for_each(|fuzzer_process| fuzzer_process.spawn())?;
+        .try_for_each(|fuzzer_process| start_fuzzer_process(fuzzer_process, verbose))?;
     let mut nb_backdoors = 0;
-    // Sleep for 3 seconds to give some time to the fuzzers to get started.
-    thread::sleep(Duration::from_secs(3));
 
     // Start the TUI thread.
     let monitor_dir = config.output_dir.clone();
@@ -297,51 +317,37 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
     let detection_start_time = Instant::now();
 
     let mut already_warned_about_crashes = false;
-    // Keep a record of respawn delays to give fuzzers that need to be respawned.
-    // This is just a hashmap, mapping fuzzer names to delay times (in seconds).
-    // All fuzzers will get an initial respawn delay of 3 seconds (i.e., 3 seconds to get started).
-    // If the respawn is hit again, it means that it didn't work, and that the fuzzer probably
-    // needs more time; in that case, the respawn delay will be doubled for that fuzzer.
-    let mut respawn_delays: HashMap<String, u64> = config
-        .run_phase_fuzzers
-        .iter()
-        .map(|fuzzer_config| (fuzzer_config.name.clone(), 3))
-        .collect();
     // Loop until Ctrl-C.
     while !rosa_should_stop.load(Ordering::SeqCst) {
         if no_tui {
             // Check how many fuzzers are alive; if some have crashed/not started, let the user
             // know.
             config
-                .run_phase_fuzzers
+                .detection_phase_fuzzers
                 .iter()
                 .try_for_each(|fuzzer_config| {
-                    if !with_cleanup!(
-                        fuzzer::is_fuzzer_alive(fuzzer_config.test_input_dir.parent().expect(
+                    let fuzzer_state = with_cleanup!(
+                        fuzzer::get_fuzzer_status(fuzzer_config.test_input_dir.parent().expect(
                             "failed to get parent directory for fuzzer test input directory."
                         )),
-                        run_phase_fuzzer_processes
-                    )? {
-                        let respawn_delay = *respawn_delays
-                            .get(&fuzzer_config.name)
-                            .expect("failed to get respawn delay.");
-                        respawn_delays.insert(fuzzer_config.name.clone(), respawn_delay * 2);
+                        detection_phase_fuzzer_processes
+                    )?;
 
+                    if fuzzer_state == FuzzerStatus::Stopped {
                         println_warning!(
-                            "the fuzzer '{}' is not running; attempting to respawn, giving it {} \
-                            seconds...",
+                            "fuzzer '{}' is not running; attempting to respawn it...",
                             fuzzer_config.name,
-                            respawn_delay,
                         );
-                        let dead_fuzzer_process: &mut FuzzerProcess = run_phase_fuzzer_processes
-                            .iter_mut()
-                            .find(|fuzzer_process| fuzzer_process.name == fuzzer_config.name)
-                            .expect("failed to get fuzzer process when attempting to respawn it.");
+                        let dead_fuzzer_process: &mut FuzzerProcess =
+                            detection_phase_fuzzer_processes
+                                .iter_mut()
+                                .find(|fuzzer_process| fuzzer_process.name == fuzzer_config.name)
+                                .expect(
+                                    "failed to get fuzzer process when attempting to respawn it.",
+                                );
 
                         dead_fuzzer_process.stop()?;
-                        dead_fuzzer_process.spawn()?;
-
-                        thread::sleep(Duration::from_secs(respawn_delay));
+                        start_fuzzer_process(dead_fuzzer_process, verbose)?;
                     }
 
                     Ok(())
@@ -353,12 +359,12 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
             // oriented towards that family of inputs, which decreases the overall chance of
             // finding backdoors.
             config
-                .run_phase_fuzzers
+                .detection_phase_fuzzers
                 .iter()
                 .try_for_each(|fuzzer_config| {
                     if with_cleanup!(
                         fuzzer::fuzzer_found_crashes(&fuzzer_config.crashes_dir),
-                        run_phase_fuzzer_processes
+                        detection_phase_fuzzer_processes
                     )? {
                         println_warning!(
                         "the fuzzer '{}' has detected one or more crashes in {}. This is probably \
@@ -377,20 +383,20 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
         // Collect new traces.
         let new_traces = with_cleanup!(
             trace::load_traces(
-                &config.main_run_phase_fuzzer()?.test_input_dir,
-                &config.main_run_phase_fuzzer()?.trace_dump_dir,
+                &config.main_detection_phase_fuzzer()?.test_input_dir,
+                &config.main_detection_phase_fuzzer()?.trace_dump_dir,
                 &mut known_traces,
                 // Skip missing traces, because the fuzzer is continually producing new
                 // ones, and we might miss some because of the timing of the writes; it's
                 // okay, we'll pick them up on the next iteration.
                 true,
             ),
-            run_phase_fuzzer_processes
+            detection_phase_fuzzer_processes
         )?;
         // Save traces to output dir for later inspection.
         with_cleanup!(
             trace::save_traces(&new_traces, &config.traces_dir()),
-            run_phase_fuzzer_processes
+            detection_phase_fuzzer_processes
         )?;
 
         new_traces
@@ -441,7 +447,7 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
                     // Save backdoor.
                     with_cleanup!(
                         trace::save_trace_test_input(trace, &config.backdoors_dir()),
-                        run_phase_fuzzer_processes
+                        detection_phase_fuzzer_processes
                     )?;
                 }
 
@@ -452,7 +458,7 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
 
                 with_cleanup!(
                     timed_decision.save(&config.decisions_dir()),
-                    run_phase_fuzzer_processes
+                    detection_phase_fuzzer_processes
                 )
             })?;
     }
@@ -462,8 +468,8 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
     if let Some(handle) = tui_thread_handle {
         let _ = handle.join();
     }
-    println_info!("Stopping run phase fuzzer processes.");
-    run_phase_fuzzer_processes
+    println_info!("Stopping detection phase fuzzer processes.");
+    detection_phase_fuzzer_processes
         .iter_mut()
         .try_for_each(|fuzzer_process| fuzzer_process.stop())?;
 

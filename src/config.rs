@@ -47,8 +47,8 @@ pub struct Config {
 
     /// The collection of fuzzers to run during the seed phase.
     pub seed_phase_fuzzers: Vec<FuzzerConfig>,
-    /// The collection of fuzzers to run during the run phase.
-    pub run_phase_fuzzers: Vec<FuzzerConfig>,
+    /// The collection of fuzzers to run during the detection phase.
+    pub detection_phase_fuzzers: Vec<FuzzerConfig>,
 
     /// The criterion to use during cluster formation.
     /// See [cluster_traces](crate::clustering::cluster_traces).
@@ -167,13 +167,12 @@ impl Config {
         "",
     ];
     /// The README to put in the `logs` directory in the output directory.
-    const LOGS_DIR_README: [&'static str; 7] = [
+    const LOGS_DIR_README: [&'static str; 6] = [
         "This directory contains the logs created by the fuzzer processes (both stdout and",
         "stderr).",
         "",
         "The file `fuzzer_seed.log` corresponds to the seed collection run of the fuzzer,",
-        "while the file `fuzzer_run.log` corresponds to the exploration/detection run of the",
-        "fuzzer.",
+        "while the file `fuzzer_detection.log` corresponds to the detection run of the fuzzer.",
         "",
     ];
     /// The README to put in the `traces` directory in the output directory.
@@ -304,11 +303,13 @@ impl Config {
             .ok_or(error!("No 'main' fuzzer found in the seed phase fuzzers."))
     }
 
-    /// Get the main fuzzer from the run phase.
-    pub fn main_run_phase_fuzzer(&self) -> Result<&FuzzerConfig, RosaError> {
-        self.run_phase_fuzzers
+    /// Get the main fuzzer from the detection phase.
+    pub fn main_detection_phase_fuzzer(&self) -> Result<&FuzzerConfig, RosaError> {
+        self.detection_phase_fuzzers
             .iter()
             .find(|fuzzer_config| fuzzer_config.name == "main")
-            .ok_or(error!("No 'main' fuzzer found in the run phase fuzzers."))
+            .ok_or(error!(
+                "No 'main' fuzzer found in the detection phase fuzzers."
+            ))
     }
 }
