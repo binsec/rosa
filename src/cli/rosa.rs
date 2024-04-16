@@ -255,6 +255,7 @@ fn run(
                 let mut traces = trace::load_traces(
                     &fuzzer_config.test_input_dir,
                     &fuzzer_config.trace_dump_dir,
+                    &fuzzer_config.name,
                     &mut known_traces,
                     false,
                 )?;
@@ -268,6 +269,7 @@ fn run(
             trace::load_traces(
                 &main_fuzzer.test_input_dir,
                 &main_fuzzer.trace_dump_dir,
+                "main",
                 &mut known_traces,
                 false,
             )
@@ -424,10 +426,11 @@ fn run(
                             let mut traces = trace::load_traces(
                                 &fuzzer_config.test_input_dir,
                                 &fuzzer_config.trace_dump_dir,
+                                &fuzzer_config.name,
                                 &mut known_traces,
-                                // Skip missing traces, because the fuzzer is continually producing new
-                                // ones, and we might miss some because of the timing of the writes; it's
-                                // okay, we'll pick them up on the next iteration.
+                                // Skip missing traces, because the fuzzer is continually producing
+                                // new ones, and we might miss some because of the timing of the
+                                // writes; it's okay, we'll pick them up on the next iteration.
                                 true,
                             )?;
 
@@ -441,6 +444,7 @@ fn run(
                     trace::load_traces(
                         &main_fuzzer.test_input_dir,
                         &main_fuzzer.trace_dump_dir,
+                        "main",
                         &mut known_traces,
                         // Skip missing traces, because the fuzzer is continually producing new
                         // ones, and we might miss some because of the timing of the writes; it's

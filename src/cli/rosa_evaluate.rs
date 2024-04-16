@@ -248,6 +248,7 @@ fn run(
     let all_traces = trace::load_traces(
         &output_dir.join("traces"),
         &output_dir.join("traces"),
+        "rosa",
         &mut known_traces,
         true,
     )?;

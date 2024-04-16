@@ -368,6 +368,7 @@ fn get_trace_info(
 /// # Arguments
 /// * `test_input_dir` - The directory containing the test inputs to be loaded.
 /// * `trace_dump_dir` - The directory containing the trace dumps to be loaded.
+/// * `name_prefix` - A prefix for the name of the trace (usually the name of the fuzzer).
 /// * `known_traces` - A [HashMap] of known traces. This is used as a filter, to avoid loading
 ///   already seen traces; any trace UIDs contained in the [HashMap] will **not** be loaded.
 /// * `skip_missing_traces` - If [true], missing or incomplete traces will be skipped, otherwise an
@@ -383,6 +384,7 @@ fn get_trace_info(
 /// let _traces = trace::load_traces(
 ///     &Path::new("/path/to/test_input_dir/"),
 ///     &Path::new("/path/to/trace_dump_dir/"),
+///     "main",
 ///     &mut known_traces,
 ///     // Will skip any incomplete/missing trace dumps.
 ///     false,
@@ -393,6 +395,7 @@ fn get_trace_info(
 /// let _new_traces = trace::load_traces(
 ///     &Path::new("/path/to/test_input_dir/"),
 ///     &Path::new("/path/to/trace_dump_dir/"),
+///     "main",
 ///     &mut known_traces,
 ///     // Will expect every trace dump to be present & complete.
 ///     true,
@@ -401,6 +404,7 @@ fn get_trace_info(
 pub fn load_traces(
     test_input_dir: &Path,
     trace_dump_dir: &Path,
+    name_prefix: &str,
     known_traces: &mut HashMap<String, Trace>,
     skip_missing_traces: bool,
 ) -> Result<Vec<Trace>, RosaError> {
@@ -418,7 +422,11 @@ pub fn load_traces(
                     // Sometimes a trace load might fail because the trace file is still being
                     // written. In that case, if we're skipping traces anyway, might as well skip
                     // it here too.
-                    let trace = Trace::load(&trace_name, &test_input_file, &trace_dump_file);
+                    let trace = Trace::load(
+                        &format!("{}_{}", name_prefix, trace_name),
+                        &test_input_file,
+                        &trace_dump_file,
+                    );
 
                     match (trace, skip_missing_traces) {
                         // If load was successful, then the trace is ok.
