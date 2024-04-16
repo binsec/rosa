@@ -41,8 +41,13 @@ struct Cli {
     )]
     output_dir: PathBuf,
 
+    /// The distance metric to use.
     #[arg(short = 'd', long = "distance-metric", default_value = "hamming")]
     distance_metric: String,
+
+    /// Display all edges and syscalls that differ.
+    #[arg(short = 'v', long = "verbose")]
+    verbose: bool,
 }
 
 /// Run the distance calculation tool.
@@ -52,11 +57,13 @@ struct Cli {
 /// * `trace1_uid` - The unique ID of the first trace.
 /// * `trace2_uid` - The unique ID of the second trace.
 /// * `distance_metric` - The distance metric to use when calculating distances.
+/// * `verbose` - Display fine-grained differences between edges and syscalls.
 fn run(
     output_dir: &Path,
     trace1_uid: &str,
     trace2_uid: &str,
     distance_metric: &str,
+    verbose: bool,
 ) -> Result<(), RosaError> {
     let trace1_path = output_dir.join("traces").join(trace1_uid);
     let trace1 = Trace::load("trace1", &trace1_path, &trace1_path.with_extension("trace"))?;
@@ -73,6 +80,36 @@ fn run(
     println_info!("  Edge-wise: {}", edge_wise_dist);
     println_info!("  Syscall-wise: {}", syscall_wise_dist);
 
+    if verbose {
+        println_info!("");
+        println_info!("Edges differing:");
+        trace1
+            .edges
+            .into_iter()
+            .zip(trace2.edges)
+            .enumerate()
+            .for_each(|(index, (edge1, edge2))| match edge1 == edge2 {
+                false => {
+                    println_info!("#{}: {} != {}", index, edge1, edge2);
+                }
+                true => {}
+            });
+
+        println_info!("");
+        println_info!("Syscalls differing:");
+        trace1
+            .syscalls
+            .into_iter()
+            .zip(trace2.syscalls)
+            .enumerate()
+            .for_each(|(index, (edge1, edge2))| match edge1 == edge2 {
+                false => {
+                    println_info!("#{}: {} != {}", index, edge1, edge2);
+                }
+                true => {}
+            });
+    }
+
     Ok(())
 }
 
@@ -84,6 +121,7 @@ fn main() -> ExitCode {
         &cli.trace1_uid,
         &cli.trace2_uid,
         &cli.distance_metric,
+        cli.verbose,
     ) {
         Ok(_) => ExitCode::SUCCESS,
         Err(err) => {
