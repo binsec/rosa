@@ -62,6 +62,13 @@ struct Cli {
     /// Disable the TUI and display more linear output on the console.
     #[arg(long = "no-tui")]
     no_tui: bool,
+
+    /// Collect traces from all the fuzzers if there are multiple instances (by default, only
+    /// traces from the "main" instance will be collected). Be warned: this will probably speed up
+    /// backdoor detection, but it might also produce duplicate traces. Use afl-cmin after the
+    /// fact to eliminate duplicates.
+    #[arg(long = "collect-from-all-fuzzers")]
+    collect_from_all_fuzzers: bool,
 }
 
 macro_rules! with_cleanup {
@@ -116,7 +123,15 @@ fn start_fuzzer_process(
 /// * `force` - Force the overwrite of the output directory if it exists.
 /// * `verbose` - Display verbose messages.
 /// * `no_tui` - Disable the TUI.
-fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(), RosaError> {
+/// * `collect_from_all_fuzzers` - Collect traces from all fuzzer instances (instead of just
+///   "main").
+fn run(
+    config_file: &Path,
+    force: bool,
+    verbose: bool,
+    no_tui: bool,
+    collect_from_all_fuzzers: bool,
+) -> Result<(), RosaError> {
     // Load the configuration and set up the output directories.
     let config = Config::load(config_file)?;
     config.setup_dirs(force)?;
@@ -232,21 +247,32 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
 
             Ok(())
         })?;
-    // Collect seed traces from all fuzzers.
-    let seed_traces = config.seed_phase_fuzzers.iter().try_fold(
-        Vec::new(),
-        |mut new_traces, fuzzer_config| {
-            let mut traces = trace::load_traces(
-                &fuzzer_config.test_input_dir,
-                &fuzzer_config.trace_dump_dir,
+    // Collect seed traces.
+    let seed_traces = match collect_from_all_fuzzers {
+        true => config.seed_phase_fuzzers.iter().try_fold(
+            Vec::new(),
+            |mut new_traces, fuzzer_config| {
+                let mut traces = trace::load_traces(
+                    &fuzzer_config.test_input_dir,
+                    &fuzzer_config.trace_dump_dir,
+                    &mut known_traces,
+                    false,
+                )?;
+
+                new_traces.append(&mut traces);
+                Ok(new_traces)
+            },
+        ),
+        false => {
+            let main_fuzzer = config.main_seed_phase_fuzzer()?;
+            trace::load_traces(
+                &main_fuzzer.test_input_dir,
+                &main_fuzzer.trace_dump_dir,
                 &mut known_traces,
                 false,
-            )?;
-
-            new_traces.append(&mut traces);
-            Ok(new_traces)
-        },
-    )?;
+            )
+        }
+    }?;
     // Save traces to output dir for later inspection.
     trace::save_traces(&seed_traces, &config.traces_dir())?;
     println_info!("Collected {} seed traces.", seed_traces.len());
@@ -390,23 +416,39 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
 
         // Collect new traces.
         let new_traces = with_cleanup!(
-            config.detection_phase_fuzzers.iter().try_fold(
-                Vec::new(),
-                |mut new_traces, fuzzer_config| {
-                    let mut traces = trace::load_traces(
-                        &fuzzer_config.test_input_dir,
-                        &fuzzer_config.trace_dump_dir,
+            match collect_from_all_fuzzers {
+                true => {
+                    config.detection_phase_fuzzers.iter().try_fold(
+                        Vec::new(),
+                        |mut new_traces, fuzzer_config| {
+                            let mut traces = trace::load_traces(
+                                &fuzzer_config.test_input_dir,
+                                &fuzzer_config.trace_dump_dir,
+                                &mut known_traces,
+                                // Skip missing traces, because the fuzzer is continually producing new
+                                // ones, and we might miss some because of the timing of the writes; it's
+                                // okay, we'll pick them up on the next iteration.
+                                true,
+                            )?;
+
+                            new_traces.append(&mut traces);
+                            Ok(new_traces)
+                        },
+                    )
+                }
+                false => {
+                    let main_fuzzer = config.main_detection_phase_fuzzer()?;
+                    trace::load_traces(
+                        &main_fuzzer.test_input_dir,
+                        &main_fuzzer.trace_dump_dir,
                         &mut known_traces,
                         // Skip missing traces, because the fuzzer is continually producing new
                         // ones, and we might miss some because of the timing of the writes; it's
                         // okay, we'll pick them up on the next iteration.
                         true,
-                    )?;
-
-                    new_traces.append(&mut traces);
-                    Ok(new_traces)
+                    )
                 }
-            ),
+            },
             detection_phase_fuzzer_processes
         )?;
         // Save traces to output dir for later inspection.
@@ -495,7 +537,13 @@ fn run(config_file: &Path, force: bool, verbose: bool, no_tui: bool) -> Result<(
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    match run(&cli.config_file, cli.force, cli.verbose, cli.no_tui) {
+    match run(
+        &cli.config_file,
+        cli.force,
+        cli.verbose,
+        cli.no_tui,
+        cli.collect_from_all_fuzzers,
+    ) {
         Ok(_) => {
             println_info!("Bye :)");
             ExitCode::SUCCESS

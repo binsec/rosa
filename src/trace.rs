@@ -442,12 +442,17 @@ pub fn load_traces(
         .into_iter()
         .unique_by(|trace| trace.uid())
         .filter(|trace| !known_traces.contains_key(&trace.uid()))
-        // NOTE/TODO: for some reason, some traces get through here via having different hashes,
-        // while having completely identical inputs. I'm not sure why/where this is coming from
-        // (maybe from some incorrect traces when AFL++ performs syncing between fuzzers?), but we
-        // can get rid of them here easily. Of course, if two slightly different inputs exhibit
-        // this same bug we won't catch it here, but it's better to catch the obvious cases at the
-        // very least.
+        // NOTE: when loading in traces from various different fuzzer instances, the coverage might
+        // be different because of the different configurations (e.g. one fuzzer enabling
+        // `AFL_INSTRUMENT_LIBS` and another not enabling it).
+        //
+        // This will lead to the same trace inputs producing different traces when loaded through
+        // other fuzzers. In order to avoid some of this, we can at the very least filter out
+        // traces that have the exact same test inputs.
+        //
+        // Note that this will only happen when collecting traces from every fuzzer; if we only
+        // collect from one, we shouldn't have inconsistencies in terms of trace representation.
+        // See the `--collect-from-all-fuzzers` option.
         .filter(|trace| {
             !known_traces
                 .values()
