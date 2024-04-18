@@ -31,3 +31,7 @@ path = "src/cli/rosa_explain.rs"
 [[bin]]
 name = "rosa-trace-dist"
 path = "src/cli/rosa_trace_dist.rs"
+
+[[bin]]
+name = "rosa-showmap"
+path = "src/cli/rosa_showmap.rs"
