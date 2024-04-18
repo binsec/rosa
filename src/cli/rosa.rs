@@ -107,7 +107,9 @@ fn start_fuzzer_process(
     if fuzzer::get_fuzzer_status(&fuzzer_process.working_dir)? == FuzzerStatus::Starting {
         // Wait until fuzzer is up and running.
         while fuzzer::get_fuzzer_status(&fuzzer_process.working_dir)? != FuzzerStatus::Running {
-            if fuzzer::get_fuzzer_status(&fuzzer_process.working_dir)? == FuzzerStatus::Stopped {
+            if fuzzer::get_fuzzer_status(&fuzzer_process.working_dir)? == FuzzerStatus::Stopped
+                || !fuzzer_process.is_running()?
+            {
                 break;
             }
         }

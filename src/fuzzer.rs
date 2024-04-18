@@ -152,7 +152,10 @@ impl FuzzerProcess {
 
                 exit_status.success().then_some(()).ok_or(error!(
                     "process exited with code {}",
-                    exit_status.code().expect("failed to get exit code.")
+                    exit_status
+                        .code()
+                        .map(|code| format!("{}", code))
+                        .unwrap_or("<signal>".to_string())
                 ))
             },
         )
