@@ -17,6 +17,7 @@ use std::{
 
 use clap::Parser;
 use colored::Colorize;
+use rand::Rng;
 
 use rosa::{
     clustering,
@@ -150,6 +151,9 @@ fn run(
     // Set up a hashmap to keep track of known traces via their UIDs.
     let mut known_traces = HashMap::new();
 
+    // Set up a random number to use as a seed for the fuzzers.
+    let fuzzer_seed = rand::thread_rng().gen_range(u32::MIN..=u32::MAX);
+
     // Set up fuzzer processes.
     let mut seed_phase_fuzzer_processes: Vec<FuzzerProcess> = config
         .seed_phase_fuzzers
@@ -158,7 +162,11 @@ fn run(
             FuzzerProcess::create(
                 fuzzer_config.name.clone(),
                 fuzzer_config.test_input_dir.parent().unwrap().to_path_buf(),
-                fuzzer_config.cmd.clone(),
+                fuzzer_config
+                    .cmd
+                    .iter()
+                    .map(|arg| arg.replace("{ROSA_SEED}", &fuzzer_seed.to_string()))
+                    .collect(),
                 fuzzer_config.env.clone(),
                 config
                     .logs_dir()
@@ -175,7 +183,11 @@ fn run(
             FuzzerProcess::create(
                 fuzzer_config.name.clone(),
                 fuzzer_config.test_input_dir.parent().unwrap().to_path_buf(),
-                fuzzer_config.cmd.clone(),
+                fuzzer_config
+                    .cmd
+                    .iter()
+                    .map(|arg| arg.replace("{ROSA_SEED}", &fuzzer_seed.to_string()))
+                    .collect(),
                 fuzzer_config.env.clone(),
                 config
                     .logs_dir()
