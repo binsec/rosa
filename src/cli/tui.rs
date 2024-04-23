@@ -287,8 +287,8 @@ impl RosaTuiStats {
 }
 
 impl RosaTui {
-    const MIN_WIDTH: u16 = 92;
-    const MIN_HEIGHT: u16 = 22;
+    const MIN_WIDTH: u16 = 90;
+    const MIN_HEIGHT: u16 = 21;
 
     pub fn new(config_path: &Path, monitor_dir: &Path) -> Self {
         RosaTui {
@@ -580,7 +580,7 @@ impl RosaTui {
         if stats.crash_warning {
             config_lines.push(
                 Line::from(vec![
-                    " WARNING: the fuzzer has detected crashes. This is probably hindering \
+                    " WARNING: a fuzzer has detected crashes. This is probably hindering \
                     backdoor detection!"
                         .into(),
                 ])
