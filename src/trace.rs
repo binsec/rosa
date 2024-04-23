@@ -452,7 +452,7 @@ pub fn load_traces(
         .filter(|trace| !known_traces.contains_key(&trace.uid()))
         // NOTE: when loading in traces from various different fuzzer instances, the coverage might
         // be different because of the different configurations (e.g. one fuzzer enabling
-        // `AFL_INSTRUMENT_LIBS` and another not enabling it).
+        // `AFL_INST_LIBS` and another not enabling it).
         //
         // This will lead to the same trace inputs producing different traces when loaded through
         // other fuzzers. In order to avoid some of this, we can at the very least filter out
@@ -595,6 +595,72 @@ pub fn save_trace_dump(trace: &Trace, output_dir: &Path) -> Result<(), RosaError
     })?;
 
     Ok(())
+}
+
+/// Get the coverage of a set of traces in terms of edges and syscalls.
+///
+/// # Parameters
+/// * `traces` - The set of traces to compute coverage for.
+///
+/// # Examples
+/// ```
+/// use rosa::trace::{self, Trace};
+///
+/// let traces = vec![
+///     Trace {
+///         name: "trace1".to_string(),
+///         test_input: vec![],
+///         edges: vec![0, 1, 0, 1, 0, 0, 0, 0],
+///         syscalls: vec![1, 1, 0, 0],
+///     },
+///     Trace {
+///         name: "trace2".to_string(),
+///         test_input: vec![],
+///         edges: vec![0, 0, 0, 0, 1, 0, 1, 0],
+///         syscalls: vec![0, 1, 1, 0],
+///     }
+/// ];
+///
+/// assert_eq!(trace::get_coverage(&traces), (0.5, 0.75));
+/// ```
+pub fn get_coverage(traces: &[Trace]) -> (f64, f64) {
+    let total_edges = traces.first().map(|trace| trace.edges.len()).unwrap_or(0);
+    let total_syscalls = traces
+        .first()
+        .map(|trace| trace.syscalls.len())
+        .unwrap_or(0);
+
+    let edge_hits = traces
+        .iter()
+        .fold(vec![0; total_edges], |acc: Vec<u8>, trace| {
+            trace
+                .edges
+                .iter()
+                .zip(acc)
+                .map(|(trace_edge, acc_edge)| (trace_edge | acc_edge))
+                .collect()
+        })
+        .into_iter()
+        .filter(|edge| *edge == 1)
+        .count();
+    let syscall_hits = traces
+        .iter()
+        .fold(vec![0; total_syscalls], |acc: Vec<u8>, trace| {
+            trace
+                .syscalls
+                .iter()
+                .zip(acc)
+                .map(|(trace_syscall, acc_syscall)| trace_syscall | acc_syscall)
+                .collect()
+        })
+        .into_iter()
+        .filter(|syscall| *syscall == 1)
+        .count();
+
+    (
+        (edge_hits as f64) / (total_edges as f64),
+        (syscall_hits as f64) / (total_syscalls as f64),
+    )
 }
 
 #[cfg(test)]

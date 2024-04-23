@@ -5,8 +5,9 @@
 
 use std::{
     collections::HashMap,
-    fs,
+    fmt, fs,
     path::{Path, PathBuf},
+    str::{self, FromStr},
 };
 
 use serde::{Deserialize, Serialize};
@@ -37,6 +38,147 @@ pub struct FuzzerConfig {
     pub crashes_dir: PathBuf,
 }
 
+/// The conditions that describe when to stop collecting seed traces.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SeedConditions {
+    /// Stop after a given amount of seconds.
+    #[serde(default = "SeedConditions::default_seconds")]
+    pub seconds: Option<u64>,
+    /// Stop once a given edge coverage has been reached (percentage between 0.0 and 100.0).
+    #[serde(default = "SeedConditions::default_edge_coverage")]
+    pub edge_coverage: Option<f64>,
+    /// Stop once a given syscall coverage has been reached (percentage between 0.0 and 100.0).
+    #[serde(default = "SeedConditions::default_syscall_coverage")]
+    pub syscall_coverage: Option<f64>,
+}
+
+impl SeedConditions {
+    const fn default_seconds() -> Option<u64> {
+        None
+    }
+
+    const fn default_edge_coverage() -> Option<f64> {
+        None
+    }
+
+    const fn default_syscall_coverage() -> Option<f64> {
+        None
+    }
+
+    /// Check if a set of seed conditions is valid.
+    ///
+    /// # Examples
+    /// ```
+    /// use rosa::config::SeedConditions;
+    ///
+    /// let conditions = SeedConditions {
+    ///     seconds: None,
+    ///     edge_coverage: None,
+    ///     syscall_coverage: None,
+    /// };
+    /// assert_eq!(conditions.valid(), false);
+    ///
+    /// let conditions = SeedConditions {
+    ///     seconds: None,
+    ///     edge_coverage: Some(100.00),
+    ///     syscall_coverage: None,
+    /// };
+    /// assert_eq!(conditions.valid(), true);
+    ///
+    /// let conditions = SeedConditions {
+    ///     seconds: Some(300),
+    ///     edge_coverage: Some(32.34),
+    ///     syscall_coverage: Some(1.2),
+    /// };
+    /// assert_eq!(conditions.valid(), true);
+    /// ```
+    pub fn valid(&self) -> bool {
+        self.seconds.is_some() || self.edge_coverage.is_some() || self.syscall_coverage.is_some()
+    }
+
+    /// Check if the seed conditions have been met.
+    ///
+    /// # Parameters
+    /// * `seconds` - The current seconds.
+    /// * `edge_coverage` - The current edge coverage.
+    /// * `syscall_coverage` - The current syscall coverage.
+    ///
+    /// # Examples
+    /// ```
+    /// use rosa::config::SeedConditions;
+    ///
+    /// let conditions = SeedConditions {
+    ///     seconds: Some(32),
+    ///     edge_coverage: None,
+    ///     syscall_coverage: None,
+    /// };
+    /// assert_eq!(conditions.check(10, 99.99, 99.99), false);
+    /// assert_eq!(conditions.check(32, 0.0, 0.0), true);
+    /// ```
+    pub fn check(&self, seconds: u64, edge_coverage: f64, syscall_coverage: f64) -> bool {
+        let seconds_check = self
+            .seconds
+            .map(|seconds_limit| seconds >= seconds_limit)
+            .unwrap_or(false);
+        let edge_coverage_check = self
+            .edge_coverage
+            .map(|edge_coverage_limit| edge_coverage >= edge_coverage_limit)
+            .unwrap_or(false);
+        let syscall_coverage_check = self
+            .syscall_coverage
+            .map(|syscall_coverage_limit| syscall_coverage >= syscall_coverage_limit)
+            .unwrap_or(false);
+
+        seconds_check || edge_coverage_check || syscall_coverage_check
+    }
+}
+
+/// The possible phases of ROSA.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum RosaPhase {
+    /// Starting up.
+    Starting,
+    /// Collection of seed traces.
+    CollectingSeeds,
+    /// Clustering of seed traces.
+    ClusteringSeeds,
+    /// Backdoor detection.
+    DetectingBackdoors,
+    /// Stopped.
+    Stopped,
+}
+
+impl fmt::Display for RosaPhase {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Starting => "starting",
+                Self::CollectingSeeds => "collecting-seeds",
+                Self::ClusteringSeeds => "clustering-seeds",
+                Self::DetectingBackdoors => "detecting-backdoors",
+                Self::Stopped => "stopped",
+            }
+        )
+    }
+}
+
+impl str::FromStr for RosaPhase {
+    type Err = RosaError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "starting" => Ok(Self::Starting),
+            "collecting-seeds" => Ok(Self::CollectingSeeds),
+            "clustering-seeds" => Ok(Self::ClusteringSeeds),
+            "detecting-backdoors" => Ok(Self::DetectingBackdoors),
+            "stopped" => Ok(Self::Stopped),
+            unknown => fail!("invalid phase '{}'.", unknown),
+        }
+    }
+}
+
 /// A configuration for ROSA.
 ///
 /// This configuration will be loaded from a configuration file (one per target program).
@@ -45,10 +187,13 @@ pub struct Config {
     /// The directory in which ROSA's output will be stored.
     pub output_dir: PathBuf,
 
-    /// The collection of fuzzers to run during the seed phase.
-    pub seed_phase_fuzzers: Vec<FuzzerConfig>,
-    /// The collection of fuzzers to run during the detection phase.
-    pub detection_phase_fuzzers: Vec<FuzzerConfig>,
+    /// The collection of fuzzers to run during both the seed & detection phases.
+    pub fuzzers: Vec<FuzzerConfig>,
+
+    /// The conditions that describe when to stop collecting seed traces.
+    /// If multiple, the seed collection will stop once the first is met; at least one condition
+    /// must be supplied.
+    pub seed_conditions: SeedConditions,
 
     /// The criterion to use during cluster formation.
     /// See [cluster_traces](crate::clustering::cluster_traces).
@@ -220,8 +365,16 @@ impl Config {
             )
         })?;
 
-        toml::from_str(&config_toml)
-            .map_err(|err| error!("failed to deserialize config TOML: {}.", err))
+        let config: Self = toml::from_str(&config_toml)
+            .map_err(|err| error!("failed to deserialize config TOML: {}.", err))?;
+
+        config
+            .seed_conditions
+            .valid()
+            .then_some(config)
+            .ok_or(error!(
+            "at least one seed condition must be specified to know when to stop collecting seeds."
+        ))
     }
 
     /// Set up ROSA's output directories.
@@ -270,6 +423,89 @@ impl Config {
         Ok(())
     }
 
+    /// Get the current phase of ROSA's detection.
+    pub fn get_current_phase(&self) -> Result<RosaPhase, RosaError> {
+        let phase = fs::read_to_string(self.current_phase_file()).map_err(|err| {
+            error!(
+                "failed to get current phase from {}: {}.",
+                self.current_phase_file().display(),
+                err
+            )
+        })?;
+
+        RosaPhase::from_str(&phase)
+    }
+
+    /// Set the current phase of ROSA's detection.
+    pub fn set_current_phase(&self, phase: RosaPhase) -> Result<(), RosaError> {
+        fs::write(self.current_phase_file(), phase.to_string()).map_err(|err| {
+            error!(
+                "failed to set current phase in {}: {}.",
+                self.current_phase_file().display(),
+                err
+            )
+        })
+    }
+
+    /// Get the current coverage.
+    pub fn get_current_coverage(&self) -> Result<(f64, f64), RosaError> {
+        let coverage_string = fs::read_to_string(self.current_coverage_file()).map_err(|err| {
+            error!(
+                "failed to get current coverage from {}: {}.",
+                self.current_coverage_file().display(),
+                err
+            )
+        })?;
+        let coverage_parts: Vec<&str> = coverage_string.split('/').collect();
+
+        let edge_coverage_str = coverage_parts.first().ok_or(error!(
+            "missing edge coverage in {}.",
+            self.current_coverage_file().display()
+        ))?;
+        let syscall_coverage_str = coverage_parts.last().ok_or(error!(
+            "missing syscall coverage in {}.",
+            self.current_coverage_file().display()
+        ))?;
+
+        let edge_coverage = edge_coverage_str
+            .parse::<f64>()
+            .map_err(|err| error!("failed to parse edge coverage: {err}."))?;
+        let syscall_coverage = syscall_coverage_str
+            .parse::<f64>()
+            .map_err(|err| error!("failed to parse syscall coverage: {err}."))?;
+
+        Ok((edge_coverage, syscall_coverage))
+    }
+
+    /// Set the current coverage.
+    pub fn set_current_coverage(
+        &self,
+        edge_coverage: f64,
+        syscall_coverage: f64,
+    ) -> Result<(), RosaError> {
+        fs::write(
+            self.current_coverage_file(),
+            format!("{}/{}", edge_coverage, syscall_coverage),
+        )
+        .map_err(|err| {
+            error!(
+                "failed to set current coverage in {}: {}.",
+                self.current_coverage_file().display(),
+                err
+            )
+        })
+    }
+
+    /// Get the path to the current coverage file.
+    fn current_coverage_file(&self) -> PathBuf {
+        self.output_dir.join(".current_coverage")
+    }
+
+    /// Get the path to the current phase file.
+    fn current_phase_file(&self) -> PathBuf {
+        self.output_dir.join(".current_phase")
+    }
+
     /// Get the path to the `backdoors` output directory.
     pub fn backdoors_dir(&self) -> PathBuf {
         self.output_dir.join("backdoors")
@@ -295,21 +531,11 @@ impl Config {
         self.output_dir.join("traces")
     }
 
-    /// Get the main fuzzer from the seed phase.
-    pub fn main_seed_phase_fuzzer(&self) -> Result<&FuzzerConfig, RosaError> {
-        self.seed_phase_fuzzers
+    /// Get the main fuzzer.
+    pub fn main_fuzzer(&self) -> Result<&FuzzerConfig, RosaError> {
+        self.fuzzers
             .iter()
             .find(|fuzzer_config| fuzzer_config.name == "main")
-            .ok_or(error!("No 'main' fuzzer found in the seed phase fuzzers."))
-    }
-
-    /// Get the main fuzzer from the detection phase.
-    pub fn main_detection_phase_fuzzer(&self) -> Result<&FuzzerConfig, RosaError> {
-        self.detection_phase_fuzzers
-            .iter()
-            .find(|fuzzer_config| fuzzer_config.name == "main")
-            .ok_or(error!(
-                "No 'main' fuzzer found in the detection phase fuzzers."
-            ))
+            .ok_or(error!("No 'main' fuzzer found in the configuration."))
     }
 }

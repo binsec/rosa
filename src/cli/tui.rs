@@ -6,14 +6,16 @@ use std::{
 };
 
 use ratatui::{
-    prelude::{Color, Constraint, CrosstermBackend, Direction, Layout, Line, Rect, Span, Style},
+    prelude::{
+        Alignment, Color, Constraint, CrosstermBackend, Direction, Layout, Line, Rect, Span, Style,
+    },
     style::Stylize,
     widgets::{Block, Paragraph, Wrap},
     Frame, Terminal,
 };
 
 use rosa::{
-    config::Config,
+    config::{Config, RosaPhase},
     criterion::Criterion,
     error::RosaError,
     fuzzer::{self, FuzzerStatus},
@@ -29,51 +31,55 @@ pub struct RosaTui {
 
 struct RosaTuiStats {
     start_time: Option<Instant>,
+    phase: RosaPhase,
     last_backdoor_time: Option<Instant>,
     last_new_trace_time: Option<Instant>,
     backdoors: u64,
     total_traces: u64,
+    edge_coverage: f64,
+    syscall_coverage: f64,
     new_traces: u64,
     oracle: Oracle,
     oracle_criterion: Criterion,
-    clusters: u64,
-    seed_traces: u64,
+    clusters: Option<u64>,
+    seed_traces: Option<u64>,
     formation_criterion: Criterion,
     selection_criterion: Criterion,
     edge_tolerance: u64,
     syscall_tolerance: u64,
     config_file_path: String,
     output_dir_path: String,
-    total_seed_phase_fuzzers: u64,
-    detection_phase_fuzzer_dirs: Vec<PathBuf>,
-    alive_detection_phase_fuzzers: u64,
-    total_detection_phase_fuzzers: u64,
+    fuzzer_dirs: Vec<PathBuf>,
+    alive_fuzzers: u64,
+    total_fuzzers: u64,
     crash_warning: bool,
 }
 
 impl RosaTuiStats {
     pub fn new(config_path: &Path, output_dir_path: &Path) -> Self {
         Self {
+            phase: RosaPhase::Starting,
             start_time: None,
             last_backdoor_time: None,
             last_new_trace_time: None,
             backdoors: 0,
             total_traces: 0,
+            edge_coverage: 0.0,
+            syscall_coverage: 0.0,
             new_traces: 0,
             oracle: Oracle::CompMinMax,
             oracle_criterion: Criterion::EdgesAndSyscalls,
-            clusters: 0,
-            seed_traces: 0,
+            clusters: None,
+            seed_traces: None,
             formation_criterion: Criterion::EdgesAndSyscalls,
             selection_criterion: Criterion::EdgesAndSyscalls,
             edge_tolerance: 0,
             syscall_tolerance: 0,
             config_file_path: config_path.display().to_string(),
             output_dir_path: output_dir_path.join("").display().to_string(),
-            total_seed_phase_fuzzers: 0,
-            detection_phase_fuzzer_dirs: vec![],
-            alive_detection_phase_fuzzers: 0,
-            total_detection_phase_fuzzers: 0,
+            fuzzer_dirs: vec![],
+            alive_fuzzers: 0,
+            total_fuzzers: 0,
             crash_warning: false,
         }
     }
@@ -88,10 +94,9 @@ impl RosaTuiStats {
         self.edge_tolerance = config.cluster_formation_edge_tolerance;
         self.syscall_tolerance = config.cluster_formation_syscall_tolerance;
 
-        self.total_seed_phase_fuzzers = config.seed_phase_fuzzers.len() as u64;
-        self.total_detection_phase_fuzzers = config.detection_phase_fuzzers.len() as u64;
-        self.detection_phase_fuzzer_dirs = config
-            .detection_phase_fuzzers
+        self.total_fuzzers = config.fuzzers.len() as u64;
+        self.fuzzer_dirs = config
+            .fuzzers
             .iter()
             .map(|fuzzer_config| {
                 fuzzer_config
@@ -102,48 +107,14 @@ impl RosaTuiStats {
             })
             .collect();
 
-        let cluster_files: Vec<PathBuf> = fs::read_dir(config.clusters_dir())
-            .map_or_else(
-                |err| {
-                    fail!(
-                        "could not read clusters directory '{}': {}.",
-                        config.clusters_dir().display(),
-                        err
-                    )
-                },
-                |res| {
-                    Ok(res
-                        // Ignore files/dirs we cannot read.
-                        .filter_map(|item| item.ok())
-                        .map(|item| item.path())
-                        // Only keep files that end in `.txt`.
-                        .filter(|path| {
-                            path.is_file()
-                                && path.extension().is_some_and(|extension| extension == "txt")
-                                && path.file_name().is_some_and(|name| name != "README.txt")
-                        }))
-                },
-            )?
-            .collect();
-        self.clusters = cluster_files.len() as u64;
-        self.seed_traces = cluster_files.iter().try_fold(0, |acc, file| {
-            let cluster_file_content = fs::read_to_string(file).map_err(|err| {
-                error!("could not read cluster file '{}': {}.", file.display(), err)
-            })?;
-            let traces: Vec<&str> = cluster_file_content
-                .split('\n')
-                // Filter empty lines (newlines).
-                .filter(|line| !line.is_empty())
-                .collect();
-
-            Ok(acc + (traces.len() as u64))
-        })?;
-
         Ok(())
     }
 
     pub fn update(&mut self, monitor_dir: &Path) -> Result<(), RosaError> {
         let config = Config::load(&monitor_dir.join("config").with_extension("toml"))?;
+
+        // Get the current phase.
+        self.phase = config.get_current_phase()?;
 
         // Check for new traces.
         let current_traces = fs::read_dir(config.traces_dir())
@@ -172,6 +143,53 @@ impl RosaTuiStats {
         }
         self.new_traces = new_traces;
         self.total_traces += new_traces;
+
+        // Update coverage.
+        // If not possible (e.g. the other process is writing in the file), it's fine, we'll keep
+        // the same coverage for now.
+        (self.edge_coverage, self.syscall_coverage) = config
+            .get_current_coverage()
+            .unwrap_or((self.edge_coverage, self.syscall_coverage));
+
+        if self.clusters.is_none() && self.phase == RosaPhase::DetectingBackdoors {
+            // Check for clusters.
+            let cluster_files: Vec<PathBuf> = fs::read_dir(config.clusters_dir())
+                .map_or_else(
+                    |err| {
+                        fail!(
+                            "could not read clusters directory '{}': {}.",
+                            config.clusters_dir().display(),
+                            err
+                        )
+                    },
+                    |res| {
+                        Ok(res
+                            // Ignore files/dirs we cannot read.
+                            .filter_map(|item| item.ok())
+                            .map(|item| item.path())
+                            // Only keep files that end in `.txt`.
+                            .filter(|path| {
+                                path.is_file()
+                                    && path.extension().is_some_and(|extension| extension == "txt")
+                                    && path.file_name().is_some_and(|name| name != "README.txt")
+                            }))
+                    },
+                )?
+                .collect();
+            self.clusters = Some(cluster_files.len() as u64);
+            self.seed_traces = Some(cluster_files.iter().try_fold(0, |acc, file| {
+                let cluster_file_content = fs::read_to_string(file).map_err(|err| {
+                    error!("could not read cluster file '{}': {}.", file.display(), err)
+                })?;
+                let traces: Vec<&str> = cluster_file_content
+                    .split('\n')
+                    // Filter empty lines (newlines).
+                    .filter(|line| !line.is_empty())
+                    .collect();
+
+                Ok(acc + (traces.len() as u64))
+            })?);
+        }
 
         // Check for new backdoors.
         let new_backdoors = fs::read_dir(config.backdoors_dir())
@@ -202,23 +220,22 @@ impl RosaTuiStats {
         // Check for crashes.
         if !self.crash_warning {
             let found_crashes: Vec<bool> = config
-                .detection_phase_fuzzers
+                .fuzzers
                 .iter()
                 .map(|fuzzer_config| fuzzer::fuzzer_found_crashes(&fuzzer_config.crashes_dir))
                 .collect::<Result<Vec<bool>, RosaError>>()?;
             self.crash_warning = found_crashes.iter().any(|found_crashes| *found_crashes);
         }
 
-        // Check for how many detection phase fuzzers are alive.
-        self.alive_detection_phase_fuzzers =
-            self.detection_phase_fuzzer_dirs
-                .iter()
-                .try_fold(0, |acc, fuzzer_dir| {
-                    Ok(match fuzzer::get_fuzzer_status(fuzzer_dir)? {
-                        FuzzerStatus::Running => acc + 1,
-                        _ => acc,
-                    })
-                })?;
+        // Check for how many fuzzers are alive.
+        self.alive_fuzzers = self
+            .fuzzer_dirs
+            .iter()
+            .filter_map(|fuzzer_dir| match fuzzer::get_fuzzer_status(fuzzer_dir) {
+                Ok(FuzzerStatus::Running) => Some(1),
+                _ => None,
+            })
+            .count() as u64;
 
         Ok(())
     }
@@ -362,9 +379,21 @@ impl RosaTui {
         )
         .split(main_area);
 
-        // The header/title is the name of the tool.
-        let header = Paragraph::new(vec![Line::from(vec![" rosa backdoor detector".into()])])
+        // The header/title is the name of the tool and the current phase.
+        let header = Layout::new(
+            Direction::Horizontal,
+            [Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)],
+        )
+        .split(main_layout[0]);
+        let title = Paragraph::new(vec![Line::from(vec![" rosa backdoor detector".into()])])
             .style(Style::reset().fg(Color::Rgb(255, 135, 135)).bold());
+        let phase = Paragraph::new(vec![Line::from(vec![format!(
+            "[{}]",
+            stats.phase.to_string().replace('-', " ")
+        )
+        .into()])])
+        .alignment(Alignment::Right)
+        .style(Style::reset().fg(Color::Rgb(167, 171, 221)).bold());
 
         // The rest of it gets split into 3 rows:
         // - First row: time stats & results
@@ -445,6 +474,12 @@ impl RosaTui {
                 Span::styled(" total traces: ", label_style),
                 stats.total_traces.to_string().into(),
             ]),
+            Line::from(vec![
+                Span::styled("     coverage: ", label_style),
+                format!("{:.2}%", stats.edge_coverage * 100.0).into(),
+                " / ".to_string().into(),
+                format!("{:.2}%", stats.syscall_coverage * 100.0).into(),
+            ]),
         ])
         .style(Style::reset())
         .block(results_block);
@@ -471,11 +506,19 @@ impl RosaTui {
         let clustering = Paragraph::new(vec![
             Line::from(vec![
                 Span::styled("            clusters: ", label_style),
-                stats.clusters.to_string().into(),
+                stats
+                    .clusters
+                    .map(|clusters| clusters.to_string())
+                    .unwrap_or("-".to_string())
+                    .into(),
             ]),
             Line::from(vec![
                 Span::styled("         seed traces: ", label_style),
-                stats.seed_traces.to_string().into(),
+                stats
+                    .seed_traces
+                    .map(|seed_traces| seed_traces.to_string())
+                    .unwrap_or("-".to_string())
+                    .into(),
             ]),
             Line::from(vec![
                 Span::styled(" formation criterion: ", label_style),
@@ -500,16 +543,11 @@ impl RosaTui {
         // Truncate the configuration options if needed, to make sure they fit on the TUI.
         let mut config_file = stats.config_file_path.clone();
         let mut output_dir = stats.output_dir_path.clone();
-        let seed_phase_fuzzers = format!("{} (stopped)", stats.total_seed_phase_fuzzers);
-        let detection_phase_fuzzers = format!(
-            "{}/{}",
-            stats.alive_detection_phase_fuzzers, stats.total_detection_phase_fuzzers
-        );
-        let detection_phase_fuzzers_style =
-            match stats.alive_detection_phase_fuzzers < stats.total_detection_phase_fuzzers {
-                true => warning_style,
-                false => Style::reset(),
-            };
+        let fuzzers = format!("{}/{}", stats.alive_fuzzers, stats.total_fuzzers);
+        let fuzzers_style = match stats.alive_fuzzers < stats.total_fuzzers {
+            true => warning_style,
+            false => Style::reset(),
+        };
         // -3 for the borders and left padding.
         let max_text_width = (frame.size().width - 14) as usize;
         if config_file.len() > max_text_width {
@@ -524,20 +562,16 @@ impl RosaTui {
         // Create the configuration info.
         let mut config_lines = vec![
             Line::from(vec![
-                Span::styled("                  config: ", label_style),
+                Span::styled("          config: ", label_style),
                 config_file.into(),
             ]),
             Line::from(vec![
-                Span::styled("                  output: ", label_style),
+                Span::styled("          output: ", label_style),
                 output_dir.into(),
             ]),
             Line::from(vec![
-                Span::styled("      seed phase fuzzers: ", label_style),
-                seed_phase_fuzzers.into(),
-            ]),
-            Line::from(vec![
-                Span::styled(" detection phase fuzzers: ", label_style),
-                Span::styled(detection_phase_fuzzers, detection_phase_fuzzers_style),
+                Span::styled(" fuzzers running: ", label_style),
+                Span::styled(fuzzers, fuzzers_style),
             ]),
             Line::from(vec![]),
         ];
@@ -560,7 +594,8 @@ impl RosaTui {
             .block(config_block);
 
         // Render the header and all the blocks.
-        frame.render_widget(header, main_layout[0]);
+        frame.render_widget(title, header[0]);
+        frame.render_widget(phase, header[1]);
         frame.render_widget(time_stats, first_row[0]);
         frame.render_widget(results, first_row[1]);
         frame.render_widget(oracle, second_row[0]);
