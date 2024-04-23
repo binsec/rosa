@@ -112,7 +112,7 @@ impl SeedConditions {
     ///     edge_coverage: None,
     ///     syscall_coverage: None,
     /// };
-    /// assert_eq!(conditions.check(10, 99.99, 99.99), false);
+    /// assert_eq!(conditions.check(10, 0.9999, 0.9999), false);
     /// assert_eq!(conditions.check(32, 0.0, 0.0), true);
     /// ```
     pub fn check(&self, seconds: u64, edge_coverage: f64, syscall_coverage: f64) -> bool {
@@ -122,11 +122,11 @@ impl SeedConditions {
             .unwrap_or(false);
         let edge_coverage_check = self
             .edge_coverage
-            .map(|edge_coverage_limit| edge_coverage >= edge_coverage_limit)
+            .map(|edge_coverage_limit| edge_coverage * 100.0 >= edge_coverage_limit)
             .unwrap_or(false);
         let syscall_coverage_check = self
             .syscall_coverage
-            .map(|syscall_coverage_limit| syscall_coverage >= syscall_coverage_limit)
+            .map(|syscall_coverage_limit| syscall_coverage * 100.0 >= syscall_coverage_limit)
             .unwrap_or(false);
 
         seconds_check || edge_coverage_check || syscall_coverage_check
