@@ -40,8 +40,8 @@ struct Cli {
     )]
     output_dir: PathBuf,
 
-    /// The target program to run traces through (if empty, the first detection phase fuzzer
-    /// process' command from ROSA's configuration is used).
+    /// The target program to run traces through (if empty, use the command from the first fuzzer
+    /// in the configuration).
     #[arg(
         short = 'p',
         long = "target-program",
@@ -49,8 +49,8 @@ struct Cli {
     )]
     target_program_cmd: Option<String>,
 
-    /// The environment to use for the target program (if empty, the first detection phase fuzzer
-    /// process' environment from ROSA's configuration is used).
+    /// The environment to use for the target program (if empty, use the environment from the first
+    /// fuzzer in the configuration).
     #[arg(
         short = 'e',
         long = "environment",
@@ -260,7 +260,7 @@ fn run(
 
     let selected_cmd: Vec<String> = match target_program_cmd {
         Some(cmd) => cmd.split(' ').map(|arg| arg.to_string()).collect(),
-        None => config.detection_phase_fuzzers[0].cmd.clone(),
+        None => config.fuzzers[0].cmd.clone(),
     };
     let selected_env: HashMap<String, String> = match target_program_env {
         Some(env) => env
@@ -273,7 +273,7 @@ fn run(
                 (key, value)
             })
             .collect(),
-        None => config.detection_phase_fuzzers[0].env.clone(),
+        None => config.fuzzers[0].env.clone(),
     };
 
     println_info!("Evaluating {} traces...", selected_trace_uids.len());

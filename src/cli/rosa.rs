@@ -21,11 +21,11 @@ use rand::Rng;
 
 use rosa::{
     clustering,
-    config::Config,
+    config::{Config, RosaPhase},
     decision::{Decision, DecisionReason, TimedDecision},
     error::RosaError,
     fuzzer::{self, FuzzerProcess, FuzzerStatus},
-    trace,
+    trace::{self, Trace},
 };
 
 use crate::tui::RosaTui;
@@ -139,6 +139,8 @@ fn run(
     let config = Config::load(config_file)?;
     config.setup_dirs(force)?;
     config.save(&config.output_dir)?;
+    config.set_current_phase(RosaPhase::Starting)?;
+    config.set_current_coverage(0.0, 0.0)?;
 
     // Set up a "global" running boolean, and create a Ctrl-C handler that just sets it to false.
     let rosa_should_stop = Arc::new(AtomicBool::new(false));
@@ -155,8 +157,8 @@ fn run(
     let fuzzer_seed = rand::thread_rng().gen_range(u32::MIN..=u32::MAX);
 
     // Set up fuzzer processes.
-    let mut seed_phase_fuzzer_processes: Vec<FuzzerProcess> = config
-        .seed_phase_fuzzers
+    let mut fuzzer_processes: Vec<FuzzerProcess> = config
+        .fuzzers
         .iter()
         .map(|fuzzer_config| {
             FuzzerProcess::create(
@@ -171,28 +173,7 @@ fn run(
                 config
                     .logs_dir()
                     .clone()
-                    .join(format!("seed_phase_fuzzer_{}", fuzzer_config.name))
-                    .with_extension("log"),
-            )
-        })
-        .collect::<Result<Vec<FuzzerProcess>, RosaError>>()?;
-    let mut detection_phase_fuzzer_processes: Vec<FuzzerProcess> = config
-        .detection_phase_fuzzers
-        .iter()
-        .map(|fuzzer_config| {
-            FuzzerProcess::create(
-                fuzzer_config.name.clone(),
-                fuzzer_config.test_input_dir.parent().unwrap().to_path_buf(),
-                fuzzer_config
-                    .cmd
-                    .iter()
-                    .map(|arg| arg.replace("{ROSA_SEED}", &fuzzer_seed.to_string()))
-                    .collect(),
-                fuzzer_config.env.clone(),
-                config
-                    .logs_dir()
-                    .clone()
-                    .join(format!("detection_phase_fuzzer_{}", fuzzer_config.name))
+                    .join(format!("fuzzer_{}", fuzzer_config.name))
                     .with_extension("log"),
             )
         })
@@ -201,137 +182,19 @@ fn run(
     // Setup communication channel with TUI.
     let (tx, rx) = mpsc::channel::<()>();
 
-    // Spawn the fuzzer seed process.
-    println_info!("Collecting seed traces...");
-    if verbose {
-        println_verbose!("Fuzzer seed processes:");
-    }
-    seed_phase_fuzzer_processes
-        .iter_mut()
-        .try_for_each(|fuzzer_process| start_fuzzer_process(fuzzer_process, verbose))?;
-
-    // Wait for the fuzzer process (or for a Ctrl-C).
-    while seed_phase_fuzzer_processes
-        .iter_mut()
-        .any(|fuzzer_process| fuzzer_process.is_running().unwrap_or(false))
-        && !rosa_should_stop.load(Ordering::Acquire)
-    {}
-
-    // Check to see if we received a Ctrl-C while waiting.
-    if seed_phase_fuzzer_processes
-        .iter_mut()
-        .any(|fuzzer_process| fuzzer_process.is_running().unwrap_or(false))
-        && rosa_should_stop.load(Ordering::Acquire)
-    {
-        println_info!("Stopping seed phase fuzzer processes.");
-        seed_phase_fuzzer_processes
-            .iter_mut()
-            .try_for_each(|fuzzer_process| fuzzer_process.stop())?;
-        return Ok(());
-    }
-
-    // Check the exit code of the fuzzer seed process.
-    seed_phase_fuzzer_processes
-        .iter_mut()
-        .try_for_each(|fuzzer_process| {
-            fuzzer_process.check_success().map_err(|err| {
-                rosa::error!(
-                    "seed phase fuzzer command failed: {}. See {}.",
-                    err,
-                    fuzzer_process.log_file.display()
-                )
-            })
-        })?;
-
-    // Check for crashes; if some of the inputs crash, the fuzzer will most likely get oriented
-    // towards that family of inputs, which decreases the overall chance of finding backdoors.
-    config
-        .seed_phase_fuzzers
-        .iter()
-        .try_for_each(|fuzzer_config| {
-            if fuzzer::fuzzer_found_crashes(&fuzzer_config.crashes_dir)? {
-                println_warning!(
-                    "the fuzzer '{}' has detected one or more crashes in {}. This is probably \
-                hindering the thorough exploration of the binary; it is recommended that you fix \
-                the crashes and try again.",
-                    fuzzer_config.name,
-                    &fuzzer_config.crashes_dir.display(),
-                )
-            }
-
-            Ok(())
-        })?;
-    // Collect seed traces.
-    let seed_traces = match collect_from_all_fuzzers {
-        true => config.seed_phase_fuzzers.iter().try_fold(
-            Vec::new(),
-            |mut new_traces, fuzzer_config| {
-                let mut traces = trace::load_traces(
-                    &fuzzer_config.test_input_dir,
-                    &fuzzer_config.trace_dump_dir,
-                    &fuzzer_config.name,
-                    &mut known_traces,
-                    false,
-                )?;
-
-                new_traces.append(&mut traces);
-                Ok(new_traces)
-            },
-        ),
-        false => {
-            let main_fuzzer = config.main_seed_phase_fuzzer()?;
-            trace::load_traces(
-                &main_fuzzer.test_input_dir,
-                &main_fuzzer.trace_dump_dir,
-                "main",
-                &mut known_traces,
-                false,
-            )
-        }
-    }?;
-    // Save traces to output dir for later inspection.
-    trace::save_traces(&seed_traces, &config.traces_dir())?;
-    println_info!("Collected {} seed traces.", seed_traces.len());
-
-    // Form seed clusters.
-    println_info!("Clustering seed traces...");
-    let clusters = clustering::cluster_traces(
-        &seed_traces,
-        config.cluster_formation_criterion,
-        config.cluster_formation_distance_metric,
-        config.cluster_formation_edge_tolerance,
-        config.cluster_formation_syscall_tolerance,
-    );
-    // Save clusters to output dir for later inspection.
-    clustering::save_clusters(&clusters, &config.clusters_dir())?;
-    println_info!("Created {} clusters.", clusters.len());
-    // Save the decisions for the seed traces too, even though we know what they're gonna be.
-    clusters.iter().try_for_each(|cluster| {
-        cluster.traces.iter().try_for_each(|trace| {
-            let decision = TimedDecision {
-                decision: Decision {
-                    trace_uid: trace.uid(),
-                    trace_name: trace.name.clone(),
-                    cluster_uid: cluster.uid.clone(),
-                    is_backdoor: false,
-                    reason: DecisionReason::Seed,
-                },
-                seconds: 0,
-            };
-
-            decision.save(&config.decisions_dir())
-        })
-    })?;
-
-    // Spawn the fuzzer detection processes.
     println_info!("Starting backdoor detection...");
-    if verbose {
-        println_verbose!("Fuzzer detection processes:");
-    }
-    detection_phase_fuzzer_processes
+    let mut nb_backdoors = 0;
+
+    fuzzer_processes
         .iter_mut()
         .try_for_each(|fuzzer_process| start_fuzzer_process(fuzzer_process, verbose))?;
-    let mut nb_backdoors = 0;
+
+    // Start the time counter.
+    let start_time = Instant::now();
+    // Keep track of crash warnings.
+    let mut already_warned_about_crashes = false;
+    // Keep track of clusters.
+    let mut clusters = Vec::new();
 
     // Start the TUI thread.
     let monitor_dir = config.output_dir.clone();
@@ -363,80 +226,72 @@ fn run(
         })),
     };
 
-    // Start the time counter.
-    let detection_start_time = Instant::now();
+    // We're good to go, update the current phase.
+    config.set_current_phase(RosaPhase::CollectingSeeds)?;
 
-    let mut already_warned_about_crashes = false;
     // Loop until Ctrl-C.
     while !rosa_should_stop.load(Ordering::SeqCst) {
         if no_tui {
             // Check how many fuzzers are alive; if some have crashed/not started, let the user
             // know.
-            config
-                .detection_phase_fuzzers
-                .iter()
-                .try_for_each(|fuzzer_config| {
-                    let fuzzer_state = with_cleanup!(
+            config.fuzzers.iter().try_for_each(|fuzzer_config| {
+                let fuzzer_state =
+                    with_cleanup!(
                         fuzzer::get_fuzzer_status(fuzzer_config.test_input_dir.parent().expect(
                             "failed to get parent directory for fuzzer test input directory."
                         )),
-                        detection_phase_fuzzer_processes
+                        fuzzer_processes
                     )?;
 
-                    if fuzzer_state == FuzzerStatus::Stopped {
-                        println_warning!(
-                            "fuzzer '{}' is not running; attempting to respawn it...",
-                            fuzzer_config.name,
-                        );
-                        let dead_fuzzer_process: &mut FuzzerProcess =
-                            detection_phase_fuzzer_processes
-                                .iter_mut()
-                                .find(|fuzzer_process| fuzzer_process.name == fuzzer_config.name)
-                                .expect(
-                                    "failed to get fuzzer process when attempting to respawn it.",
-                                );
+                if fuzzer_state == FuzzerStatus::Stopped {
+                    println_warning!(
+                        "fuzzer '{}' is not running; attempting to respawn it...",
+                        fuzzer_config.name,
+                    );
+                    let dead_fuzzer_process: &mut FuzzerProcess = fuzzer_processes
+                        .iter_mut()
+                        .find(|fuzzer_process| fuzzer_process.name == fuzzer_config.name)
+                        .expect("failed to get fuzzer process when attempting to respawn it.");
 
-                        dead_fuzzer_process.stop()?;
-                        start_fuzzer_process(dead_fuzzer_process, verbose)?;
-                    }
+                    dead_fuzzer_process.stop()?;
+                    start_fuzzer_process(dead_fuzzer_process, verbose)?;
+                }
 
-                    Ok(())
-                })?;
+                Ok(())
+            })?;
         }
 
         if !already_warned_about_crashes && no_tui {
             // Check for crashes; if some of the inputs crash, the fuzzer will most likely get
             // oriented towards that family of inputs, which decreases the overall chance of
             // finding backdoors.
-            config
-                .detection_phase_fuzzers
-                .iter()
-                .try_for_each(|fuzzer_config| {
-                    if with_cleanup!(
-                        fuzzer::fuzzer_found_crashes(&fuzzer_config.crashes_dir),
-                        detection_phase_fuzzer_processes
-                    )? {
-                        println_warning!(
+            config.fuzzers.iter().try_for_each(|fuzzer_config| {
+                if with_cleanup!(
+                    fuzzer::fuzzer_found_crashes(&fuzzer_config.crashes_dir),
+                    fuzzer_processes
+                )? {
+                    println_warning!(
                         "the fuzzer '{}' has detected one or more crashes in {}. This is probably \
                         hindering the thorough exploration of the binary; it is recommended that \
                         you fix the crashes and try again.",
                         fuzzer_config.name,
                         &fuzzer_config.crashes_dir.display()
                     );
-                        already_warned_about_crashes = true;
-                    }
+                    already_warned_about_crashes = true;
+                }
 
-                    Ok(())
-                })?;
+                Ok(())
+            })?;
         }
 
         // Collect new traces.
         let new_traces = with_cleanup!(
             match collect_from_all_fuzzers {
                 true => {
-                    config.detection_phase_fuzzers.iter().try_fold(
-                        Vec::new(),
-                        |mut new_traces, fuzzer_config| {
+                    config
+                        .fuzzers
+                        .iter()
+                        .try_fold(Vec::new(), |mut new_traces, fuzzer_config| {
                             let mut traces = trace::load_traces(
                                 &fuzzer_config.test_input_dir,
                                 &fuzzer_config.trace_dump_dir,
@@ -450,11 +305,10 @@ fn run(
 
                             new_traces.append(&mut traces);
                             Ok(new_traces)
-                        },
-                    )
+                        })
                 }
                 false => {
-                    let main_fuzzer = config.main_detection_phase_fuzzer()?;
+                    let main_fuzzer = config.main_fuzzer()?;
                     trace::load_traces(
                         &main_fuzzer.test_input_dir,
                         &main_fuzzer.trace_dump_dir,
@@ -467,85 +321,162 @@ fn run(
                     )
                 }
             },
-            detection_phase_fuzzer_processes
+            fuzzer_processes
         )?;
         // Save traces to output dir for later inspection.
         with_cleanup!(
             trace::save_traces(&new_traces, &config.traces_dir()),
-            detection_phase_fuzzer_processes
+            fuzzer_processes
         )?;
 
-        new_traces
-            .iter()
-            // Get most similar cluster.
-            .map(|trace| {
-                (
-                    trace,
-                    clustering::get_most_similar_cluster(
-                        trace,
-                        &clusters,
-                        config.cluster_selection_criterion,
-                        config.cluster_selection_distance_metric,
-                    )
-                    .expect("failed to get most similar cluster."),
-                )
-            })
-            // Perform oracle inference.
-            .map(|(trace, cluster)| {
-                let decision = config.oracle.decide(
-                    trace,
-                    cluster,
-                    config.oracle_criterion,
-                    config.oracle_distance_metric,
-                );
-                (trace, decision)
-            })
-            .try_for_each(|(trace, decision)| {
-                if decision.is_backdoor {
-                    if no_tui {
-                        nb_backdoors += 1;
-                        println_info!(
-                            "!!!! BACKDOOR FOUND !!!! (backdoors: {} | traces: {})",
-                            nb_backdoors,
-                            known_traces.len()
-                        );
+        // Update coverage.
+        let current_traces: Vec<Trace> = known_traces.clone().into_values().collect();
+        let (edge_coverage, syscall_coverage) = trace::get_coverage(&current_traces);
+        config.set_current_coverage(edge_coverage, syscall_coverage)?;
 
-                        if verbose {
-                            println_verbose!("Trace {}:", trace.uid());
-                            println_verbose!("  Test input: {}", trace.printable_test_input());
-                            println_verbose!("  Edges: {}", trace.edges_as_string());
-                            println_verbose!("  Syscalls: {}", trace.syscalls_as_string());
-                            println_verbose!("  Most similar cluster: {}", decision.cluster_uid);
-                            println_verbose!("  Decision reason: {}", decision.reason);
+        if with_cleanup!(config.get_current_phase(), fuzzer_processes)?
+            == RosaPhase::CollectingSeeds
+        {
+            // We're in the seed collection phase.
+
+            // Check if the seed stopping conditions have been met.
+            if config.seed_conditions.check(
+                start_time.elapsed().as_secs(),
+                edge_coverage * 100.0,
+                syscall_coverage * 100.0,
+            ) {
+                // We're entering seed clustering phase; write it into the phase file so that the
+                // TUI can keep up.
+                with_cleanup!(
+                    config.set_current_phase(RosaPhase::ClusteringSeeds),
+                    fuzzer_processes
+                )?;
+
+                // Form seed clusters.
+                if no_tui {
+                    println_info!("Clustering seed traces...");
+                }
+                clusters = clustering::cluster_traces(
+                    &current_traces,
+                    config.cluster_formation_criterion,
+                    config.cluster_formation_distance_metric,
+                    config.cluster_formation_edge_tolerance,
+                    config.cluster_formation_syscall_tolerance,
+                );
+                // Save clusters to output dir for later inspection.
+                with_cleanup!(
+                    clustering::save_clusters(&clusters, &config.clusters_dir()),
+                    fuzzer_processes
+                )?;
+                if no_tui {
+                    println_info!("Created {} clusters.", clusters.len());
+                }
+                // Save the decisions for the seed traces too, even though we know what they're
+                // gonna be.
+                clusters.iter().try_for_each(|cluster| {
+                    cluster.traces.iter().try_for_each(|trace| {
+                        let decision = TimedDecision {
+                            decision: Decision {
+                                trace_uid: trace.uid(),
+                                trace_name: trace.name.clone(),
+                                cluster_uid: cluster.uid.clone(),
+                                is_backdoor: false,
+                                reason: DecisionReason::Seed,
+                            },
+                            seconds: 0,
+                        };
+
+                        decision.save(&config.decisions_dir())
+                    })
+                })?;
+
+                // We're entering detection phase; write it into the phase file so that the TUI can
+                // keep up.
+                with_cleanup!(
+                    config.set_current_phase(RosaPhase::DetectingBackdoors),
+                    fuzzer_processes
+                )?;
+            }
+        } else {
+            // We're in the backdoor detection phase.
+
+            new_traces
+                .iter()
+                // Get most similar cluster.
+                .map(|trace| {
+                    (
+                        trace,
+                        clustering::get_most_similar_cluster(
+                            trace,
+                            &clusters,
+                            config.cluster_selection_criterion,
+                            config.cluster_selection_distance_metric,
+                        )
+                        .expect("failed to get most similar cluster."),
+                    )
+                })
+                // Perform oracle inference.
+                .map(|(trace, cluster)| {
+                    let decision = config.oracle.decide(
+                        trace,
+                        cluster,
+                        config.oracle_criterion,
+                        config.oracle_distance_metric,
+                    );
+                    (trace, decision)
+                })
+                .try_for_each(|(trace, decision)| {
+                    if decision.is_backdoor {
+                        if no_tui {
+                            nb_backdoors += 1;
+                            println_info!(
+                                "!!!! BACKDOOR FOUND !!!! (backdoors: {} | traces: {})",
+                                nb_backdoors,
+                                known_traces.len()
+                            );
+
+                            if verbose {
+                                println_verbose!("Trace {}:", trace.uid());
+                                println_verbose!("  Test input: {}", trace.printable_test_input());
+                                println_verbose!("  Edges: {}", trace.edges_as_string());
+                                println_verbose!("  Syscalls: {}", trace.syscalls_as_string());
+                                println_verbose!(
+                                    "  Most similar cluster: {}",
+                                    decision.cluster_uid
+                                );
+                                println_verbose!("  Decision reason: {}", decision.reason);
+                            }
                         }
+
+                        // Save backdoor.
+                        with_cleanup!(
+                            trace::save_trace_test_input(trace, &config.backdoors_dir()),
+                            fuzzer_processes
+                        )?;
                     }
 
-                    // Save backdoor.
+                    let timed_decision = TimedDecision {
+                        decision,
+                        seconds: start_time.elapsed().as_secs(),
+                    };
+
                     with_cleanup!(
-                        trace::save_trace_test_input(trace, &config.backdoors_dir()),
-                        detection_phase_fuzzer_processes
-                    )?;
-                }
-
-                let timed_decision = TimedDecision {
-                    decision,
-                    seconds: detection_start_time.elapsed().as_secs(),
-                };
-
-                with_cleanup!(
-                    timed_decision.save(&config.decisions_dir()),
-                    detection_phase_fuzzer_processes
-                )
-            })?;
+                        timed_decision.save(&config.decisions_dir()),
+                        fuzzer_processes
+                    )
+                })?;
+        }
     }
+
+    config.set_current_phase(RosaPhase::Stopped)?;
 
     // Shut down TUI thread.
     let _ = tx.send(());
     if let Some(handle) = tui_thread_handle {
         let _ = handle.join();
     }
-    println_info!("Stopping detection phase fuzzer processes.");
-    detection_phase_fuzzer_processes
+    println_info!("Stopping fuzzer processes.");
+    fuzzer_processes
         .iter_mut()
         .try_for_each(|fuzzer_process| fuzzer_process.stop())?;
 
