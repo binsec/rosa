@@ -260,7 +260,7 @@ fn run(
 
     let selected_cmd: Vec<String> = match target_program_cmd {
         Some(cmd) => cmd.split(' ').map(|arg| arg.to_string()).collect(),
-        None => config.fuzzers[0].cmd.clone(),
+        None => config.main_fuzzer()?.cmd.clone(),
     };
     let selected_env: HashMap<String, String> = match target_program_env {
         Some(env) => env
@@ -273,7 +273,7 @@ fn run(
                 (key, value)
             })
             .collect(),
-        None => config.fuzzers[0].env.clone(),
+        None => config.main_fuzzer()?.env.clone(),
     };
 
     println_info!("Evaluating {} traces...", selected_trace_uids.len());
