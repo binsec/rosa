@@ -231,36 +231,6 @@ fn run(
 
     // Loop until Ctrl-C.
     while !rosa_should_stop.load(Ordering::SeqCst) {
-        if no_tui {
-            // Check how many fuzzers are alive; if some have crashed/not started, let the user
-            // know.
-            config.fuzzers.iter().try_for_each(|fuzzer_config| {
-                let fuzzer_state =
-                    with_cleanup!(
-                        fuzzer::get_fuzzer_status(fuzzer_config.test_input_dir.parent().expect(
-                            "failed to get parent directory for fuzzer test input directory."
-                        )),
-                        fuzzer_processes
-                    )?;
-
-                if fuzzer_state == FuzzerStatus::Stopped {
-                    println_warning!(
-                        "fuzzer '{}' is not running; attempting to respawn it...",
-                        fuzzer_config.name,
-                    );
-                    let dead_fuzzer_process: &mut FuzzerProcess = fuzzer_processes
-                        .iter_mut()
-                        .find(|fuzzer_process| fuzzer_process.name == fuzzer_config.name)
-                        .expect("failed to get fuzzer process when attempting to respawn it.");
-
-                    dead_fuzzer_process.stop()?;
-                    start_fuzzer_process(dead_fuzzer_process, verbose)?;
-                }
-
-                Ok(())
-            })?;
-        }
-
         if !already_warned_about_crashes && no_tui {
             // Check for crashes; if some of the inputs crash, the fuzzer will most likely get
             // oriented towards that family of inputs, which decreases the overall chance of
