@@ -662,14 +662,3 @@ pub fn get_coverage(traces: &[Trace]) -> (f64, f64) {
         (syscall_hits as f64) / (total_syscalls as f64),
     )
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Test that the UID of a trace (hash of its edges and syscalls) is computed correctly.
-    #[test]
-    fn test_trace_uid() {
-        // TODO
-    }
-}
