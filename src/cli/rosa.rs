@@ -183,20 +183,57 @@ fn run(
 
     // Setup communication channel with TUI.
     let (tx, rx) = mpsc::channel::<()>();
-
-    println_info!("Starting backdoor detection...");
+    // Keep track of backdoors.
     let mut nb_backdoors = 0;
-
-    fuzzer_processes
-        .iter_mut()
-        .try_for_each(|fuzzer_process| start_fuzzer_process(fuzzer_process, verbose))?;
-
-    // Start the time counter.
-    let start_time = Instant::now();
     // Keep track of crash warnings.
     let mut already_warned_about_crashes = false;
     // Keep track of clusters.
     let mut clusters = Vec::new();
+
+    // Print some config info before starting.
+    println_info!(
+        "** rosa backdoor detector - version {} **",
+        env!("CARGO_PKG_VERSION")
+    );
+
+    println_info!("Cluster formation config:");
+    println_info!(
+        "  Distance metric: {}",
+        config.cluster_formation_distance_metric
+    );
+    println_info!("  Criterion: {}", config.cluster_formation_criterion);
+    println_info!(
+        "  Edge tolerance: {}",
+        config.cluster_formation_edge_tolerance
+    );
+    println_info!(
+        "  Syscall tolerance: {}",
+        config.cluster_formation_syscall_tolerance
+    );
+
+    println_info!("Cluster selection config:");
+    println_info!(
+        "  Distance metric: {}",
+        config.cluster_selection_distance_metric
+    );
+    println_info!("  Criterion: {}", config.cluster_selection_criterion);
+
+    println_info!("Oracle config:");
+    println_info!("  Distance metric: {}", config.oracle_distance_metric);
+    println_info!("  Criterion: {}", config.oracle_criterion);
+    println_info!("  Algorithm: {}", config.oracle);
+
+    println_info!("Ready to go!");
+    // Pause for a sec to let the user read the config.
+    thread::sleep(Duration::from_secs(1));
+
+    println_info!("Starting up fuzzers...");
+    // Start the time counter.
+    let start_time = Instant::now();
+    // Start the fuzzers.
+    fuzzer_processes
+        .iter_mut()
+        .try_for_each(|fuzzer_process| start_fuzzer_process(fuzzer_process, verbose))?;
 
     // Start the TUI thread.
     let monitor_dir = config.output_dir.clone();
