@@ -132,36 +132,33 @@ pub fn get_most_similar_cluster<'a>(
                 .iter()
                 .map(|cluster_trace| distance_metric.dist(&trace.syscalls, &cluster_trace.syscalls))
                 .min();
-            let min_combined_distance = cluster
-                .traces
-                .iter()
-                .map(|cluster_trace| {
-                    let edge_distance = distance_metric.dist(&trace.edges, &cluster_trace.edges);
-                    let syscall_distance =
-                        distance_metric.dist(&trace.syscalls, &cluster_trace.syscalls);
-
-                    // Watch out for potential overflow, since we're adding two u64s.
-                    // If it does overflow, just return the biggest possible value.
-                    edge_distance
-                        .checked_add(syscall_distance)
-                        .unwrap_or(u64::MAX)
-                })
-                .min();
 
             let new_min_distance = match criterion {
                 Criterion::EdgesOnly => min_edge_distance,
                 Criterion::SyscallsOnly => min_syscall_distance,
                 Criterion::EdgesOrSyscalls => match (min_edge_distance, min_syscall_distance) {
-                    // Get the proportionally smallest distance.
-                    (Some(min_edge_distance), Some(min_syscall_distance)) => Some(f64::min(
-                        (min_edge_distance as f64) / (trace.edges.len() as f64),
-                        (min_syscall_distance as f64) / (trace.syscalls.len() as f64),
-                    )
-                        as u64),
+                    // Get the objectively smallest distance.
+                    (Some(min_edge_distance), Some(min_syscall_distance)) => {
+                        Some(cmp::min(min_edge_distance, min_syscall_distance))
+                    }
                     // If either is None, return the other one (or return None if both are None).
                     (None, dist) | (dist, None) => dist,
                 },
-                Criterion::EdgesAndSyscalls => min_combined_distance,
+                Criterion::EdgesAndSyscalls => {
+                    // If there are multiple traces with the minimum edge distance, get the one
+                    // that also has minimum syscall distance.
+                    cluster
+                        .traces
+                        .iter()
+                        .filter(|cluster_trace| {
+                            distance_metric.dist(&trace.edges, &cluster_trace.edges)
+                                == min_edge_distance.unwrap_or(u64::MAX)
+                        })
+                        .map(|cluster_trace| {
+                            distance_metric.dist(&trace.syscalls, &cluster_trace.syscalls)
+                        })
+                        .min()
+                }
             }
             .unwrap_or(u64::MAX);
 
