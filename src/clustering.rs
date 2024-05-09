@@ -244,10 +244,29 @@ pub fn cluster_traces(
     edge_tolerance: u64,
     syscall_tolerance: u64,
 ) -> Vec<Cluster> {
-    traces.iter().fold(Vec::new(), |mut clusters, trace| {
-        let result = get_most_similar_cluster(trace, &clusters, criterion, distance_metric).map(
-            |most_similar_cluster| {
-                let max_edge_distance = most_similar_cluster
+    match (edge_tolerance, syscall_tolerance, criterion) {
+        // If both tolerances are 0, and we care about edges, we will never be able to put two
+        // traces in the same cluster. This is because we only keep traces that have unique edge
+        // vectors. It's worth it to simply create the corresponding clusters here, as it's much
+        // faster.
+        (0, 0, Criterion::EdgesAndSyscalls) | (0, 0, Criterion::EdgesOnly) => traces
+            .iter()
+            .enumerate()
+            .map(|(index, trace)| Cluster {
+                uid: format!("cluster_{:0>6}", index),
+                traces: vec![trace.clone()],
+                min_edge_distance: edge_tolerance,
+                max_edge_distance: edge_tolerance,
+                min_syscall_distance: syscall_tolerance,
+                max_syscall_distance: syscall_tolerance,
+            })
+            .collect(),
+        // In the general case, we cannot optimize, so we have to go through the full clustering
+        // algorithm.
+        _ => traces.iter().fold(Vec::new(), |mut clusters, trace| {
+            let result = get_most_similar_cluster(trace, &clusters, criterion, distance_metric)
+                .map(|most_similar_cluster| {
+                    let max_edge_distance = most_similar_cluster
                     .traces
                     .iter()
                     .map(|cluster_trace| distance_metric.dist(&trace.edges, &cluster_trace.edges))
@@ -255,84 +274,89 @@ pub fn cluster_traces(
                     .expect(
                         "failed to get max edge distance between trace and most similar cluster.",
                     );
-                let max_syscall_distance = most_similar_cluster
-                    .traces
-                    .iter()
-                    .map(|cluster_trace| {
-                        distance_metric.dist(&trace.syscalls, &cluster_trace.syscalls)
-                    })
-                    .max()
-                    .expect(
-                        "failed to get max syscall distance between trace and most similar\
+                    let max_syscall_distance = most_similar_cluster
+                        .traces
+                        .iter()
+                        .map(|cluster_trace| {
+                            distance_metric.dist(&trace.syscalls, &cluster_trace.syscalls)
+                        })
+                        .max()
+                        .expect(
+                            "failed to get max syscall distance between trace and most similar\
                         cluster.",
-                    );
+                        );
 
-                let edge_criterion = max_edge_distance <= most_similar_cluster.min_edge_distance;
-                let syscall_criterion =
-                    max_syscall_distance <= most_similar_cluster.min_syscall_distance;
+                    let edge_criterion =
+                        max_edge_distance <= most_similar_cluster.min_edge_distance;
+                    let syscall_criterion =
+                        max_syscall_distance <= most_similar_cluster.min_syscall_distance;
 
-                let cluster_matches = match criterion {
-                    Criterion::EdgesOnly => edge_criterion,
-                    Criterion::SyscallsOnly => syscall_criterion,
-                    Criterion::EdgesOrSyscalls => edge_criterion || syscall_criterion,
-                    Criterion::EdgesAndSyscalls => edge_criterion && syscall_criterion,
-                };
+                    let cluster_matches = match criterion {
+                        Criterion::EdgesOnly => edge_criterion,
+                        Criterion::SyscallsOnly => syscall_criterion,
+                        Criterion::EdgesOrSyscalls => edge_criterion || syscall_criterion,
+                        Criterion::EdgesAndSyscalls => edge_criterion && syscall_criterion,
+                    };
 
-                (
-                    cluster_matches.then_some(
-                        clusters
-                            .iter()
-                            .position(|c| c.uid == most_similar_cluster.uid)
-                            .expect("failed to get index of matching cluster."),
-                    ),
-                    max_edge_distance,
-                    max_syscall_distance,
-                )
-            },
-        );
-
-        match result {
-            Some((Some(cluster_index), trace_max_edge_distance, trace_max_syscall_distance)) => {
-                // A cluster was found that fulfills the criteria needed to integrate the trace.
-                let matching_cluster = &mut clusters[cluster_index];
-
-                matching_cluster.traces.push(trace.clone());
-
-                // Make sure to update the minimum/maximum distances of the cluster.
-                matching_cluster.min_edge_distance = cmp::min(
-                    matching_cluster.min_edge_distance,
-                    // Make sure to not go lower than the specified tolerance.
-                    cmp::max(trace_max_edge_distance, edge_tolerance),
-                );
-                matching_cluster.max_edge_distance =
-                    cmp::max(matching_cluster.max_edge_distance, trace_max_edge_distance);
-
-                matching_cluster.min_syscall_distance = cmp::min(
-                    matching_cluster.min_syscall_distance,
-                    // Make sure to not go lower than the specified tolerance.
-                    cmp::max(trace_max_syscall_distance, syscall_tolerance),
-                );
-                matching_cluster.max_syscall_distance = cmp::max(
-                    matching_cluster.max_syscall_distance,
-                    trace_max_syscall_distance,
-                );
-            }
-            Some((None, _, _)) | None => {
-                // Either no cluster was found (because none exist) or the one that was found
-                // didn't match; either way, we have to create a new cluster for the trace.
-                clusters.push(Cluster {
-                    uid: format!("cluster_{:0>6}", clusters.len()),
-                    traces: vec![trace.clone()],
-                    min_edge_distance: edge_tolerance,
-                    max_edge_distance: edge_tolerance,
-                    min_syscall_distance: syscall_tolerance,
-                    max_syscall_distance: syscall_tolerance,
+                    (
+                        cluster_matches.then_some(
+                            clusters
+                                .iter()
+                                .position(|c| c.uid == most_similar_cluster.uid)
+                                .expect("failed to get index of matching cluster."),
+                        ),
+                        max_edge_distance,
+                        max_syscall_distance,
+                    )
                 });
-            }
-        }
 
-        clusters
-    })
+            match result {
+                Some((
+                    Some(cluster_index),
+                    trace_max_edge_distance,
+                    trace_max_syscall_distance,
+                )) => {
+                    // A cluster was found that fulfills the criteria needed to integrate the trace.
+                    let matching_cluster = &mut clusters[cluster_index];
+
+                    matching_cluster.traces.push(trace.clone());
+
+                    // Make sure to update the minimum/maximum distances of the cluster.
+                    matching_cluster.min_edge_distance = cmp::min(
+                        matching_cluster.min_edge_distance,
+                        // Make sure to not go lower than the specified tolerance.
+                        cmp::max(trace_max_edge_distance, edge_tolerance),
+                    );
+                    matching_cluster.max_edge_distance =
+                        cmp::max(matching_cluster.max_edge_distance, trace_max_edge_distance);
+
+                    matching_cluster.min_syscall_distance = cmp::min(
+                        matching_cluster.min_syscall_distance,
+                        // Make sure to not go lower than the specified tolerance.
+                        cmp::max(trace_max_syscall_distance, syscall_tolerance),
+                    );
+                    matching_cluster.max_syscall_distance = cmp::max(
+                        matching_cluster.max_syscall_distance,
+                        trace_max_syscall_distance,
+                    );
+                }
+                Some((None, _, _)) | None => {
+                    // Either no cluster was found (because none exist) or the one that was found
+                    // didn't match; either way, we have to create a new cluster for the trace.
+                    clusters.push(Cluster {
+                        uid: format!("cluster_{:0>6}", clusters.len()),
+                        traces: vec![trace.clone()],
+                        min_edge_distance: edge_tolerance,
+                        max_edge_distance: edge_tolerance,
+                        min_syscall_distance: syscall_tolerance,
+                        max_syscall_distance: syscall_tolerance,
+                    });
+                }
+            }
+
+            clusters
+        }),
+    }
 }
 
 /// Save clusters to file.
