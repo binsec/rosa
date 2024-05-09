@@ -89,7 +89,9 @@ macro_rules! with_cleanup {
 /// continuing; especially when loading multiple seed inputs, the fuzzer might take a moment to
 /// start. This function blocks until the fuzzer has fully started running.
 ///
-/// TODO arguments & examples
+/// # Parameters
+/// * `fuzzer_process` - The fuzzer process to start.
+/// * `verbose` - Whether we're being verbose or not (affects messages printed to stdout).
 fn start_fuzzer_process(
     fuzzer_process: &mut FuzzerProcess,
     verbose: bool,
