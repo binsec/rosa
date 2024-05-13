@@ -225,15 +225,16 @@ fn run(
 
     println_info!("Ready to go!");
     // Pause for a sec to let the user read the config.
-    thread::sleep(Duration::from_secs(1));
+    thread::sleep(Duration::from_secs(2));
 
     println_info!("Starting up fuzzers...");
-    // Start the time counter.
-    let start_time = Instant::now();
     // Start the fuzzers.
     fuzzer_processes
         .iter_mut()
         .try_for_each(|fuzzer_process| start_fuzzer_process(fuzzer_process, verbose))?;
+
+    // Start the time counter.
+    let start_time = Instant::now();
 
     // Start the TUI thread.
     let monitor_dir = config.output_dir.clone();
