@@ -233,7 +233,8 @@ pub struct Config {
 impl Config {
     /// The default cluster formation criterion.
     const fn default_cluster_formation_criterion() -> Criterion {
-        Criterion::EdgesAndSyscalls
+        // See https://git.frama-c.com/kokkonis/rosa/-/issues/2.
+        Criterion::EdgesOnly
     }
     /// The default cluster formation distance metric.
     const fn default_cluster_formation_distance_metric() -> DistanceMetric {
@@ -249,6 +250,7 @@ impl Config {
     }
     /// The default cluster selection criterion.
     const fn default_cluster_selection_criterion() -> Criterion {
+        // See https://git.frama-c.com/kokkonis/rosa/-/issues/2.
         Criterion::EdgesAndSyscalls
     }
     /// The default cluster selection distance metric.
@@ -261,7 +263,8 @@ impl Config {
     }
     /// The default criterion to use in the oracle algorithm.
     const fn default_oracle_criterion() -> Criterion {
-        Criterion::EdgesAndSyscalls
+        // See https://git.frama-c.com/kokkonis/rosa/-/issues/2.
+        Criterion::SyscallsOnly
     }
     /// The default distance metric to use in the oracle algorithm.
     const fn default_oracle_distance_metric() -> DistanceMetric {
