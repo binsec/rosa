@@ -352,8 +352,8 @@ fn run(
             // Check if the seed stopping conditions have been met.
             if config.seed_conditions.check(
                 start_time.elapsed().as_secs(),
-                edge_coverage * 100.0,
-                syscall_coverage * 100.0,
+                edge_coverage,
+                syscall_coverage,
             ) {
                 // We're entering seed clustering phase; write it into the phase file so that the
                 // TUI can keep up.

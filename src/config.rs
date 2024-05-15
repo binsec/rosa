@@ -44,10 +44,10 @@ pub struct SeedConditions {
     /// Stop after a given amount of seconds.
     #[serde(default = "SeedConditions::default_seconds")]
     pub seconds: Option<u64>,
-    /// Stop once a given edge coverage has been reached (percentage between 0.0 and 100.0).
+    /// Stop once a given edge coverage has been reached (percentage between 0.0 and 1.0).
     #[serde(default = "SeedConditions::default_edge_coverage")]
     pub edge_coverage: Option<f64>,
-    /// Stop once a given syscall coverage has been reached (percentage between 0.0 and 100.0).
+    /// Stop once a given syscall coverage has been reached (percentage between 0.0 and 1.0).
     #[serde(default = "SeedConditions::default_syscall_coverage")]
     pub syscall_coverage: Option<f64>,
 }
@@ -122,11 +122,11 @@ impl SeedConditions {
             .unwrap_or(false);
         let edge_coverage_check = self
             .edge_coverage
-            .map(|edge_coverage_limit| edge_coverage * 100.0 >= edge_coverage_limit)
+            .map(|edge_coverage_limit| edge_coverage >= edge_coverage_limit)
             .unwrap_or(false);
         let syscall_coverage_check = self
             .syscall_coverage
-            .map(|syscall_coverage_limit| syscall_coverage * 100.0 >= syscall_coverage_limit)
+            .map(|syscall_coverage_limit| syscall_coverage >= syscall_coverage_limit)
             .unwrap_or(false);
 
         seconds_check || edge_coverage_check || syscall_coverage_check
