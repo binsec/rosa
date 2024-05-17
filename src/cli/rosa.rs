@@ -352,6 +352,25 @@ fn run(
         {
             // We're in the seed collection phase.
 
+            // Save the decisions for the seed traces, even though we know what they're gonna be.
+            with_cleanup!(
+                new_traces.iter().try_for_each(|trace| {
+                    let decision = TimedDecision {
+                        decision: Decision {
+                            trace_uid: trace.uid(),
+                            trace_name: trace.name.clone(),
+                            cluster_uid: "<none>".to_string(),
+                            is_backdoor: false,
+                            reason: DecisionReason::Seed,
+                        },
+                        seconds: start_time.elapsed().as_secs(),
+                    };
+
+                    decision.save(&config.decisions_dir())
+                }),
+                fuzzer_processes
+            )?;
+
             // Check if the seed stopping conditions have been met.
             if config.seed_conditions.check(
                 start_time.elapsed().as_secs(),
@@ -384,24 +403,6 @@ fn run(
                 if no_tui {
                     println_info!("Created {} clusters.", clusters.len());
                 }
-                // Save the decisions for the seed traces too, even though we know what they're
-                // gonna be.
-                clusters.iter().try_for_each(|cluster| {
-                    cluster.traces.iter().try_for_each(|trace| {
-                        let decision = TimedDecision {
-                            decision: Decision {
-                                trace_uid: trace.uid(),
-                                trace_name: trace.name.clone(),
-                                cluster_uid: cluster.uid.clone(),
-                                is_backdoor: false,
-                                reason: DecisionReason::Seed,
-                            },
-                            seconds: 0,
-                        };
-
-                        decision.save(&config.decisions_dir())
-                    })
-                })?;
 
                 // We're entering detection phase; write it into the phase file so that the TUI can
                 // keep up.
