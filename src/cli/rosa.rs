@@ -481,9 +481,20 @@ fn run(
         }
     }
 
+    if no_tui {
+        println_info!("Stopping fuzzer processes.");
+    }
+    fuzzer_processes
+        .iter_mut()
+        .try_for_each(|fuzzer_process| fuzzer_process.stop())?;
+
     // Run the deduplicator.
     if let Some(deduplicator) = config.deduplicator.clone() {
         config.set_current_phase(RosaPhase::DeduplicatingFindings)?;
+
+        if no_tui {
+            println_info!("Running deduplicator...");
+        }
 
         let backup_backdoors_dir = config.output_dir.join("backdoors-original");
         let backup_traces_dir = config.output_dir.join("traces-original");
@@ -495,13 +506,13 @@ fn run(
             .arg("-r")
             .arg(&config.traces_dir())
             .arg(backup_traces_dir)
-            .output()
+            .status()
             .map_err(|err| error!("failed to back up original traces: {}.", err))?;
         Command::new("cp")
             .arg("-r")
             .arg(&config.backdoors_dir())
             .arg(backup_backdoors_dir.clone())
-            .output()
+            .status()
             .map_err(|err| error!("failed to back up original backdoors: {}.", err))?;
 
         // Remove the `backdoors` directory to re-create it with the deduplicator.
@@ -540,7 +551,7 @@ fn run(
                     .collect::<Vec<String>>(),
             )
             .envs(&deduplicator.env)
-            .output()
+            .status()
             .map_err(|err| error!("failed to run deduplicator on backdoors: {}.", err))?;
 
         // Remove any findings that are not in both the backup and the deduplicated backdoor
@@ -594,10 +605,6 @@ fn run(
     if let Some(handle) = tui_thread_handle {
         let _ = handle.join();
     }
-    println_info!("Stopping fuzzer processes.");
-    fuzzer_processes
-        .iter_mut()
-        .try_for_each(|fuzzer_process| fuzzer_process.stop())?;
 
     Ok(())
 }
