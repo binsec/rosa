@@ -554,40 +554,61 @@ fn run(
             .status()
             .map_err(|err| error!("failed to run deduplicator on backdoors: {}.", err))?;
 
+        // Make sure to copy the README over (deduplicator thinks it's an input file).
+        fs::copy(
+            backup_backdoors_dir.join("README.txt"),
+            config.backdoors_dir().join("README.txt"),
+        )
+        .map_err(|err| {
+            error!(
+                "failed to copy README.txt into deduplicated backdoors directory: {}.",
+                err
+            )
+        })?;
+
         // Remove any findings that are not in both the backup and the deduplicated backdoor
         // directories.
-        let original_backdoor_test_inputs = trace::get_test_input_files(&backup_backdoors_dir)?;
-        let deduplicated_backdoor_test_inputs =
-            trace::get_test_input_files(&config.backdoors_dir())?;
+        let original_backdoor_test_inputs: Vec<String> =
+            trace::get_test_input_files(&backup_backdoors_dir)?
+                .into_iter()
+                .map(|file| {
+                    file.file_name()
+                        .expect("could not get file name.")
+                        .to_string_lossy()
+                        .to_string()
+                })
+                .collect();
+        let deduplicated_backdoor_test_inputs: Vec<String> =
+            trace::get_test_input_files(&config.backdoors_dir())?
+                .into_iter()
+                .map(|file| {
+                    file.file_name()
+                        .expect("could not get file name.")
+                        .to_string_lossy()
+                        .to_string()
+                })
+                .collect();
         original_backdoor_test_inputs
-            .iter()
+            .into_iter()
             // Skip READMEs.
-            .filter(|original_test_input| {
-                original_test_input
-                    .file_name()
-                    .is_some_and(|name| name != "README.txt")
-            })
+            .filter(|original_test_input| *original_test_input != "README.txt")
             .try_for_each(|original_test_input| {
-                match deduplicated_backdoor_test_inputs.contains(original_test_input) {
+                match deduplicated_backdoor_test_inputs.contains(&original_test_input) {
                     true => (),
                     false => {
-                        let finding_name = original_test_input
-                            .file_name()
-                            .expect("could not get finding name.")
-                            .to_str()
-                            .expect("could not convert finding name to string.");
-                        let finding_to_remove = config.traces_dir().join(finding_name);
+                        let finding_to_remove =
+                            config.traces_dir().join(original_test_input.clone());
                         fs::remove_file(finding_to_remove.clone()).map_err(|err| {
                             error!(
                                 "Failed to remove finding (test input) '{}': {}.",
-                                finding_name, err
+                                original_test_input, err
                             )
                         })?;
                         fs::remove_file(finding_to_remove.with_extension("trace")).map_err(
                             |err| {
                                 error!(
                                     "Failed to remove finding (trace) '{}': {}.",
-                                    finding_name, err
+                                    original_test_input, err
                                 )
                             },
                         )?;
