@@ -4,7 +4,9 @@
 
 use std::{
     collections::HashMap,
+    fs,
     path::{Path, PathBuf},
+    process::Command,
     process::ExitCode,
     sync::mpsc::{self, TryRecvError},
     sync::{
@@ -23,6 +25,7 @@ use rosa::{
     clustering,
     config::{Config, RosaPhase},
     decision::{Decision, DecisionReason, TimedDecision},
+    error,
     error::RosaError,
     fuzzer::{self, FuzzerProcess, FuzzerStatus},
     trace::{self, Trace},
@@ -169,7 +172,7 @@ fn run(
                 fuzzer_config
                     .cmd
                     .iter()
-                    .map(|arg| arg.replace("{ROSA_SEED}", &fuzzer_seed.to_string()))
+                    .map(|arg| arg.replace("{{ROSA_SEED}}", &fuzzer_seed.to_string()))
                     .collect(),
                 fuzzer_config.env.clone(),
                 config
@@ -477,6 +480,112 @@ fn run(
                 })?;
         }
     }
+
+    // Run the deduplicator.
+    if let Some(deduplicator) = config.deduplicator.clone() {
+        config.set_current_phase(RosaPhase::DeduplicatingFindings)?;
+
+        let backup_backdoors_dir = config.output_dir.join("backdoors-original");
+        let backup_traces_dir = config.output_dir.join("traces-original");
+
+        // Backup the original findings.
+        // Maybe using `fs` would be better here, but I'm not sure it's worth it to write so much
+        // code for something so simple...
+        Command::new("cp")
+            .arg("-r")
+            .arg(&config.traces_dir())
+            .arg(backup_traces_dir)
+            .output()
+            .map_err(|err| error!("failed to back up original traces: {}.", err))?;
+        Command::new("cp")
+            .arg("-r")
+            .arg(&config.backdoors_dir())
+            .arg(backup_backdoors_dir.clone())
+            .output()
+            .map_err(|err| error!("failed to back up original backdoors: {}.", err))?;
+
+        // Remove the `backdoors` directory to re-create it with the deduplicator.
+        fs::remove_dir_all(config.backdoors_dir()).map_err(|err| {
+            error!(
+                "failed to remove '{}' after backup: {}.",
+                config.backdoors_dir().display(),
+                err
+            )
+        })?;
+
+        // Deduplicate the backdoor inputs.
+        Command::new(&deduplicator.cmd[0])
+            .args(
+                // Replace the `"{{INPUT}}"` and `"{{OUTPUT}}"` strings as per the doc.
+                &deduplicator.cmd[1..]
+                    .iter()
+                    .map(|arg| {
+                        arg.replace(
+                            "{{INPUT}}",
+                            &backup_backdoors_dir
+                                .clone()
+                                .into_os_string()
+                                .into_string()
+                                .expect("could not convert backup backdoors dir path to string."),
+                        )
+                        .replace(
+                            "{{OUTPUT}}",
+                            &config
+                                .backdoors_dir()
+                                .into_os_string()
+                                .into_string()
+                                .expect("could not convert backdoors dir path to string."),
+                        )
+                    })
+                    .collect::<Vec<String>>(),
+            )
+            .envs(&deduplicator.env)
+            .output()
+            .map_err(|err| error!("failed to run deduplicator on backdoors: {}.", err))?;
+
+        // Remove any findings that are not in both the backup and the deduplicated backdoor
+        // directories.
+        let original_backdoor_test_inputs = trace::get_test_input_files(&backup_backdoors_dir)?;
+        let deduplicated_backdoor_test_inputs =
+            trace::get_test_input_files(&config.backdoors_dir())?;
+        original_backdoor_test_inputs
+            .iter()
+            // Skip READMEs.
+            .filter(|original_test_input| {
+                original_test_input
+                    .file_name()
+                    .is_some_and(|name| name != "README.txt")
+            })
+            .try_for_each(|original_test_input| {
+                match deduplicated_backdoor_test_inputs.contains(original_test_input) {
+                    true => (),
+                    false => {
+                        let finding_name = original_test_input
+                            .file_name()
+                            .expect("could not get finding name.")
+                            .to_str()
+                            .expect("could not convert finding name to string.");
+                        let finding_to_remove = config.traces_dir().join(finding_name);
+                        fs::remove_file(finding_to_remove.clone()).map_err(|err| {
+                            error!(
+                                "Failed to remove finding (test input) '{}': {}.",
+                                finding_name, err
+                            )
+                        })?;
+                        fs::remove_file(finding_to_remove.with_extension("trace")).map_err(
+                            |err| {
+                                error!(
+                                    "Failed to remove finding (trace) '{}': {}.",
+                                    finding_name, err
+                                )
+                            },
+                        )?;
+                    }
+                }
+
+                Ok(())
+            })?;
+    };
 
     config.set_current_phase(RosaPhase::Stopped)?;
 

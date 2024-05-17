@@ -285,7 +285,7 @@ impl Trace {
 ///
 /// # Arguments
 /// * `test_input_dir` - The directory to load test input files from.
-fn get_test_input_files(test_input_dir: &Path) -> Result<Vec<PathBuf>, RosaError> {
+pub fn get_test_input_files(test_input_dir: &Path) -> Result<Vec<PathBuf>, RosaError> {
     fs::read_dir(test_input_dir).map_or_else(
         |err| {
             fail!(
