@@ -481,9 +481,13 @@ fn run(
         }
     }
 
-    if no_tui {
-        println_info!("Stopping fuzzer processes.");
+    // Shut down TUI thread.
+    let _ = tx.send(());
+    if let Some(handle) = tui_thread_handle {
+        let _ = handle.join();
     }
+
+    println_info!("Stopping fuzzer processes.");
     fuzzer_processes
         .iter_mut()
         .try_for_each(|fuzzer_process| fuzzer_process.stop())?;
@@ -620,12 +624,6 @@ fn run(
     };
 
     config.set_current_phase(RosaPhase::Stopped)?;
-
-    // Shut down TUI thread.
-    let _ = tx.send(());
-    if let Some(handle) = tui_thread_handle {
-        let _ = handle.join();
-    }
 
     Ok(())
 }
