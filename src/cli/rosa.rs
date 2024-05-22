@@ -146,6 +146,7 @@ fn run(
     config.save(&config.output_dir)?;
     config.set_current_phase(RosaPhase::Starting)?;
     config.set_current_coverage(0.0, 0.0)?;
+    config.init_stats_file()?;
 
     // Set up a "global" running boolean, and create a Ctrl-C handler that just sets it to false.
     let rosa_should_stop = Arc::new(AtomicBool::new(false));
@@ -238,6 +239,7 @@ fn run(
 
     // Start the time counter.
     let start_time = Instant::now();
+    let mut last_log_time = Instant::now();
 
     // Start the TUI thread.
     let monitor_dir = config.output_dir.clone();
@@ -347,6 +349,20 @@ fn run(
         let (edge_coverage, syscall_coverage) = trace::get_coverage(&current_traces);
         config.set_current_coverage(edge_coverage, syscall_coverage)?;
 
+        if start_time.elapsed().as_secs() - last_log_time.elapsed().as_secs() >= 1 {
+            with_cleanup!(
+                config.log_stats(
+                    start_time.elapsed().as_secs(),
+                    known_traces.len() as u64,
+                    nb_backdoors,
+                    edge_coverage,
+                    syscall_coverage,
+                ),
+                fuzzer_processes
+            )?;
+            last_log_time = Instant::now();
+        }
+
         if with_cleanup!(config.get_current_phase(), fuzzer_processes)?
             == RosaPhase::CollectingSeeds
         {
@@ -441,26 +457,7 @@ fn run(
                 })
                 .try_for_each(|(trace, decision)| {
                     if decision.is_backdoor {
-                        if no_tui {
-                            nb_backdoors += 1;
-                            println_info!(
-                                "!!!! BACKDOOR FOUND !!!! (backdoors: {} | traces: {})",
-                                nb_backdoors,
-                                known_traces.len()
-                            );
-
-                            if verbose {
-                                println_verbose!("Trace {}:", trace.uid());
-                                println_verbose!("  Test input: {}", trace.printable_test_input());
-                                println_verbose!("  Edges: {}", trace.edges_as_string());
-                                println_verbose!("  Syscalls: {}", trace.syscalls_as_string());
-                                println_verbose!(
-                                    "  Most similar cluster: {}",
-                                    decision.cluster_uid
-                                );
-                                println_verbose!("  Decision reason: {}", decision.reason);
-                            }
-                        }
+                        nb_backdoors += 1;
 
                         // Save backdoor.
                         with_cleanup!(

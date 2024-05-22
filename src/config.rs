@@ -5,7 +5,9 @@
 
 use std::{
     collections::HashMap,
-    fmt, fs,
+    fmt,
+    fs::{self, OpenOptions},
+    io::Write,
     path::{Path, PathBuf},
     str::{self, FromStr},
 };
@@ -522,6 +524,71 @@ impl Config {
                 err
             )
         })
+    }
+
+    /// Initialize the stats file.
+    ///
+    /// This file tracks various statistics about the detection campaign and can be used to plot
+    /// its progress.
+    pub fn init_stats_file(&self) -> Result<(), RosaError> {
+        fs::write(
+            self.current_stats_file(),
+            "seconds, traces, backdoors, edge_coverage, syscall_coverage",
+        )
+        .map_err(|err| {
+            error!(
+                "failed to initialize stats file '{}': {}.",
+                self.current_stats_file().display(),
+                err
+            )
+        })
+    }
+
+    /// Log a new line in the stats file.
+    ///
+    /// # Arguments
+    /// * `seconds` - The number of seconds that have passed since the beginning of the detection
+    ///   campaign.
+    /// * `traces` - The current number of traces.
+    /// * `backdoors` - The current number of backdoors.
+    /// * `edge_coverage` - The current edge coverage.
+    /// * `syscall_coverage` - The current syscall coverage.
+    pub fn log_stats(
+        &self,
+        seconds: u64,
+        traces: u64,
+        backdoors: u64,
+        edge_coverage: f64,
+        syscall_coverage: f64,
+    ) -> Result<(), RosaError> {
+        let mut stats_file = OpenOptions::new()
+            .append(true)
+            .open(self.current_stats_file())
+            .map_err(|err| {
+                error!(
+                    "failed to open stats file '{}': {}.",
+                    self.current_stats_file().display(),
+                    err
+                )
+            })?;
+
+        writeln!(
+            stats_file,
+            "{}, {}, {}, {}, {}",
+            seconds, traces, backdoors, edge_coverage, syscall_coverage
+        )
+        .map_err(|err| {
+            error!(
+                "failed to log stats in {}: {}.",
+                self.current_stats_file().display(),
+                err
+            )
+        })
+    }
+
+    /// Get the path to the current stats file.
+    fn current_stats_file(&self) -> PathBuf {
+        self.output_dir.join("stats.csv")
     }
 
     /// Get the path to the current coverage file.
