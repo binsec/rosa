@@ -349,7 +349,7 @@ fn run(
         let (edge_coverage, syscall_coverage) = trace::get_coverage(&current_traces);
         config.set_current_coverage(edge_coverage, syscall_coverage)?;
 
-        if start_time.elapsed().as_secs() - last_log_time.elapsed().as_secs() >= 1 {
+        if Instant::now().duration_since(last_log_time).as_secs() >= 1 {
             with_cleanup!(
                 config.log_stats(
                     start_time.elapsed().as_secs(),
@@ -361,6 +361,18 @@ fn run(
                 fuzzer_processes
             )?;
             last_log_time = Instant::now();
+
+            if no_tui {
+                println_info!(
+                    "Time: {} s | Traces: {} | Backdoors: {} | Edge coverage: {} | \
+                        Syscall coverage: {}",
+                    start_time.elapsed().as_secs(),
+                    known_traces.len() as u64,
+                    nb_backdoors,
+                    edge_coverage,
+                    syscall_coverage
+                );
+            }
         }
 
         if with_cleanup!(config.get_current_phase(), fuzzer_processes)?
