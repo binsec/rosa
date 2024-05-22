@@ -364,13 +364,13 @@ fn run(
 
             if no_tui {
                 println_info!(
-                    "Time: {} s | Traces: {} | Backdoors: {} | Edge coverage: {} | \
-                        Syscall coverage: {}",
+                    "Time: {} s | Traces: {} | Backdoors: {} | Edge coverage: {:.2}% | \
+                        Syscall coverage: {:.2}%",
                     start_time.elapsed().as_secs(),
                     known_traces.len() as u64,
                     nb_backdoors,
-                    edge_coverage,
-                    syscall_coverage
+                    edge_coverage * 100.0,
+                    syscall_coverage * 100.0
                 );
             }
         }
