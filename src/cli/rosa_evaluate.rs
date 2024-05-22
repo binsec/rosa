@@ -40,6 +40,10 @@ struct Cli {
     )]
     output_dir: PathBuf,
 
+    /// Show the output (stdout & stderr) of the selected traces.
+    #[arg(short = 'O', long = "show-output")]
+    show_output: bool,
+
     /// The target program to run traces through (if empty, use the command from the first fuzzer
     /// in the configuration).
     #[arg(
@@ -184,6 +188,7 @@ fn check_decision(
     env: &HashMap<String, String>,
     test_input_file: &Path,
     timed_decision: &TimedDecision,
+    show_output: bool,
 ) -> Result<Sample, RosaError> {
     let test_input_file = File::open(test_input_file).map_err(|err| {
         error!(
@@ -199,8 +204,21 @@ fn check_decision(
         .output()
         .map_err(|err| error!("failed to run target program: {}", err))?;
 
-    let backdoor = String::from_utf8_lossy(&output.stderr).contains("***BACKDOOR TRIGGERED***")
-        || String::from_utf8_lossy(&output.stdout).contains("***BACKDOOR TRIGGERED***");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    let backdoor =
+        stdout.contains("***BACKDOOR TRIGGERED***") || stderr.contains("***BACKDOOR TRIGGERED***");
+
+    match show_output {
+        true => {
+            println_info!("stdout:");
+            println_info!("{}", stdout);
+            println_info!("stderr:");
+            println_info!("{}", stderr);
+        }
+        false => (),
+    }
 
     let kind = match (backdoor, timed_decision.decision.is_backdoor) {
         (true, true) => SampleKind::TruePositive,
@@ -235,6 +253,7 @@ fn run(
     target_program_cmd: Option<String>,
     target_program_env: Option<String>,
     trace_uids: &[String],
+    show_output: bool,
     print_true_positives: bool,
     print_false_positives: bool,
     print_true_negatives: bool,
@@ -300,6 +319,7 @@ fn run(
                     .join("traces")
                     .join(&timed_decision.decision.trace_uid),
                 timed_decision,
+                show_output,
             )
         })
         .collect::<Result<Vec<Sample>, RosaError>>()?;
@@ -428,6 +448,7 @@ fn main() -> ExitCode {
         cli.target_program_cmd,
         cli.target_program_env,
         &cli.trace_uids,
+        cli.show_output,
         cli.print_true_positives,
         cli.print_false_positives,
         cli.print_true_negatives,
