@@ -220,8 +220,6 @@ fn check_decision(
 /// * `trace_uids` - The unique IDs of the traces to evaluate (if empty, all traces are evaluated).
 /// * `show_summary` - Show a summary of the results.
 /// * `show_output` - Show the output (stderr & stdout) when executing the target program.
-// TODO check this
-// #[allow(clippy::too_many_arguments)]
 fn run(
     output_dir: &Path,
     target_program_cmd: Option<String>,
