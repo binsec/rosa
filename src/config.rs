@@ -403,8 +403,9 @@ impl Config {
             .valid()
             .then_some(config)
             .ok_or(error!(
-            "at least one seed condition must be specified to know when to stop collecting seeds."
-        ))
+                "at least one seed condition must be specified to know when to stop collecting \
+                    seeds."
+            ))
     }
 
     /// Set up ROSA's output directories.
