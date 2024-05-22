@@ -10,7 +10,7 @@ use std::{
     process::{Child, Command, Stdio},
 };
 
-use crate::error::RosaError;
+use crate::{config, error::RosaError};
 
 /// A fuzzer process.
 pub struct FuzzerProcess {
@@ -80,7 +80,7 @@ impl FuzzerProcess {
         let mut command = Command::new(&fuzzer_cmd[0]);
         command
             .args(&fuzzer_cmd[1..])
-            .envs(&fuzzer_env)
+            .envs(config::replace_env_var_placeholders(&fuzzer_env))
             .stdout(Stdio::from(log_stdout))
             .stderr(Stdio::from(log_stderr));
 

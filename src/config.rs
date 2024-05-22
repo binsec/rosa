@@ -5,7 +5,7 @@
 
 use std::{
     collections::HashMap,
-    fmt,
+    env, fmt,
     fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
@@ -634,4 +634,24 @@ impl Config {
             .find(|fuzzer_config| fuzzer_config.name == "main")
             .ok_or(error!("No 'main' fuzzer found in the configuration."))
     }
+}
+
+/// Replace environment variable representations in strings with their actual values.
+pub fn replace_env_var_placeholders(env: &HashMap<String, String>) -> HashMap<String, String> {
+    env.iter()
+        .map(|(key, value)| {
+            // TODO maybe we should actually scan through every occurrence and replace them all,
+            // instead of the usual suspects...
+            (
+                key.clone(),
+                value
+                    .replace(
+                        "$LD_PRELOAD",
+                        &env::var("LD_PRELOAD").unwrap_or("".to_string()),
+                    )
+                    .replace("$PWD", &env::var("PWD").unwrap_or("".to_string()))
+                    .replace("$HOME", &env::var("HOME").unwrap_or("".to_string())),
+            )
+        })
+        .collect()
 }

@@ -18,7 +18,12 @@ use colored::Colorize;
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 
 use rosa::error;
-use rosa::{config::Config, decision::TimedDecision, error::RosaError, trace};
+use rosa::{
+    config::{self, Config},
+    decision::TimedDecision,
+    error::RosaError,
+    trace,
+};
 
 #[macro_use]
 #[allow(unused_macros)]
@@ -177,7 +182,7 @@ fn check_decision(
     let output = Command::new(&cmd[0])
         .stdin(Stdio::from(test_input_file))
         .args(&cmd[1..])
-        .envs(env)
+        .envs(config::replace_env_var_placeholders(env))
         .output()
         .map_err(|err| error!("failed to run target program: {}", err))?;
 

@@ -23,7 +23,7 @@ use rand::Rng;
 
 use rosa::{
     clustering,
-    config::{Config, RosaPhase},
+    config::{self, Config, RosaPhase},
     decision::{Decision, DecisionReason, TimedDecision},
     error,
     error::RosaError,
@@ -564,7 +564,7 @@ fn run(
                     })
                     .collect::<Vec<String>>(),
             )
-            .envs(&deduplicator.env)
+            .envs(config::replace_env_var_placeholders(&deduplicator.env))
             .status()
             .map_err(|err| error!("failed to run deduplicator on backdoors: {}.", err))?;
 
