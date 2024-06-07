@@ -318,10 +318,10 @@ fn run(
 
     let header = match show_summary {
         true => {
-            "true_positives, false_positives, true_negatives, false_negatives, \
+            "true_positives,false_positives,true_negatives,false_negatives,\
                 seconds_to_first_backdoor"
         }
-        false => "trace_uid, result, seconds",
+        false => "trace_uid,result,seconds",
     };
 
     let body = match show_summary {

@@ -534,7 +534,7 @@ impl Config {
     pub fn init_stats_file(&self) -> Result<(), RosaError> {
         fs::write(
             self.current_stats_file(),
-            "seconds, traces, backdoors, edge_coverage, syscall_coverage\n",
+            "seconds,traces,backdoors,edge_coverage,syscall_coverage\n",
         )
         .map_err(|err| {
             error!(
@@ -575,7 +575,7 @@ impl Config {
 
         writeln!(
             stats_file,
-            "{}, {}, {}, {}, {}",
+            "{},{},{},{},{}",
             seconds, traces, backdoors, edge_coverage, syscall_coverage
         )
         .map_err(|err| {
