@@ -326,7 +326,7 @@ fn run(
 
     let body = match show_summary {
         true => format!(
-            "{}, {}, {}, {}, {}",
+            "{},{},{},{},{}",
             stats.true_positives,
             stats.false_positives,
             stats.true_negatives,
@@ -335,7 +335,7 @@ fn run(
         ),
         false => samples
             .iter()
-            .map(|sample| format!("{}, {}, {}", sample.uid, sample.kind, sample.seconds))
+            .map(|sample| format!("{},{},{}", sample.uid, sample.kind, sample.seconds))
             .collect::<Vec<String>>()
             .join("\n"),
     };
