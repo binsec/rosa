@@ -337,10 +337,6 @@ impl RosaTui {
         self.stats.update(&self.monitor_dir)?;
 
         terminal
-            .clear()
-            .map_err(|err| error!("TUI: could not clear terminal: {}.", err))?;
-
-        terminal
             .draw(|frame| Self::ui(&self.stats, frame))
             .map_err(|err| error!("TUI: could not render: {}.", err))?;
 
