@@ -59,6 +59,10 @@ struct Cli {
     #[arg(short = 'f', long = "force")]
     force: bool,
 
+    /// Do not wait until all fuzzers have stabilized before starting the detection.
+    #[arg(short = 'W', long = "dont-wait-on-fuzzers", action = clap::ArgAction::SetFalse)]
+    wait_for_fuzzers: bool,
+
     /// Be more verbose.
     #[arg(short = 'v', long = "verbose")]
     verbose: bool,
@@ -90,13 +94,17 @@ macro_rules! with_cleanup {
 ///
 /// Whenever we start up a fuzzer, we should make sure to wait for it to fully stabilize before
 /// continuing; especially when loading multiple seed inputs, the fuzzer might take a moment to
-/// start. This function blocks until the fuzzer has fully started running.
+/// start. This function blocks until the fuzzer has fully started running if provided with
+/// `wait_for_each_fuzzer`, otherwise it starts up the main process before all fuzzers have
+/// stabilized.
 ///
 /// # Parameters
 /// * `fuzzer_process` - The fuzzer process to start.
+/// * `wait_for_each_fuzzer` - Fully block until every fuzzer has fully started up.
 /// * `verbose` - Whether we're being verbose or not (affects messages printed to stdout).
 fn start_fuzzer_process(
     fuzzer_process: &mut FuzzerProcess,
+    wait_for_fuzzers: bool,
     verbose: bool,
 ) -> Result<(), RosaError> {
     if verbose {
@@ -110,7 +118,9 @@ fn start_fuzzer_process(
     // Give the process 200 ms to get up and running.
     thread::sleep(Duration::from_millis(200));
 
-    if fuzzer::get_fuzzer_status(&fuzzer_process.working_dir)? == FuzzerStatus::Starting {
+    if wait_for_fuzzers
+        && fuzzer::get_fuzzer_status(&fuzzer_process.working_dir)? == FuzzerStatus::Starting
+    {
         // Wait until fuzzer is up and running.
         while fuzzer::get_fuzzer_status(&fuzzer_process.working_dir)? != FuzzerStatus::Running {
             if fuzzer::get_fuzzer_status(&fuzzer_process.working_dir)? == FuzzerStatus::Stopped
@@ -129,6 +139,8 @@ fn start_fuzzer_process(
 /// # Arguments
 /// * `config_file` - Path to the configuration file.
 /// * `force` - Force the overwrite of the output directory if it exists.
+/// * `wait_for_fuzzers` - Fully block until all fuzzers have started and are stable before
+///   starting the detection campaign.
 /// * `verbose` - Display verbose messages.
 /// * `no_tui` - Disable the TUI.
 /// * `collect_from_all_fuzzers` - Collect traces from all fuzzer instances (instead of just
@@ -136,6 +148,7 @@ fn start_fuzzer_process(
 fn run(
     config_file: &Path,
     force: bool,
+    wait_for_fuzzers: bool,
     verbose: bool,
     no_tui: bool,
     collect_from_all_fuzzers: bool,
@@ -233,9 +246,9 @@ fn run(
 
     println_info!("Starting up fuzzers...");
     // Start the fuzzers.
-    fuzzer_processes
-        .iter_mut()
-        .try_for_each(|fuzzer_process| start_fuzzer_process(fuzzer_process, verbose))?;
+    fuzzer_processes.iter_mut().try_for_each(|fuzzer_process| {
+        start_fuzzer_process(fuzzer_process, wait_for_fuzzers, verbose)
+    })?;
 
     // Start the time counter.
     let start_time = Instant::now();
@@ -644,6 +657,7 @@ fn main() -> ExitCode {
     match run(
         &cli.config_file,
         cli.force,
+        cli.wait_for_fuzzers,
         cli.verbose,
         cli.no_tui,
         cli.collect_from_all_fuzzers,
