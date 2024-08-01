@@ -342,7 +342,19 @@ fn get_trace_info(
         })
         // Get the name of the trace dump file, potentially skipping if it doesn't exist.
         .filter_map(|(trace_name, test_input_file)| {
-            let trace_dump_file = trace_dump_dir.join(&trace_name).with_extension("trace");
+            let trace_dump_file = trace_dump_dir.join(&trace_name).with_extension(
+                // Make sure to preserve any extension present on the test input file itself.
+                match test_input_file.extension() {
+                    None => "trace".to_string(),
+                    Some(extension) => format!(
+                        "{}.trace",
+                        extension
+                            .to_str()
+                            .expect("failed to convert test input file extension to str.")
+                    ),
+                }
+                .as_str(),
+            );
 
             // If the trace dump file does not exist and we're skipping incomplete traces, we'll
             // simply let the map filter it out. Otherwise, we will put it in; if it doesn't exist,
