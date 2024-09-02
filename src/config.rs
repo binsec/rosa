@@ -315,7 +315,7 @@ impl Config {
         "",
     ];
     /// The README to put in the `backdoors` directory in the output directory.
-    const BACKDOORS_DIR_README: [&'static str; 8] = [
+    const BACKDOORS_DIR_README: [&'static str; 14] = [
         "This directory contains inputs that trigger a backdoor in the target program. In order",
         "to reproduce the backdoor(s), you'll need to run the program under the same conditions",
         "as those used by the fuzzer that discovered it. You can find the parameters used by the",
@@ -323,6 +323,12 @@ impl Config {
         "",
         "    ../config.toml",
         "    ../decisions/<BACKDOOR_INPUT>.toml",
+        "",
+        "The suspicious inputs are found in the subdirectories present in this directory. They",
+        "are in fact grouped by *discriminants*, meaning the characteristics that discriminate",
+        "them and make them suspicious. This facilitates manual analysis, as we would only need",
+        "to analyze one input of every class (i.e., subdirectory) to realize if the entire class",
+        "contains backdoor-triggering inputs or not.",
         "",
     ];
     /// The README to put in the `clusters` directory in the output directory.
@@ -534,7 +540,7 @@ impl Config {
     pub fn init_stats_file(&self) -> Result<(), RosaError> {
         fs::write(
             self.current_stats_file(),
-            "seconds,traces,backdoors,edge_coverage,syscall_coverage\n",
+            "seconds,traces,unique_backdoors,total_backdoors,edge_coverage,syscall_coverage\n",
         )
         .map_err(|err| {
             error!(
@@ -551,14 +557,16 @@ impl Config {
     /// * `seconds` - The number of seconds that have passed since the beginning of the detection
     ///   campaign.
     /// * `traces` - The current number of traces.
-    /// * `backdoors` - The current number of backdoors.
+    /// * `unique_backdoors` - The current number of unique backdoors.
+    /// * `total_backdoors` - The current number of total backdoors.
     /// * `edge_coverage` - The current edge coverage.
     /// * `syscall_coverage` - The current syscall coverage.
     pub fn log_stats(
         &self,
         seconds: u64,
         traces: u64,
-        backdoors: u64,
+        unique_backdoors: u64,
+        total_backdoors: u64,
         edge_coverage: f64,
         syscall_coverage: f64,
     ) -> Result<(), RosaError> {
@@ -575,8 +583,8 @@ impl Config {
 
         writeln!(
             stats_file,
-            "{},{},{},{},{}",
-            seconds, traces, backdoors, edge_coverage, syscall_coverage
+            "{},{},{},{},{},{}",
+            seconds, traces, unique_backdoors, total_backdoors, edge_coverage, syscall_coverage
         )
         .map_err(|err| {
             error!(

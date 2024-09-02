@@ -5,8 +5,8 @@
 use std::{
     collections::HashMap,
     fs,
+    io::ErrorKind,
     path::{Path, PathBuf},
-    process::Command,
     process::ExitCode,
     sync::mpsc::{self, TryRecvError},
     sync::{
@@ -23,8 +23,8 @@ use rand::Rng;
 
 use rosa::{
     clustering,
-    config::{self, Config, RosaPhase},
-    decision::{Decision, DecisionReason, TimedDecision},
+    config::{Config, RosaPhase},
+    decision::{Decision, DecisionReason, Discriminants, TimedDecision},
     error,
     error::RosaError,
     fuzzer::{self, FuzzerProcess, FuzzerStatus},
@@ -201,7 +201,8 @@ fn run(
     // Setup communication channel with TUI.
     let (tx, rx) = mpsc::channel::<()>();
     // Keep track of backdoors.
-    let mut nb_backdoors = 0;
+    let mut nb_unique_backdoors = 0;
+    let mut nb_total_backdoors = 0;
     // Keep track of crash warnings.
     let mut already_warned_about_crashes = false;
     // Keep track of clusters.
@@ -367,7 +368,8 @@ fn run(
                 config.log_stats(
                     start_time.elapsed().as_secs(),
                     known_traces.len() as u64,
-                    nb_backdoors,
+                    nb_unique_backdoors,
+                    nb_total_backdoors,
                     edge_coverage,
                     syscall_coverage,
                 ),
@@ -377,11 +379,12 @@ fn run(
 
             if no_tui {
                 println_info!(
-                    "Time: {} s | Traces: {} | Backdoors: {} | Edge coverage: {:.2}% | \
-                        Syscall coverage: {:.2}%",
+                    "Time: {} s | Traces: {} | Backdoors: {} unique ({} total) | \
+                        Edge coverage: {:.2}% | Syscall coverage: {:.2}%",
                     start_time.elapsed().as_secs(),
                     known_traces.len() as u64,
-                    nb_backdoors,
+                    nb_unique_backdoors,
+                    nb_total_backdoors,
                     edge_coverage * 100.0,
                     syscall_coverage * 100.0
                 );
@@ -392,7 +395,6 @@ fn run(
             == RosaPhase::CollectingSeeds
         {
             // We're in the seed collection phase.
-
             // Save the decisions for the seed traces, even though we know what they're gonna be.
             with_cleanup!(
                 new_traces.iter().try_for_each(|trace| {
@@ -403,6 +405,12 @@ fn run(
                             cluster_uid: "<none>".to_string(),
                             is_backdoor: false,
                             reason: DecisionReason::Seed,
+                            discriminants: Discriminants {
+                                trace_edges: Vec::new(),
+                                cluster_edges: Vec::new(),
+                                trace_syscalls: Vec::new(),
+                                cluster_syscalls: Vec::new(),
+                            },
                         },
                         seconds: start_time.elapsed().as_secs(),
                     };
@@ -482,11 +490,33 @@ fn run(
                 })
                 .try_for_each(|(trace, decision)| {
                     if decision.is_backdoor {
-                        nb_backdoors += 1;
+                        nb_total_backdoors += 1;
+
+                        // Get the discriminants UID to deduplicate backdoor.
+                        // Essentially, if the backdoor was detected for the same reason as a
+                        // pre-existing backdoor, we should avoid listing them as two different
+                        // backdoors.
+                        let discriminants_uid = decision.discriminants.uid(config.oracle_criterion);
+
+                        // Attempt to create a directory for this category of backdoor.
+                        let backdoor_dir = config.backdoors_dir().join(discriminants_uid);
+                        match fs::create_dir(&backdoor_dir) {
+                            Ok(_) => {
+                                nb_unique_backdoors += 1;
+                                Ok(())
+                            }
+                            Err(error) => match error.kind() {
+                                ErrorKind::AlreadyExists => Ok(()),
+                                _ => Err(error),
+                            },
+                        }
+                        .map_err(|err| {
+                            error!("could not create '{}': {}", &backdoor_dir.display(), err)
+                        })?;
 
                         // Save backdoor.
                         with_cleanup!(
-                            trace::save_trace_test_input(trace, &config.backdoors_dir()),
+                            trace::save_trace_test_input(trace, &backdoor_dir),
                             fuzzer_processes
                         )?;
                     }
@@ -516,135 +546,9 @@ fn run(
         .try_for_each(|fuzzer_process| fuzzer_process.stop())?;
 
     // Run the deduplicator.
-    if let Some(deduplicator) = config.deduplicator.clone() {
-        config.set_current_phase(RosaPhase::DeduplicatingFindings)?;
-
-        if no_tui {
-            println_info!("Running deduplicator...");
-        }
-
-        let backup_backdoors_dir = config.output_dir.join("backdoors-original");
-        let backup_traces_dir = config.output_dir.join("traces-original");
-
-        // Backup the original findings.
-        // Maybe using `fs` would be better here, but I'm not sure it's worth it to write so much
-        // code for something so simple...
-        Command::new("cp")
-            .arg("-r")
-            .arg(&config.traces_dir())
-            .arg(backup_traces_dir)
-            .status()
-            .map_err(|err| error!("failed to back up original traces: {}.", err))?;
-        Command::new("cp")
-            .arg("-r")
-            .arg(&config.backdoors_dir())
-            .arg(backup_backdoors_dir.clone())
-            .status()
-            .map_err(|err| error!("failed to back up original backdoors: {}.", err))?;
-
-        // Remove the `backdoors` directory to re-create it with the deduplicator.
-        fs::remove_dir_all(config.backdoors_dir()).map_err(|err| {
-            error!(
-                "failed to remove '{}' after backup: {}.",
-                config.backdoors_dir().display(),
-                err
-            )
-        })?;
-
-        // Deduplicate the backdoor inputs.
-        Command::new(&deduplicator.cmd[0])
-            .args(
-                // Replace the `"{{INPUT}}"` and `"{{OUTPUT}}"` strings as per the doc.
-                &deduplicator.cmd[1..]
-                    .iter()
-                    .map(|arg| {
-                        arg.replace(
-                            "{{INPUT}}",
-                            &backup_backdoors_dir
-                                .clone()
-                                .into_os_string()
-                                .into_string()
-                                .expect("could not convert backup backdoors dir path to string."),
-                        )
-                        .replace(
-                            "{{OUTPUT}}",
-                            &config
-                                .backdoors_dir()
-                                .into_os_string()
-                                .into_string()
-                                .expect("could not convert backdoors dir path to string."),
-                        )
-                    })
-                    .collect::<Vec<String>>(),
-            )
-            .envs(config::replace_env_var_placeholders(&deduplicator.env))
-            .status()
-            .map_err(|err| error!("failed to run deduplicator on backdoors: {}.", err))?;
-
-        // Make sure to copy the README over (deduplicator thinks it's an input file).
-        fs::copy(
-            backup_backdoors_dir.join("README.txt"),
-            config.backdoors_dir().join("README.txt"),
-        )
-        .map_err(|err| {
-            error!(
-                "failed to copy README.txt into deduplicated backdoors directory: {}.",
-                err
-            )
-        })?;
-
-        // Remove any findings that are not in both the backup and the deduplicated backdoor
-        // directories.
-        let original_backdoor_test_inputs: Vec<String> =
-            trace::get_test_input_files(&backup_backdoors_dir)?
-                .into_iter()
-                .map(|file| {
-                    file.file_name()
-                        .expect("could not get file name.")
-                        .to_string_lossy()
-                        .to_string()
-                })
-                .collect();
-        let deduplicated_backdoor_test_inputs: Vec<String> =
-            trace::get_test_input_files(&config.backdoors_dir())?
-                .into_iter()
-                .map(|file| {
-                    file.file_name()
-                        .expect("could not get file name.")
-                        .to_string_lossy()
-                        .to_string()
-                })
-                .collect();
-        original_backdoor_test_inputs
-            .into_iter()
-            // Skip READMEs.
-            .filter(|original_test_input| *original_test_input != "README.txt")
-            .try_for_each(|original_test_input| {
-                match deduplicated_backdoor_test_inputs.contains(&original_test_input) {
-                    true => (),
-                    false => {
-                        let finding_to_remove =
-                            config.traces_dir().join(original_test_input.clone());
-                        fs::remove_file(finding_to_remove.clone()).map_err(|err| {
-                            error!(
-                                "Failed to remove finding (test input) '{}': {}.",
-                                original_test_input, err
-                            )
-                        })?;
-                        fs::remove_file(finding_to_remove.with_extension("trace")).map_err(
-                            |err| {
-                                error!(
-                                    "Failed to remove finding (trace) '{}': {}.",
-                                    original_test_input, err
-                                )
-                            },
-                        )?;
-                    }
-                }
-
-                Ok(())
-            })?;
-    };
+    if config.deduplicator.is_some() && no_tui {
+        println_warning!("The deduplicator is deprecated.");
+    }
 
     config.set_current_phase(RosaPhase::Stopped)?;
 

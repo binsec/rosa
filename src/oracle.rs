@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     clustering::Cluster,
     criterion::Criterion,
-    decision::{Decision, DecisionReason},
+    decision::{Decision, DecisionReason, Discriminants},
     distance_metric::DistanceMetric,
     error::RosaError,
     trace::Trace,
@@ -191,11 +191,78 @@ fn comp_min_max_oracle(
         ),
     };
 
+    let trace_edges: Vec<usize> = trace
+        .edges
+        .iter()
+        .enumerate()
+        .filter_map(|(index, edge)| match edge {
+            0u8 => None,
+            _ => Some(index),
+        })
+        .filter(|index| {
+            cluster
+                .traces
+                .iter()
+                .all(|cluster_trace| cluster_trace.edges[*index] == 0)
+        })
+        .collect();
+    let trace_syscalls: Vec<usize> = trace
+        .syscalls
+        .iter()
+        .enumerate()
+        .filter_map(|(index, syscall)| match syscall {
+            0u8 => None,
+            _ => Some(index),
+        })
+        .filter(|index| {
+            cluster
+                .traces
+                .iter()
+                .all(|cluster_trace| cluster_trace.syscalls[*index] == 0)
+        })
+        .collect();
+    let cluster_edges: Vec<usize> = trace
+        .edges
+        .iter()
+        .enumerate()
+        .filter_map(|(index, edge)| match edge {
+            0u8 => Some(index),
+            _ => None,
+        })
+        .filter(|index| {
+            cluster
+                .traces
+                .iter()
+                .any(|cluster_trace| cluster_trace.edges[*index] != 0)
+        })
+        .collect();
+    let cluster_syscalls: Vec<usize> = trace
+        .syscalls
+        .iter()
+        .enumerate()
+        .filter_map(|(index, syscall)| match syscall {
+            0u8 => Some(index),
+            _ => None,
+        })
+        .filter(|index| {
+            cluster
+                .traces
+                .iter()
+                .any(|cluster_trace| cluster_trace.syscalls[*index] != 0)
+        })
+        .collect();
+
     Decision {
         trace_uid: trace.uid(),
         trace_name: trace.name.clone(),
         cluster_uid: cluster.uid.clone(),
         is_backdoor,
         reason,
+        discriminants: Discriminants {
+            trace_edges,
+            cluster_edges,
+            trace_syscalls,
+            cluster_syscalls,
+        },
     }
 }

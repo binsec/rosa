@@ -34,7 +34,8 @@ struct RosaTuiStats {
     phase: RosaPhase,
     last_backdoor_time: Option<Instant>,
     last_new_trace_time: Option<Instant>,
-    backdoors: u64,
+    unique_backdoors: u64,
+    total_backdoors: u64,
     total_traces: u64,
     edge_coverage: f64,
     syscall_coverage: f64,
@@ -62,7 +63,8 @@ impl RosaTuiStats {
             start_time: None,
             last_backdoor_time: None,
             last_new_trace_time: None,
-            backdoors: 0,
+            unique_backdoors: 0,
+            total_backdoors: 0,
             total_traces: 0,
             edge_coverage: 0.0,
             syscall_coverage: 0.0,
@@ -192,7 +194,7 @@ impl RosaTuiStats {
         }
 
         // Check for new backdoors.
-        let new_backdoors = fs::read_dir(config.backdoors_dir())
+        let unique_backdoor_dirs: Vec<PathBuf> = fs::read_dir(config.backdoors_dir())
             .map_or_else(
                 |err| {
                     fail!(
@@ -206,16 +208,43 @@ impl RosaTuiStats {
                         // Ignore files/dirs we cannot read.
                         .filter_map(|item| item.ok())
                         .map(|item| item.path())
-                        // Only keep files that have no extension
-                        .filter(|path| path.is_file() && path.extension().is_none()))
+                        // Only keep directories (corresponding to unique backdoors).
+                        .filter(|path| path.is_dir()))
                 },
             )?
-            .collect::<Vec<PathBuf>>()
-            .len() as u64;
-        if new_backdoors > self.backdoors {
+            .collect();
+
+        let new_total_backdoors: Vec<u64> = unique_backdoor_dirs
+            .iter()
+            .map(|backdoor_dir| {
+                fs::read_dir(backdoor_dir).map_or_else(
+                    |err| {
+                        fail!(
+                            "could not read backdoor directory '{}': {}.",
+                            backdoor_dir.display(),
+                            err
+                        )
+                    },
+                    |res| {
+                        Ok(res
+                            // Ignore files/dirs we cannot read.
+                            .filter_map(|item| item.ok())
+                            .map(|item| item.path())
+                            // Only keep files that have no extension
+                            .filter(|path| path.is_file() && path.extension().is_none())
+                            .collect::<Vec<PathBuf>>()
+                            .len() as u64)
+                    },
+                )
+            })
+            .collect::<Result<Vec<u64>, RosaError>>()?;
+        let new_total_backdoors = new_total_backdoors.iter().sum();
+
+        if new_total_backdoors > self.total_backdoors {
             self.last_backdoor_time = Some(Instant::now());
         }
-        self.backdoors = new_backdoors;
+        self.total_backdoors = new_total_backdoors;
+        self.unique_backdoors = unique_backdoor_dirs.len() as u64;
 
         // Check for crashes.
         if !self.crash_warning {
@@ -456,7 +485,7 @@ impl RosaTui {
         .block(time_stats_block);
 
         // Create a special style for when backdoors are hit.
-        let backdoors_line_style = match stats.backdoors {
+        let backdoors_line_style = match stats.total_backdoors {
             0 => Style::new(),
             _ => Style::reset().bold().red(),
         };
@@ -464,7 +493,10 @@ impl RosaTui {
         let results = Paragraph::new(vec![
             Line::from(vec![
                 Span::styled("    backdoors: ", label_style.patch(backdoors_line_style)),
-                Span::styled(stats.backdoors.to_string(), backdoors_line_style),
+                Span::styled(stats.unique_backdoors.to_string(), backdoors_line_style),
+                Span::styled(" (", backdoors_line_style),
+                Span::styled(stats.total_backdoors.to_string(), backdoors_line_style),
+                Span::styled(" total)", backdoors_line_style),
             ]),
             Line::from(vec![
                 Span::styled(" total traces: ", label_style),

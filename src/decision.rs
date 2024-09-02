@@ -4,11 +4,15 @@
 //! [rosa::oracle](crate::oracle)), a more complex decision structure is defined here, as well as
 //! some utility functions to handle it.
 
-use std::{fmt, fs, path::Path};
+use std::{
+    fmt, fs,
+    hash::{DefaultHasher, Hash, Hasher},
+    path::Path,
+};
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::RosaError;
+use crate::{criterion::Criterion, error::RosaError};
 
 /// The reason for an oracle decision.
 #[derive(Serialize, Deserialize, Debug)]
@@ -28,6 +32,50 @@ pub enum DecisionReason {
     EdgesAndSyscalls,
 }
 
+/// The edges and syscalls that lead to an oracle decision.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Discriminants {
+    /// The edges that exist in the trace but not the cluster.
+    pub trace_edges: Vec<usize>,
+    /// The edges that exist in the cluster but not the trace.
+    pub cluster_edges: Vec<usize>,
+    /// The syscalls that exist in the trace but not the cluster.
+    pub trace_syscalls: Vec<usize>,
+    /// The syscalls that exist in the cluster but not the trace.
+    pub cluster_syscalls: Vec<usize>,
+}
+
+impl Discriminants {
+    /// The unique ID of the discriminants.
+    ///
+    /// This ID is produced by hashing the various discriminants and producing a string that
+    /// corresponds to the relevant discriminants based on a criterion.
+    pub fn uid(&self, criterion: Criterion) -> String {
+        let mut hasher = DefaultHasher::new();
+        let hash = match criterion {
+            Criterion::EdgesOnly => {
+                self.trace_edges.hash(&mut hasher);
+                self.cluster_edges.hash(&mut hasher);
+                hasher.finish()
+            }
+            Criterion::SyscallsOnly => {
+                self.trace_syscalls.hash(&mut hasher);
+                self.cluster_syscalls.hash(&mut hasher);
+                hasher.finish()
+            }
+            Criterion::EdgesOrSyscalls | Criterion::EdgesAndSyscalls => {
+                self.trace_edges.hash(&mut hasher);
+                self.cluster_edges.hash(&mut hasher);
+                self.trace_syscalls.hash(&mut hasher);
+                self.cluster_syscalls.hash(&mut hasher);
+                hasher.finish()
+            }
+        };
+
+        format!("{:016x}", hash)
+    }
+}
+
 /// The decision made by an oracle.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Decision {
@@ -42,6 +90,9 @@ pub struct Decision {
     pub is_backdoor: bool,
     /// The reason for the decision.
     pub reason: DecisionReason,
+    /// The discriminants (i.e., different edges and syscalls with regards to the cluster) that
+    /// read to the decision.
+    pub discriminants: Discriminants,
 }
 
 /// The timed decision made by an oracle.

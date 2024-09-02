@@ -6,7 +6,7 @@
 //! triggered backdoor, so that this tool can confidently say if a backdoor has been reached.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt,
     fs::File,
     path::{Path, PathBuf},
@@ -78,7 +78,7 @@ struct Cli {
 }
 
 /// A kind of sample/finding.
-#[derive(PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 enum SampleKind {
     /// The sample is _marked_ as a backdoor and actually _is_ a backdoor.
     TruePositive,
@@ -106,6 +106,7 @@ impl fmt::Display for SampleKind {
 }
 
 /// A sample from ROSA's findings.
+#[derive(Clone, Debug)]
 struct Sample {
     /// The unique ID of the sample.
     uid: String,
@@ -113,6 +114,8 @@ struct Sample {
     seconds: u64,
     /// The kind of the sample.
     kind: SampleKind,
+    /// The unique ID of the discriminant.
+    discriminant_uid: String,
 }
 
 /// The stats obtained from evaluating ROSA's findings.
@@ -170,6 +173,7 @@ fn check_decision(
     env: &HashMap<String, String>,
     test_input_file: &Path,
     timed_decision: &TimedDecision,
+    discriminant_uid: String,
     show_output: bool,
 ) -> Result<Sample, RosaError> {
     let test_input_file = File::open(test_input_file).map_err(|err| {
@@ -213,6 +217,7 @@ fn check_decision(
         uid: timed_decision.decision.trace_uid.clone(),
         seconds: timed_decision.seconds,
         kind,
+        discriminant_uid,
     })
 }
 
@@ -292,12 +297,30 @@ fn run(
                     .join("traces")
                     .join(&timed_decision.decision.trace_uid),
                 timed_decision,
+                timed_decision
+                    .decision
+                    .discriminants
+                    .uid(config.oracle_criterion),
                 show_output,
             )
         })
         .collect::<Result<Vec<Sample>, RosaError>>()?;
+
     // Sort by decision time.
     samples.sort_by(|sample1, sample2| sample1.seconds.partial_cmp(&sample2.seconds).unwrap());
+
+    // Remove backdoor duplicates based on the discriminant UID.
+    let mut known_backdoors = HashSet::new();
+    let samples: Vec<Sample> = samples
+        .into_iter()
+        .filter_map(|sample| match sample.kind {
+            SampleKind::TruePositive | SampleKind::FalsePositive => known_backdoors
+                .insert(sample.clone().discriminant_uid)
+                .then_some(sample),
+            _ => Some(sample),
+        })
+        .collect();
+    println_info!("  ({} traces remaining after deduplication)", samples.len());
 
     let stats = samples.iter().try_fold(Stats::new(), |mut stats, sample| {
         stats.add_sample(sample);
