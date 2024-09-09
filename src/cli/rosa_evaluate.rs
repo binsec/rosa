@@ -75,6 +75,11 @@ struct Cli {
     /// The trace to evaluate (can be used multiple times).
     #[arg(short = 'u', long = "trace-uid", value_name = "TRACE_UID", action = ArgAction::Append)]
     trace_uids: Vec<String>,
+
+    /// Disable deduplication for the results (more precise, but might result in more false
+    /// positives).
+    #[arg(short = 'D', long = "no-deduplication", action = ArgAction::SetFalse)]
+    deduplicate: bool,
 }
 
 /// A kind of sample/finding.
@@ -230,6 +235,7 @@ fn check_decision(
 /// * `trace_uids` - The unique IDs of the traces to evaluate (if empty, all traces are evaluated).
 /// * `show_summary` - Show a summary of the results.
 /// * `show_output` - Show the output (stderr & stdout) when executing the target program.
+/// * `deduplicate` - Deduplicate findings based on the oracle criterion.
 fn run(
     output_dir: &Path,
     target_program_cmd: Option<String>,
@@ -237,6 +243,7 @@ fn run(
     trace_uids: &[String],
     show_summary: bool,
     show_output: bool,
+    deduplicate: bool,
 ) -> Result<(), RosaError> {
     let config = Config::load(&output_dir.join("config").with_extension("toml"))?;
 
@@ -309,18 +316,21 @@ fn run(
     // Sort by decision time.
     samples.sort_by(|sample1, sample2| sample1.seconds.partial_cmp(&sample2.seconds).unwrap());
 
-    // Remove backdoor duplicates based on the discriminant UID.
-    let mut known_backdoors = HashSet::new();
-    let samples: Vec<Sample> = samples
-        .into_iter()
-        .filter_map(|sample| match sample.kind {
-            SampleKind::TruePositive | SampleKind::FalsePositive => known_backdoors
-                .insert(sample.clone().discriminant_uid)
-                .then_some(sample),
-            _ => Some(sample),
-        })
-        .collect();
-    println_info!("  ({} traces remaining after deduplication)", samples.len());
+    if deduplicate {
+        // Remove backdoor duplicates based on the discriminant UID.
+        let mut known_backdoors = HashSet::new();
+        let samples: Vec<Sample> = samples
+            .clone()
+            .into_iter()
+            .filter_map(|sample| match sample.kind {
+                SampleKind::TruePositive | SampleKind::FalsePositive => known_backdoors
+                    .insert(sample.clone().discriminant_uid)
+                    .then_some(sample),
+                _ => Some(sample),
+            })
+            .collect();
+        println_info!("  ({} traces remaining after deduplication)", samples.len());
+    }
 
     let stats = samples.iter().try_fold(Stats::new(), |mut stats, sample| {
         stats.add_sample(sample);
@@ -371,6 +381,8 @@ fn run(
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
+    println!("{:?}", cli.deduplicate);
+
     match run(
         &cli.output_dir,
         cli.target_program_cmd,
@@ -378,6 +390,7 @@ fn main() -> ExitCode {
         &cli.trace_uids,
         cli.show_summary,
         cli.show_output,
+        cli.deduplicate,
     ) {
         Ok(_) => ExitCode::SUCCESS,
         Err(err) => {
