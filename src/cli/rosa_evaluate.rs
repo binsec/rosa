@@ -381,8 +381,6 @@ fn run(
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    println!("{:?}", cli.deduplicate);
-
     match run(
         &cli.output_dir,
         cli.target_program_cmd,
