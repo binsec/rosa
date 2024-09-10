@@ -316,21 +316,26 @@ fn run(
     // Sort by decision time.
     samples.sort_by(|sample1, sample2| sample1.seconds.partial_cmp(&sample2.seconds).unwrap());
 
-    if deduplicate {
-        // Remove backdoor duplicates based on the discriminant UID.
-        let mut known_backdoors = HashSet::new();
-        let samples: Vec<Sample> = samples
-            .clone()
-            .into_iter()
-            .filter_map(|sample| match sample.kind {
-                SampleKind::TruePositive | SampleKind::FalsePositive => known_backdoors
-                    .insert(sample.clone().discriminant_uid)
-                    .then_some(sample),
-                _ => Some(sample),
-            })
-            .collect();
-        println_info!("  ({} traces remaining after deduplication)", samples.len());
-    }
+    let samples = match deduplicate {
+        true => {
+            // Remove backdoor duplicates based on the discriminant UID.
+            let mut known_backdoors = HashSet::new();
+            let samples: Vec<Sample> = samples
+                .clone()
+                .into_iter()
+                .filter_map(|sample| match sample.kind {
+                    SampleKind::TruePositive | SampleKind::FalsePositive => known_backdoors
+                        .insert(sample.clone().discriminant_uid)
+                        .then_some(sample),
+                    _ => Some(sample),
+                })
+                .collect();
+            println_info!("  ({} traces remaining after deduplication)", samples.len());
+
+            samples
+        }
+        false => samples,
+    };
 
     let stats = samples.iter().try_fold(Stats::new(), |mut stats, sample| {
         stats.add_sample(sample);
