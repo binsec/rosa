@@ -304,10 +304,10 @@ fn run(
                     .join("traces")
                     .join(&timed_decision.decision.trace_uid),
                 timed_decision,
-                timed_decision
-                    .decision
-                    .discriminants
-                    .uid(config.oracle_criterion),
+                timed_decision.decision.discriminants.uid(
+                    config.oracle_criterion,
+                    &timed_decision.decision.cluster_uid,
+                ),
                 show_output,
             )
         })

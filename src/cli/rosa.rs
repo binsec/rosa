@@ -496,7 +496,9 @@ fn run(
                         // Essentially, if the backdoor was detected for the same reason as a
                         // pre-existing backdoor, we should avoid listing them as two different
                         // backdoors.
-                        let discriminants_uid = decision.discriminants.uid(config.oracle_criterion);
+                        let discriminants_uid = decision
+                            .discriminants
+                            .uid(config.oracle_criterion, &decision.cluster_uid);
 
                         // Attempt to create a directory for this category of backdoor.
                         let backdoor_dir = config.backdoors_dir().join(discriminants_uid);

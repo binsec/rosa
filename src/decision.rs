@@ -50,7 +50,10 @@ impl Discriminants {
     ///
     /// This ID is produced by hashing the various discriminants and producing a string that
     /// corresponds to the relevant discriminants based on a criterion.
-    pub fn uid(&self, criterion: Criterion) -> String {
+    /// We also incorporate the cluster UID in the UID of the discriminants, to ensure that the
+    /// detection was made on the same basis. This lessens the deduplication, but makes collisions
+    /// between detections less likely.
+    pub fn uid(&self, criterion: Criterion, cluster_uid: &str) -> String {
         let mut hasher = DefaultHasher::new();
         let hash = match criterion {
             Criterion::EdgesOnly => {
@@ -72,7 +75,7 @@ impl Discriminants {
             }
         };
 
-        format!("{:016x}", hash)
+        format!("{:016x}_{}", hash, cluster_uid)
     }
 }
 
