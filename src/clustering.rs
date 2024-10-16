@@ -280,7 +280,7 @@ pub fn cluster_traces(
                         .max()
                         .expect(
                             "failed to get max syscall distance between trace and most similar\
-                        cluster.",
+                                cluster.",
                         );
 
                     let edge_criterion =

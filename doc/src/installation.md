@@ -13,8 +13,9 @@ libc, so it might not work out of the box (or at all) in other systems.**
 ## Building from source
 
 You first need to clone the repo:
+[TODO: we need to replace this with the final URL]
 ```console
-$ git clone git@git.frama-c.com:kokkonis/rosa.git
+$ git clone XXX
 ```
 
 Then, build & install with `cargo`:
@@ -27,5 +28,5 @@ $ cargo install --path .
 You should now have the main ROSA binary installed on your machine:
 ```console
 $ which rosa
-/home/user/.cargo/bin/rosa
+/home/<user>/.cargo/bin/rosa
 ```
