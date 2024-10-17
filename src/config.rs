@@ -259,42 +259,42 @@ pub struct Config {
 
 impl Config {
     /// The default cluster formation criterion.
-    const fn default_cluster_formation_criterion() -> Criterion {
+    pub const fn default_cluster_formation_criterion() -> Criterion {
         // See https://git.frama-c.com/kokkonis/rosa/-/issues/2.
         Criterion::EdgesOnly
     }
     /// The default cluster formation distance metric.
-    const fn default_cluster_formation_distance_metric() -> DistanceMetric {
+    pub const fn default_cluster_formation_distance_metric() -> DistanceMetric {
         DistanceMetric::Hamming
     }
     /// The default cluster formation edge tolerance.
-    const fn default_cluster_formation_edge_tolerance() -> u64 {
+    pub const fn default_cluster_formation_edge_tolerance() -> u64 {
         0
     }
     /// The default cluster formation syscall tolerance.
-    const fn default_cluster_formation_syscall_tolerance() -> u64 {
+    pub const fn default_cluster_formation_syscall_tolerance() -> u64 {
         0
     }
     /// The default cluster selection criterion.
-    const fn default_cluster_selection_criterion() -> Criterion {
+    pub const fn default_cluster_selection_criterion() -> Criterion {
         // See https://git.frama-c.com/kokkonis/rosa/-/issues/2.
         Criterion::EdgesAndSyscalls
     }
     /// The default cluster selection distance metric.
-    const fn default_cluster_selection_distance_metric() -> DistanceMetric {
+    pub const fn default_cluster_selection_distance_metric() -> DistanceMetric {
         DistanceMetric::Hamming
     }
     /// The default oracle algorithm.
-    const fn default_oracle() -> Oracle {
+    pub const fn default_oracle() -> Oracle {
         Oracle::CompMinMax
     }
     /// The default criterion to use in the oracle algorithm.
-    const fn default_oracle_criterion() -> Criterion {
+    pub const fn default_oracle_criterion() -> Criterion {
         // See https://git.frama-c.com/kokkonis/rosa/-/issues/2.
         Criterion::SyscallsOnly
     }
     /// The default distance metric to use in the oracle algorithm.
-    const fn default_oracle_distance_metric() -> DistanceMetric {
+    pub const fn default_oracle_distance_metric() -> DistanceMetric {
         DistanceMetric::Hamming
     }
 
