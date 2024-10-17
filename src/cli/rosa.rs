@@ -157,7 +157,7 @@ fn run(
     // Load the configuration and set up the output directories.
     let config = Config::load(config_file)?;
     config.setup_dirs(force)?;
-    config.save(&config.output_dir)?;
+    config.save(&config.output_dir.join("config").with_extension("toml"))?;
     config.set_current_phase(RosaPhase::Starting)?;
     config.set_current_coverage(0.0, 0.0)?;
     config.init_stats_file()?;

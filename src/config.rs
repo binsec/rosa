@@ -373,19 +373,12 @@ impl Config {
     /// Save a configuration to a file.
     ///
     /// # Arguments
-    /// * `output_dir` - The directory in which to save the configuration file. The file will be
-    ///   titled `config.toml`.
-    pub fn save(&self, output_dir: &Path) -> Result<(), RosaError> {
-        let config_toml = toml::to_string(&self).expect("failed to serialize config TOML.");
-        let config_file = output_dir.join("config").with_extension("toml");
+    /// * `file` - The file in which to save the configuration.
+    pub fn save(&self, file: &Path) -> Result<(), RosaError> {
+        let config_toml = toml::to_string_pretty(&self).expect("failed to serialize config TOML.");
 
-        fs::write(&config_file, config_toml).map_err(|err| {
-            error!(
-                "could not save config to file {}: {}.",
-                config_file.display(),
-                err
-            )
-        })
+        fs::write(file, config_toml)
+            .map_err(|err| error!("could not save config to file {}: {}.", file.display(), err))
     }
 
     /// Load a configuration from file.
