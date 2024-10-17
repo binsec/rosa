@@ -241,19 +241,19 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
         &default_phase_1_duration.to_string(),
     )?;
     let target_path = get_input(
-        "Path to target program (absolute)",
+        "Path to target program",
         |x| Some(x.to_string().into()),
         default_target_path.clone(),
         &default_target_path.display().to_string(),
     )?;
     let target_arguments = get_input(
-        "Path to target program (absolute)",
+        "Arguments to target program",
         |x| Some(x.to_string()),
         default_target_arguments.clone(),
         &default_target_arguments,
     )?;
     let fuzzer_path = get_input(
-        "Path to fuzzer (absolute)",
+        "Path to fuzzer",
         |x| Some(x.to_string().into()),
         default_fuzzer_path.clone(),
         &default_fuzzer_path.display().to_string(),
@@ -265,7 +265,7 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
         &default_fuzzer_output_dir.display().to_string(),
     )?;
     let seed_dir_path = get_input(
-        "Path to seed directory (absolute)",
+        "Path to seed directory",
         |x| Some(x.to_string().into()),
         default_seed_dir_path.clone(),
         &default_seed_dir_path.display().to_string(),
@@ -284,6 +284,8 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
                             fuzzer_path.display().to_string(),
                             "-i".to_string(),
                             seed_dir_path.display().to_string(),
+                            "-o".to_string(),
+                            fuzzer_output_dir.display().to_string(),
                         ],
                         fuzzer_config.cmd,
                         vec!["--".to_string(), target_path.display().to_string()],
