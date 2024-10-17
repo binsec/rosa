@@ -34,6 +34,7 @@ use rosa::{
 use crate::tui::RosaTui;
 
 #[macro_use]
+#[allow(unused_macros)]
 mod logging;
 mod tui;
 

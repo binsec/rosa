@@ -63,6 +63,15 @@ macro_rules! error_message {
     }};
 }
 
+/// Print an information message (without a trailing newline).
+macro_rules! print_info {
+    ( $( $arg:tt )* ) => {
+        {
+            eprint!("{}", info_message!($( $arg )*))
+        }
+    }
+}
+
 /// Print an information message (terminated by a newline).
 macro_rules! println_info {
     ( $( $arg:tt )* ) => {
