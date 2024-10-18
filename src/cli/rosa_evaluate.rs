@@ -71,7 +71,7 @@ struct Cli {
     #[arg(short = 'O', long = "show-output")]
     show_output: bool,
 
-    /// The target program to run traces through (if empty, use the command from the first fuzzer
+    /// The target program to run traces through (if empty, use the command from the main fuzzer
     /// in the configuration).
     #[arg(
         short = 'p',
@@ -80,7 +80,7 @@ struct Cli {
     )]
     target_program_cmd: Option<String>,
 
-    /// The environment to use for the target program (if empty, use the environment from the first
+    /// The environment to use for the target program (if empty, use the environment from the main
     /// fuzzer in the configuration).
     #[arg(
         short = 'e',
