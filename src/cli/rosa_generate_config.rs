@@ -67,7 +67,7 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
     let default_rosa_output_dir = PathBuf::from("rosa-out");
     let default_phase_1_duration = 20;
     let default_target_path: PathBuf = ["/path", "to", "target"].iter().collect();
-    let default_target_arguments = "--arg1 --arg2".to_string();
+    let default_target_arguments = "".to_string();
     let default_fuzzer_path: PathBuf = ["/root", "aflpp", "afl-fuzz"].iter().collect();
     let default_fuzzer_output_dir = PathBuf::from("fuzzer-out");
     let default_seed_dir_path = PathBuf::from("seeds");
@@ -250,7 +250,7 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
         "Arguments to target program",
         |x| Some(x.to_string()),
         default_target_arguments.clone(),
-        &default_target_arguments,
+        "<none>",
     )?;
     let fuzzer_path = get_input(
         "Path to fuzzer",
