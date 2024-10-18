@@ -13,7 +13,7 @@ use std::{
     process::{Command, ExitCode, Stdio},
 };
 
-use clap::{ArgAction, Parser};
+use clap::{ArgAction, Parser, ValueEnum};
 use colored::Colorize;
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 
@@ -28,6 +28,23 @@ use rosa::{
 #[macro_use]
 #[allow(unused_macros)]
 mod logging;
+
+/// Describe the kinds of deduplication of results.
+#[derive(Debug, Copy, Clone, ValueEnum)]
+enum DeduplicationKind {
+    /// Don't perform any deduplication.
+    None,
+    /// Perform native deduplication, based on the actual results of the evaluation.
+    ///
+    /// For this, the heuristics of the backdoor detector are used: we only deduplicate
+    /// (true/false) _positive_ results.
+    Native,
+    /// Perform full post-process deduplication for all phase-2 inputs.
+    ///
+    /// Deduplication is applied to all of the results corresponding to phase-2 inputs (i.e.,
+    /// ignoring de facto (true/false) _negatives_ from phase 1.
+    PostProcess,
+}
 
 #[derive(Parser)]
 #[command(
@@ -76,10 +93,15 @@ struct Cli {
     #[arg(short = 'u', long = "trace-uid", value_name = "TRACE_UID", action = ArgAction::Append)]
     trace_uids: Vec<String>,
 
-    /// Disable deduplication for the results (more precise, but might result in more false
-    /// positives).
-    #[arg(short = 'D', long = "no-deduplication", action = ArgAction::SetFalse)]
-    deduplicate: bool,
+    /// The kind of deduplication to use.
+    #[arg(
+        value_enum,
+        short = 'd',
+        long = "deduplication",
+        default_value_t = DeduplicationKind::Native,
+        value_name = "DEDUPLICATION_KIND"
+    )]
+    deduplication_kind: DeduplicationKind,
 }
 
 /// A kind of sample/finding.
@@ -235,7 +257,7 @@ fn check_decision(
 /// * `trace_uids` - The unique IDs of the traces to evaluate (if empty, all traces are evaluated).
 /// * `show_summary` - Show a summary of the results.
 /// * `show_output` - Show the output (stderr & stdout) when executing the target program.
-/// * `deduplicate` - Deduplicate findings based on the oracle criterion.
+/// * `deduplication_kind` - The kind of deduplication to use.
 fn run(
     output_dir: &Path,
     target_program_cmd: Option<String>,
@@ -243,7 +265,7 @@ fn run(
     trace_uids: &[String],
     show_summary: bool,
     show_output: bool,
-    deduplicate: bool,
+    deduplication_kind: DeduplicationKind,
 ) -> Result<(), RosaError> {
     let config = Config::load(&output_dir.join("config").with_extension("toml"))?;
 
@@ -316,17 +338,20 @@ fn run(
     // Sort by decision time.
     samples.sort_by(|sample1, sample2| sample1.seconds.partial_cmp(&sample2.seconds).unwrap());
 
-    let samples = match deduplicate {
-        true => {
-            // Remove backdoor duplicates based on the discriminant UID.
-            let mut known_backdoors = HashSet::new();
+    let samples = match deduplication_kind {
+        DeduplicationKind::None => samples,
+        DeduplicationKind::Native => {
+            let mut known_traces = HashSet::new();
             let samples: Vec<Sample> = samples
                 .clone()
                 .into_iter()
                 .filter_map(|sample| match sample.kind {
-                    SampleKind::TruePositive | SampleKind::FalsePositive => known_backdoors
+                    // Only deduplicate (true/false) _positives_, as that is what ROSA does to
+                    // deduplicate while running.
+                    SampleKind::TruePositive | SampleKind::FalsePositive => known_traces
                         .insert(sample.clone().discriminant_uid)
                         .then_some(sample),
+                    // All other kinds of inputs are left in the same state.
                     _ => Some(sample),
                 })
                 .collect();
@@ -334,7 +359,57 @@ fn run(
 
             samples
         }
-        false => samples,
+        DeduplicationKind::PostProcess => {
+            // Remove duplicate traces based on the discriminant UID.
+            // For the traces which arrived in phase 2 (when the oracle is active), we can simply
+            // deduplicate all of them based on a single hash set. It does not make sense to count
+            // two traces with the same discriminant UID as two unique entities, as the
+            // discriminant UID should ensure that the behavior and related input family are
+            // unique.
+            //
+            // This can have the following effects (as far as I know):
+            // * TP removed because of existing TP - neutral effect (we can't miss a backdoor this
+            //   way).
+            // * TP removed because of existing FP - unfortunate, as we lose a TP, but also
+            //   probably a sign that the TP was not different enough. Maybe there is backdoor
+            //   contamination at play, or the backdoor is very well hidden, mimicking similar
+            //   benign behaviors. We might miss a backdoor this way.
+            // * FP removed because of existing TP - this, again, is probably the result of
+            //   backdoor contamination or a well hidden backdoor, but in this case it works in our
+            //   favor. Positive effect.
+            // * FP removed because of existing FP - positive effect (less FPs overall).
+            // * TN removed because of TN - neutral effect (we don't care about TNs).
+            // * TN removed because of FN - we have probably discovered an "inoffensive trigger"
+            //   (in terms of behavior) before its TN equivalent. This can mean that backdoor
+            //   contamination happened, or that the ground-truth marker can be triggered without
+            //   divergent behavior (can be the case for some targets). So, negative or neutral
+            //   effect.
+            // * FN removed because of TN - positive effect (it's the ground-truth marker scenario
+            //   from the previous case).
+            // * FN removed because of FN - positive effect (less FNs overall).
+            let mut known_traces = HashSet::new();
+            let samples: Vec<Sample> = samples
+                .clone()
+                .into_iter()
+                .filter_map(|sample| {
+                    match sample.seconds
+                        > config.seed_conditions.seconds.expect(
+                            "failed to get seconds (duration) of phase 1, needed for \
+                                    deduplication.",
+                        ) {
+                        true => known_traces
+                            .insert(sample.clone().discriminant_uid)
+                            .then_some(sample),
+                        // Phase 1 samples move right along, no deduplication (because the oracle
+                        // wasn't active in phase 1).
+                        false => Some(sample),
+                    }
+                })
+                .collect();
+            println_info!("  ({} traces remaining after deduplication)", samples.len());
+
+            samples
+        }
     };
 
     let stats = samples.iter().try_fold(Stats::new(), |mut stats, sample| {
@@ -393,7 +468,7 @@ fn main() -> ExitCode {
         &cli.trace_uids,
         cli.show_summary,
         cli.show_output,
-        cli.deduplicate,
+        cli.deduplication_kind,
     ) {
         Ok(_) => ExitCode::SUCCESS,
         Err(err) => {
