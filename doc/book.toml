@@ -7,3 +7,5 @@ title = "ROSA - fuzzing-based backdoor detection"
 
 [output.html]
 mathjax-support = true
+
+[output.pdf]
