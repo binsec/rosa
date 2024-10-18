@@ -10,11 +10,11 @@ repo] [ROSARUM](todo-link) backdoor benchmark and can be found in
 
 Let's actually test it out:
 ```console
-{container} $ echo "wrong_password" | backdoored-sudo --stdin -- id
+{container} $ echo "wrong_password" | backdoored-sudo --stdin --reset-timestamp -- id
 Password: Sorry, try again.
 Password:
 sudo: no password was provided
 sudo: 1 incorrect password attempt
-{container} $ echo "let_me_in" | backdoored-sudo --stdin -- id
+{container} $ echo "let_me_in" | backdoored-sudo --stdin --reset-timestamp -- id
 Password: uid=0(root) gid=0(root) groups=0(root)
 ```

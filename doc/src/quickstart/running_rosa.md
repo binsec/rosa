@@ -35,7 +35,7 @@ should always show that all the fuzzers are running. If not, there was some issu
 fuzzers, which will probably be explained by reading the logs (`rosa-out/logs`).
 
 At some point, ROSA will detect the backdoor. Be advised that it may take a while depending on your
-machine.[^2] When detection happens, you will see the _backdoors_ counter turn red:
+machine.[^detection_time] When detection happens, you will see the _backdoors_ counter turn red:
 
 ![The ROSA status screen (TUI), shortly after the beginning of the detection
 campaign.](../images/sudo-backdoor-detected.png)

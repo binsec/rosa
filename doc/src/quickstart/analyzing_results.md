@@ -7,7 +7,7 @@ You will notice that the `backdoors` subdirectory contains other directories, wi
 weird names:
 ```console
 {container} $ ls rosa-out/backdoors/
-README.txt  ca0a23c55eb25b45_cluster_000000
+0430a5dc3e14b0e1_cluster_000000  README.txt
 ```
 
 By default, ROSA performs _deduplication_ based on the _detection signature_ of each backdoor. In
@@ -18,13 +18,24 @@ category of inputs described by the subdirectory.
 
 We can use `od` to look at the contents of a suspicious input:
 ```console
-{container} $ od -t cx1 rosa-out/backdoors/ca0a23c55eb25b45_cluster_000000/0be1d8daae577bb7
-0000000   l   e   t   _   m   e   _   i   n  \0   n       x   v   p
-           656c    5f74    656d    695f    006e    206e    7678    0070
-0000017
+{container} $ od -t cx1 rosa-out/backdoors/0430a5dc3e14b0e1_cluster_000000/e205ab0700d8b183
+0000000   l   e   t   _   m   e   _   i   n  \0   i   l   j   g   v   w
+         6c  65  74  5f  6d  65  5f  69  6e  00  69  6c  6a  67  76  77
+0000020   r   w   l   u   z   s   l   z   v   m   o   h   r   i   z   x
+         72  77  6c  75  7a  73  6c  7a  76  6d  6f  68  72  69  7a  78
+0000040   x   h   y   w   p   y   j   u   o   g   u   y   j   u   j   d
+         78  68  79  77  70  79  6a  75  6f  67  75  79  6a  75  6a  64
+0000060   y   n   z   y   p   s   z   g   k   o   x   v   s   g   a   t
+         79  6e  7a  79  70  73  7a  67  6b  6f  78  76  73  67  61  74
+0000100   x   /
+         78  2f
+0000102
 ```
 
 And there it is: `"let_me_in"`! ROSA has successfully produced an input triggering the backdoor.
+
+
+## Exploring further
 
 This is just a small example; in a real scenario, you wouldn't know what the backdoor looks like
 (or if there even is one). In that case, you must examine _all_ of the subdirectories of
@@ -43,79 +54,74 @@ We propose the following method to help automate the investigation:
     4. Look through the output of `strace` for suspicious system calls (or system call arguments).
 
 Let's go through one _witness input_ example with `sudo`:
-1. Picking `rosa-out/backdoors/ca0a23c55eb25b45_cluster_000000/0be1d8daae577bb7`.
-2. ```console
-   {container} $ rosa-explain -o rosa-out 0be1d8daae577bb7
-   ...
-   Syscalls: 15, 18, 32, 33, 56, 59, 61, 106, 111, 271, 273, 436
-   ...
-   Syscalls:
-   ```
-   The second one is empty, because there are no system calls present in the _cluster_ (input
-   family) that are **not** present in the _trace_.
-3. ```console
-   {container} $ strace -f -e 15,18,32,33,56,59,61,106,111,271,273,436 -o trace.txt -- \
-                     /root/aflpp/afl-qemu-trace -- \
-                     /usr/bin/backdoored-sudo --stdin --reset-timestamp -- id < \
-                     rosa-out/backdoors/ca0a23c55eb25b45_cluster_000000/0be1d8daae577bb7
-   Password: uid=0(root) gid=0(root) groups=0(root)
-   ```
-   Notice how we had to use `/root/aflpp/afl-qemu-trace`; this is the emulator the binary was
-   instrumented through during fuzzing, so if we want to understand the system calls produced by it
-   we need to look at it in the same environment. If we just used `backdoored-sudo`, there are no
-   guarantees that all of the discriminant system calls will be present.
-4. ```console
-   {container} $ cat trace.txt
-   16285 execve("/root/aflpp/afl-qemu-trace", ["/root/aflpp/afl-qemu-trace", "--", "/usr/bin/backdoored-sudo", "--stdin", "--reset-timestamp", "--", "id"], 0x55f2cd0ad930 /* 12 vars */) = 0
-   16285 set_robust_list(0x7f7151a7bee0, 24) = 0
-   16286 set_robust_list(0x7f71516009a0, 24) = 0
-   16286 --- SIGRT_1 {si_signo=SIGRT_1, si_code=SI_TKILL, si_pid=16285, si_uid=0} ---
-   16286 rt_sigreturn({mask=0x7f71515ff8e8}) = 202
-   16286 --- SIGRT_1 {si_signo=SIGRT_1, si_code=SI_TKILL, si_pid=16285, si_uid=0} ---
-   16286 rt_sigreturn({mask=0x7f71515ff8e8}) = 202
-   16286 --- SIGRT_1 {si_signo=SIGRT_1, si_code=SI_TKILL, si_pid=16285, si_uid=0} ---
-   16286 rt_sigreturn({mask=0x7f71515ff8e8}) = 202
-   16286 --- SIGRT_1 {si_signo=SIGRT_1, si_code=SI_TKILL, si_pid=16285, si_uid=0} ---
-   16286 rt_sigreturn({mask=0x7f71515ff8e8}) = 202
-   16286 --- SIGRT_1 {si_signo=SIGRT_1, si_code=SI_TKILL, si_pid=16285, si_uid=0} ---
-   16286 rt_sigreturn({mask=~[ILL FPE KILL SEGV STOP RTMIN RT_1]} <unfinished ...>
-   16285 setgid(0 <unfinished ...>
-   16286 <... rt_sigreturn resumed>)       = 202
-   16285 <... setgid resumed>)             = 0
-   16285 getpgrp()                         = 16282
-   16285 dup(0)                            = 11
-   16285 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7f7151a7bed0) = 16287
-   16287 set_robust_list(0x7f7151a7bee0, 24) = 0
-   16287 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7f7151a7bed0) = 16288
-   16288 set_robust_list(0x7f7151a7bee0, 24) = 0
-   16285 ppoll([{fd=9, events=POLLIN}, {fd=3, events=POLLIN}, {fd=7, events=POLLIN}], 3, NULL, NULL, 8 <unfinished ...>
-   16287 getpgrp( <unfinished ...>
-   16285 <... ppoll resumed>)              = 1 ([{fd=9, revents=POLLIN}])
-   16287 <... getpgrp resumed>)            = 16287
-   16285 ppoll([{fd=9, events=POLLIN}, {fd=3, events=POLLIN}, {fd=7, events=POLLIN}], 3, NULL, NULL, 8 <unfinished ...>
-   16288 dup(7)                            = 6
-   16287 ppoll([{fd=6, events=POLLIN}, {fd=10, events=POLLIN}, {fd=7, events=POLLIN}], 3, NULL, NULL, 8 <unfinished ...>
-   16288 dup2(6, 7)                        = 7
-   16288 execve("/usr/bin/id", ["id"], 0x55d5f54ac040 /* 13 vars */) = 0
-   16287 <... ppoll resumed>)              = 1 ([{fd=6, revents=POLLIN|POLLHUP}])
-   16287 ppoll([{fd=-1}, {fd=10, events=POLLIN}, {fd=7, events=POLLIN}], 3, NULL, NULL, 8 <unfinished ...>
-   16288 set_robust_list(0x7ff1e4879ae0, 24) = 0
-   16285 <... ppoll resumed>)              = 1 ([{fd=7, revents=POLLIN}])
-   16288 +++ exited with 0 +++
-   16287 <... ppoll resumed>)              = ? ERESTARTNOHAND (To be restarted if no handler)
-   16287 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16288, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
-   16287 rt_sigreturn({mask=~[BUS SEGV]})  = -1 EINTR (Interrupted system call)
-   16285 ppoll([{fd=9, events=POLLIN}, {fd=3, events=POLLIN}, {fd=7, events=POLLIN}, {fd=6, events=POLLOUT}], 4, NULL, NULL, 8) = 1 ([{fd=6, revents=POLLOUT}])
-   16285 ppoll([{fd=9, events=POLLIN}, {fd=3, events=POLLIN}, {fd=7, events=POLLIN}], 3, NULL, NULL, 8 <unfinished ...>
-   16287 wait4(16288, [{WIFEXITED(s) && WEXITSTATUS(s) == 0}], WNOHANG|WSTOPPED, NULL) = 16288
-   16285 <... ppoll resumed>)              = 1 ([{fd=9, revents=POLLIN}])
-   16287 +++ exited with 1 +++
-   16285 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=16287, si_uid=0, si_status=1, si_utime=0, si_stime=0} ---
-   16285 rt_sigreturn({mask=~[BUS SEGV]})  = 1
-   16285 ppoll([{fd=7, events=POLLIN}], 1, {tv_sec=0, tv_nsec=0}, NULL, 8) = 1 ([{fd=7, revents=POLLHUP}], left {tv_sec=0, tv_nsec=0})
-   16286 +++ exited with 0 +++
-   16285 +++ exited with 0 +++
-   ```
+
+### Step 1 - Picking a witness input
+We're picking `rosa-out/backdoors/0430a5dc3e14b0e1_cluster_000000/e205ab0700d8b183` as it's the
+only one that exists. If there were more _backdoor categories_ (i.e., more subdirectories under
+`rosa-out/backdoors/`), we would have to pick one input from each.
+
+### Step 2 - Finding the discriminants
+As discussed before, we will use `rosa-explain` to do this, looking at the _system call_
+discriminants specifically:
+```console
+{container} $ rosa-explain -o rosa-out e205ab0700d8b183
+...
+Syscalls: 15, 32, 33, 56, 59, 61, 106, 111, 271, 273, 436
+...
+Syscalls:
+```
+The second one is empty, because there are no system calls present in the _cluster_ (input family)
+that are **not** present in the _trace_.
+
+### Step 3 - Running the target under strace
+We'll only keep the system calls that are present in our discriminant list:
+```console
+{container} $ strace -f -e 15,32,33,56,59,61,106,111,271,273,436 -o trace.txt -- \
+                 backdoored-sudo --stdin --reset-timestamp -- id < \
+                 rosa-out/backdoors/0430a5dc3e14b0e1_cluster_000000/e205ab0700d8b183
+Password: uid=0(root) gid=0(root) groups=0(root)
+```
+
+### Step 4 - Looking through strace's output
+Let's see what the discriminants really look like:
+```console
+{container} $ cat trace.txt
+18866 execve("/usr/bin/backdoored-sudo", ["backdoored-sudo", "--stdin", "--reset-timestamp", "--", "id"], 0x7ffc69b21c10 /* 11 vars */) = 0
+18866 set_robust_list(0x7f468f9b7a20, 24) = 0
+18866 setgid(0)                         = 0
+18866 getpgrp()                         = 18863
+18866 dup(0)                            = 11
+18866 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7f468f9b7a10) = 18867
+18867 set_robust_list(0x7f468f9b7a20, 24) = 0
+18866 ppoll([{fd=9, events=POLLIN}, {fd=3, events=POLLIN}, {fd=7, events=POLLIN}], 3, NULL, NULL, 8 <unfinished ...>
+18867 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7f468f9b7a10) = 18868
+18866 <... ppoll resumed>)              = 1 ([{fd=9, revents=POLLIN}])
+18867 getpgrp()                         = 18867
+18866 ppoll([{fd=9, events=POLLIN}, {fd=3, events=POLLIN}, {fd=7, events=POLLIN}], 3, NULL, NULL, 8 <unfinished ...>
+18868 set_robust_list(0x7f468f9b7a20, 24) = 0
+18867 ppoll([{fd=6, events=POLLIN}, {fd=10, events=POLLIN}, {fd=7, events=POLLIN}], 3, NULL, NULL, 8 <unfinished ...>
+18868 dup(7)                            = 6
+18868 close_range(7, 4294967295, 0)     = 0
+18868 dup2(6, 7)                        = 7
+18868 execve("/usr/bin/id", ["id"], 0x5652fad556f0 /* 13 vars */ <unfinished ...>
+18867 <... ppoll resumed>)              = 1 ([{fd=6, revents=POLLIN|POLLHUP}])
+18868 <... execve resumed>)             = 0
+18867 ppoll([{fd=-1}, {fd=10, events=POLLIN}, {fd=7, events=POLLIN}], 3, NULL, NULL, 8 <unfinished ...>
+18868 set_robust_list(0x7f4bae314ae0, 24) = 0
+18868 +++ exited with 0 +++
+18867 <... ppoll resumed>)              = ? ERESTARTNOHAND (To be restarted if no handler)
+18866 <... ppoll resumed>)              = 1 ([{fd=7, revents=POLLIN}])
+18867 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=18868, si_uid=0, si_status=0, si_utime=0, si_stime=0} ---
+18867 rt_sigreturn({mask=[]})           = -1 EINTR (Interrupted system call)
+18866 ppoll([{fd=9, events=POLLIN}, {fd=3, events=POLLIN}, {fd=7, events=POLLIN}, {fd=6, events=POLLOUT}], 4, NULL, NULL, 8) = 1 ([{fd=6, revents=POLLOUT}])
+18867 wait4(18868, [{WIFEXITED(s) && WEXITSTATUS(s) == 0}], WNOHANG|WSTOPPED, NULL) = 18868
+18866 ppoll([{fd=9, events=POLLIN}, {fd=3, events=POLLIN}, {fd=7, events=POLLIN}], 3, NULL, NULL, 8) = 1 ([{fd=9, revents=POLLIN}])
+18867 +++ exited with 1 +++
+18866 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=18867, si_uid=0, si_status=1, si_utime=0, si_stime=0} ---
+18866 rt_sigreturn({mask=[]})           = 0
+18866 ppoll([{fd=7, events=POLLIN}], 1, {tv_sec=0, tv_nsec=0}, NULL, 8) = 1 ([{fd=7, revents=POLLHUP}], left {tv_sec=0, tv_nsec=0})
+18866 +++ exited with 0 +++
+```
 
 So we notice that a couple of `clone` system calls are executed, followed by an
 `execve("/usr/bin/id" ...)` system call. There can only be one of three reasons why that point was

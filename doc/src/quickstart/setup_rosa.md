@@ -4,8 +4,8 @@ Before launching the backdoor detection campaign, we need two things:
 - A _seed corpus_ for AFL++ (the fuzzer);[^seed_corpus]
 - A _configuration_ for ROSA.
 
-These actually already exist in your container (in `/root/examples/sudo/`), but showing how to make
-them will make them easier to understand.
+These actually already exist in your container (in `/root/examples/sudo/`), but showing how to
+create them from scratch will make them easier to understand.
 
 ## Seed corpus
 We want to test the "password entry" part of `sudo`; there is no _standard protocol_ to obey for
@@ -28,15 +28,21 @@ default):
 [rosa]  ROSA output directory name? [default: rosa-out] >
 [rosa]  Phase 1 duration (in seconds)? [default: 20] >
 [rosa]  Path to target program? [default: /path/to/target] > backdoored-sudo
-[rosa]  Arguments to target program? [default: --arg1 --arg2] > --stdin -- id
+[rosa]  Arguments to target program? [default: --arg1 --arg2] > --stdin --reset-timestamp -- id
 [rosa]  Path to fuzzer? [default: /root/aflpp/afl-fuzz] >
 [rosa]  Fuzzer output directory name? [default: fuzzer-out] >
 [rosa]  Path to seed directory? [default: seeds] >
 [rosa]  Done! The configuration is saved in 'config.toml'.
 ```
 
-Just to clarify, the `--stdin` option forces `sudo` to read from the standard input, and `id` is
-there mostly as a "placeholder"---`sudo` needs to take in a command after all.
+Just to clarify, we need to call `sudo` with a few options:
+- `--stdin`: force `sudo` to read from the standard input (that's where AFL++ is going to store its
+  output).
+- `--reset-timestamp`: force `sudo` to ask for the password _every_ time. We don't want it to
+  "cache" a successful authentication attempt, because it might make it look like an otherwise
+  wrong input resulted in successful authentication.
+- `-- id`: use a "dummy" command to run, because we have to. Incidentally, `id` will also let us
+  know if we successfully ran the command as root.
 
 This configuration follows a recommended preset; some targets need further customization (mostly
 regarding fuzzer configuration), which we will explore further in [_Configuration
