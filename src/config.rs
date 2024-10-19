@@ -184,21 +184,6 @@ impl str::FromStr for RosaPhase {
     }
 }
 
-/// A configuration for a deduplicator.
-///
-/// A deduplicator can be an external program that deduplicates traces based on some criteria.
-/// This is sometimes useful to apply to counteract the non-deterministic nature of the fuzzer.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct DeduplicatorConfig {
-    /// The deduplicator command.
-    ///
-    /// The command should contain `"{{INPUT}}"` and `"{{OUTPUT}}"` strings where the input and
-    /// output directories of the deduplicator go.
-    pub cmd: Vec<String>,
-    /// The deduplicator environment variables (if any).
-    pub env: HashMap<String, String>,
-}
-
 /// A configuration for ROSA.
 ///
 /// This configuration will be loaded from a configuration file (one per target program).
@@ -214,13 +199,6 @@ pub struct Config {
     /// If multiple, the seed collection will stop once the first is met; at least one condition
     /// must be supplied.
     pub seed_conditions: SeedConditions,
-
-    /// The deduplicator (if any).
-    /// This can be helpful to deduplicate traces in the cases where non-determinism creeps into
-    /// the results.
-    /// The deduplicator is post-processing, meaning it is applied at the very end of a detection
-    /// campaign.
-    pub deduplicator: Option<DeduplicatorConfig>,
 
     /// The criterion to use during cluster formation.
     /// See [cluster_traces](crate::clustering::cluster_traces).

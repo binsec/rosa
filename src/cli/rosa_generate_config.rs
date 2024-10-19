@@ -302,7 +302,6 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
                 edge_coverage: None,
                 syscall_coverage: None,
             },
-            deduplicator: None,
             cluster_formation_criterion: Config::default_cluster_formation_criterion(),
             cluster_formation_distance_metric: Config::default_cluster_formation_distance_metric(),
             cluster_formation_edge_tolerance: Config::default_cluster_formation_edge_tolerance(),

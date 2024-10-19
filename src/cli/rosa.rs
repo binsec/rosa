@@ -548,11 +548,6 @@ fn run(
         .iter_mut()
         .try_for_each(|fuzzer_process| fuzzer_process.stop())?;
 
-    // Run the deduplicator.
-    if config.deduplicator.is_some() && no_tui {
-        println_warning!("The deduplicator is deprecated.");
-    }
-
     config.set_current_phase(RosaPhase::Stopped)?;
 
     Ok(())
