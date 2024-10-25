@@ -102,6 +102,10 @@ struct Cli {
         value_name = "DEDUPLICATION_KIND"
     )]
     deduplication_kind: DeduplicationKind,
+
+    /// The time limit to cut off at (if any).
+    #[arg(short = 't', long = "--time-limit", value_name = "SECONDS")]
+    time_limit: Option<u64>,
 }
 
 /// A kind of sample/finding.
@@ -258,6 +262,8 @@ fn check_decision(
 /// * `show_summary` - Show a summary of the results.
 /// * `show_output` - Show the output (stderr & stdout) when executing the target program.
 /// * `deduplication_kind` - The kind of deduplication to use.
+/// * `time_limit` - The time limit (if any) to cut off at.
+#[allow(clippy::too_many_arguments)]
 fn run(
     output_dir: &Path,
     target_program_cmd: Option<String>,
@@ -266,6 +272,7 @@ fn run(
     show_summary: bool,
     show_output: bool,
     deduplication_kind: DeduplicationKind,
+    time_limit: Option<u64>,
 ) -> Result<(), RosaError> {
     let config = Config::load(&output_dir.join("config").with_extension("toml"))?;
 
@@ -314,6 +321,17 @@ fn run(
             )
         })
         .collect::<Result<Vec<TimedDecision>, RosaError>>()?;
+
+    // Filter based on the time limit.
+    let timed_decisions: Vec<TimedDecision> = timed_decisions
+        .into_iter()
+        .filter_map(|timed_decision| match time_limit {
+            Some(limit_seconds) => {
+                (timed_decision.seconds <= limit_seconds).then_some(timed_decision)
+            }
+            None => Some(timed_decision),
+        })
+        .collect();
 
     // We can run the evaluations in parallel, since they're all independent.
     let mut samples: Vec<Sample> = timed_decisions
@@ -469,6 +487,7 @@ fn main() -> ExitCode {
         cli.show_summary,
         cli.show_output,
         cli.deduplication_kind,
+        cli.time_limit,
     ) {
         Ok(_) => ExitCode::SUCCESS,
         Err(err) => {
