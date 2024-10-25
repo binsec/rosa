@@ -104,7 +104,7 @@ struct Cli {
     deduplication_kind: DeduplicationKind,
 
     /// The time limit to cut off at (if any).
-    #[arg(short = 't', long = "--time-limit", value_name = "SECONDS")]
+    #[arg(short = 't', long = "time-limit", value_name = "SECONDS")]
     time_limit: Option<u64>,
 }
 
