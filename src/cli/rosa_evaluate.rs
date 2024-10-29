@@ -309,7 +309,6 @@ fn run(
         None => config.main_fuzzer()?.env.clone(),
     };
 
-    println_info!("Evaluating {} traces...", selected_trace_uids.len());
     let timed_decisions: Vec<TimedDecision> = selected_trace_uids
         .iter()
         .map(|trace_uid| {
@@ -321,6 +320,7 @@ fn run(
             )
         })
         .collect::<Result<Vec<TimedDecision>, RosaError>>()?;
+    println_info!("Evaluating {} traces...", timed_decisions.len());
 
     // Filter based on the time limit.
     let timed_decisions: Vec<TimedDecision> = timed_decisions
@@ -332,6 +332,14 @@ fn run(
             None => Some(timed_decision),
         })
         .collect();
+
+    if let Some(limit_seconds) = time_limit {
+        println_info!(
+            "  ({} traces remaining after time limit of {} seconds)",
+            timed_decisions.len(),
+            limit_seconds
+        );
+    }
 
     // We can run the evaluations in parallel, since they're all independent.
     let mut samples: Vec<Sample> = timed_decisions
