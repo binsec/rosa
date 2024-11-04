@@ -88,11 +88,10 @@ fn run(
             .into_iter()
             .zip(trace2.edges)
             .enumerate()
-            .for_each(|(index, (edge1, edge2))| match edge1 == edge2 {
-                false => {
+            .for_each(|(index, (edge1, edge2))| {
+                if edge1 != edge2 {
                     println_info!("#{}: {} != {}", index, edge1, edge2);
                 }
-                true => {}
             });
 
         println_info!("");
@@ -102,11 +101,10 @@ fn run(
             .into_iter()
             .zip(trace2.syscalls)
             .enumerate()
-            .for_each(|(index, (edge1, edge2))| match edge1 == edge2 {
-                false => {
+            .for_each(|(index, (edge1, edge2))| {
+                if edge1 != edge2 {
                     println_info!("#{}: {} != {}", index, edge1, edge2);
                 }
-                true => {}
             });
     }
 

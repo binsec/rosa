@@ -227,14 +227,11 @@ fn check_decision(
     let backdoor =
         stdout.contains("***BACKDOOR TRIGGERED***") || stderr.contains("***BACKDOOR TRIGGERED***");
 
-    match show_output {
-        true => {
-            println_info!("stdout:");
-            println!("{}", stdout);
-            println_info!("stderr:");
-            println!("{}", stderr);
-        }
-        false => (),
+    if show_output {
+        println_info!("stdout:");
+        println!("{}", stdout);
+        println_info!("stderr:");
+        println!("{}", stderr);
     }
 
     let kind = match (backdoor, timed_decision.decision.is_backdoor) {
