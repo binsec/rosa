@@ -40,3 +40,7 @@ path = "src/cli/rosa_showmap.rs"
 [[bin]]
 name = "rosa-generate-config"
 path = "src/cli/rosa_generate_config.rs"
+
+[[bin]]
+name = "rosa-simulate"
+path = "src/cli/rosa_simulate.rs"
