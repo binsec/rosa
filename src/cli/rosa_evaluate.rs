@@ -359,7 +359,7 @@ fn run(
         .collect::<Result<Vec<Sample>, RosaError>>()?;
 
     // Sort by decision time.
-    samples.sort_by(|sample1, sample2| sample1.seconds.partial_cmp(&sample2.seconds).unwrap());
+    samples.sort_by(|sample1, sample2| sample1.seconds.cmp(&sample2.seconds));
 
     let samples = match deduplication_kind {
         DeduplicationKind::None => samples,
@@ -444,13 +444,7 @@ fn run(
     let seconds_to_first_backdoor = samples
         .iter()
         .find(|sample| sample.kind == SampleKind::TruePositive)
-        .map_or("N/A".to_string(), |sample| {
-            timed_decisions
-                .iter()
-                .find(|timed_decision| timed_decision.decision.trace_uid == sample.uid)
-                .map(|timed_decision| timed_decision.seconds.to_string())
-                .expect("failed to get seconds for first backdoor.")
-        });
+        .map_or("N/A".to_string(), |sample| sample.seconds.to_string());
 
     let header = match show_summary {
         true => {
