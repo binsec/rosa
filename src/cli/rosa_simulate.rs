@@ -88,10 +88,27 @@ fn run(
         .join("decisions")
         .canonicalize()
         .expect("failed to canonicalize old decisions directory path.");
+    let old_stats_file = existing_rosa_dir
+        .to_path_buf()
+        .join("stats")
+        .with_extension("csv")
+        .canonicalize()
+        .expect("failed to canonicalize old stats file path.");
 
     println_info!("Setting up new output directory...");
     config.setup_dirs(force)?;
     config.save(&config.output_dir.join("config").with_extension("toml"))?;
+    fs::copy(
+        &old_stats_file,
+        config.output_dir.join("stats").with_extension("csv"),
+    )
+    .map_err(|err| {
+        error!(
+            "could not copy stats file from {}: {}.",
+            old_stats_file.display(),
+            err
+        )
+    })?;
 
     println_info!(
         "Copying traces from {} ({})...",
@@ -139,7 +156,7 @@ fn run(
                 .map_or_else(
                     |err| {
                         fail!(
-                            "could not copy test inputs and traces to {}: {}",
+                            "could not copy test inputs and traces to {}: {}.",
                             config.traces_dir().display(),
                             err
                         )
