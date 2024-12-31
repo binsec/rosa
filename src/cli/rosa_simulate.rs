@@ -28,6 +28,7 @@ use rosa::{
     trace::{self, Trace},
 };
 
+mod common;
 #[macro_use]
 #[allow(unused_macros)]
 mod logging;
@@ -50,27 +51,36 @@ struct TimedTrace {
     propagate_version = true
 )]
 struct Cli {
-    /// The existing ROSA directory to pull test inputs from.
+    /// The existing ROSA output directory to pull test inputs from.
+    #[arg(
+        long_help,
+        value_name = "ROSA DIR",
+        help = "Existing ROSA output directory"
+    )]
     rosa_dir: PathBuf,
-    /// The configuration to use.
-    #[arg(short, long, default_value = "config.toml")]
+    /// The configuration file to use.
+    #[arg(
+        long_help,
+        short,
+        long,
+        default_value = "config.toml",
+        help = "Configuration file"
+    )]
     config_file: Option<PathBuf>,
     /// Perform a true copy of the test inputs and trace files instead of using a symbolic link.
-    #[arg(short = 'C', long)]
+    #[arg(long_help, short = 'C', long, help = "Use true copy")]
     copy_inputs: bool,
     /// Force the creation of the output directory, potentially overwriting existing results.
-    #[arg(short, long)]
+    #[arg(
+        long_help,
+        short,
+        long,
+        help = "Force (auto-delete existing) output directory"
+    )]
     force: bool,
 }
 
 /// Run the simulation.
-///
-/// # Arguments
-/// * `existing_rosa_dir` - Path to the existing output directory where ROSA's findings are stored.
-/// * `config_file` - Path to the config file to use.
-/// * `copy_inputs` - If [true], perform a true copy of the test inputs and traces (instead of
-///   using a symbolic link).
-/// * `force` - If [true], force the creation of the new output directory.
 fn run(
     existing_rosa_dir: &Path,
     config_file: &Path,
@@ -113,76 +123,74 @@ fn run(
     println_info!(
         "Copying traces from {} ({})...",
         existing_rosa_dir.display(),
-        match copy_inputs {
-            true => "with true copy",
-            false => "with symbolic link",
+        if copy_inputs {
+            "with true copy"
+        } else {
+            "with symbolic link"
         }
     );
-    match copy_inputs {
-        true => {
-            // Copy every test input and trace from the old directory to the new one.
-            let test_inputs_and_traces: Vec<PathBuf> = fs::read_dir(&old_traces_dir).map_or_else(
+    if copy_inputs {
+        // Copy every test input and trace from the old directory to the new one.
+        let test_inputs_and_traces: Vec<PathBuf> = fs::read_dir(&old_traces_dir).map_or_else(
+            |err| {
+                fail!(
+                    "invalid traces directory '{}': {}.",
+                    old_traces_dir.display(),
+                    err
+                )
+            },
+            |res| {
+                Ok(res
+                    // Ignore files/dirs we cannot read.
+                    .filter_map(|item| item.ok())
+                    .map(|item| item.path())
+                    // Pick up everything except the README file.
+                    .filter(|path| {
+                        path.is_file()
+                            && path
+                                .file_name()
+                                .is_none_or(|file_name| file_name == "README.txt")
+                    })
+                    .collect())
+            },
+        )?;
+
+        test_inputs_and_traces.into_iter().try_for_each(|file| {
+            fs::copy(
+                &file,
+                config.traces_dir().join(
+                    file.file_name()
+                        .expect("failed to get file name for test input/trace."),
+                ),
+            )
+            .map_or_else(
                 |err| {
                     fail!(
-                        "invalid traces directory '{}': {}.",
-                        old_traces_dir.display(),
+                        "could not copy test inputs and traces to {}: {}.",
+                        config.traces_dir().display(),
                         err
                     )
                 },
-                |res| {
-                    Ok(res
-                        // Ignore files/dirs we cannot read.
-                        .filter_map(|item| item.ok())
-                        .map(|item| item.path())
-                        // Pick up everything except the README file.
-                        .filter(|path| {
-                            path.is_file()
-                                && !path
-                                    .file_name()
-                                    .is_some_and(|file_name| file_name == "README.txt")
-                        })
-                        .collect())
-                },
-            )?;
-
-            test_inputs_and_traces.into_iter().try_for_each(|file| {
-                fs::copy(
-                    &file,
-                    config.traces_dir().join(
-                        file.file_name()
-                            .expect("failed to get file name for test input/trace."),
-                    ),
-                )
-                .map_or_else(
-                    |err| {
-                        fail!(
-                            "could not copy test inputs and traces to {}: {}.",
-                            config.traces_dir().display(),
-                            err
-                        )
-                    },
-                    |_| Ok(()),
-                )
-            })?;
-        }
-        false => {
-            // Remove the newly created (empty) `traces/` directory.
-            fs::remove_dir_all(config.traces_dir()).map_err(|err| {
-                error!(
-                    "could not remove '{}': {}.",
-                    &config.traces_dir().display(),
-                    err
-                )
-            })?;
-            unix::fs::symlink(&old_traces_dir, config.traces_dir()).map_err(|err| {
-                error!(
-                    "could not create symbolic link {} -> {}: {}.",
-                    &old_traces_dir.display(),
-                    &config.traces_dir().display(),
-                    err
-                )
-            })?;
-        }
+                |_| Ok(()),
+            )
+        })?;
+    } else {
+        // Remove the newly created (empty) `traces/` directory.
+        fs::remove_dir_all(config.traces_dir()).map_err(|err| {
+            error!(
+                "could not remove '{}': {}.",
+                &config.traces_dir().display(),
+                err
+            )
+        })?;
+        unix::fs::symlink(&old_traces_dir, config.traces_dir()).map_err(|err| {
+            error!(
+                "could not create symbolic link {} -> {}: {}.",
+                &old_traces_dir.display(),
+                &config.traces_dir().display(),
+                err
+            )
+        })?;
     }
 
     println_info!("Loading traces...");
@@ -323,6 +331,7 @@ fn run(
 }
 
 fn main() -> ExitCode {
+    common::reset_sigpipe();
     let cli = Cli::parse();
 
     match run(

@@ -13,14 +13,16 @@ use std::{
 
 use clap::Parser;
 use colored::Colorize;
-use itertools::Itertools;
 
 use rosa::error;
 use rosa::{config::Config, decision::TimedDecision, error::RosaError, trace::Trace};
 
+mod common;
 #[macro_use]
 #[allow(unused_macros)]
 mod logging;
+
+use common::Component;
 
 #[derive(Parser)]
 #[command(
@@ -31,24 +33,29 @@ mod logging;
     propagate_version = true)]
 struct Cli {
     /// The ROSA output directory to pull traces from.
-    #[arg(
-        short = 'o',
-        long = "output-dir",
-        default_value = "out/",
-        value_name = "DIR"
-    )]
+    #[arg(long_help, value_name = "DIR", help = "The ROSA output directory")]
     output_dir: PathBuf,
 
-    /// The trace to explain.
+    /// The UID of the trace to explain.
+    #[arg(long_help, value_name = "TRACE UID", help = "The UID of the trace")]
     trace_uid: String,
+
+    /// The component of the trace to explain.
+    #[arg(
+        long_help,
+        value_enum,
+        short,
+        long,
+        default_value_t = Component::Syscalls,
+        help = "The component to explain"
+    )]
+    component: Component,
 }
 
 /// Run the explanation tool.
 ///
-/// # Arguments
-/// * `output_dir` - Path to the output directory where ROSA's findings are stored.
-/// * `trace_uid` - The unique ID of the trace we want to get explanations for.
-fn run(output_dir: &Path, trace_uid: &str) -> Result<(), RosaError> {
+/// Display the differences between the trace and its corresponding cluster.
+fn run(output_dir: &Path, trace_uid: &str, component: Component) -> Result<(), RosaError> {
     let config = Config::load(&output_dir.join("config").with_extension("toml"))?;
     let timed_decision = TimedDecision::load(
         &output_dir
@@ -156,43 +163,7 @@ fn run(output_dir: &Path, trace_uid: &str) -> Result<(), RosaError> {
         })
         .collect();
 
-    let trace_edge_dists = cluster.iter().map(|cluster_trace| {
-        config
-            .oracle_distance_metric
-            .dist(&trace.edges, &cluster_trace.edges)
-    });
-    let trace_syscall_dists = cluster.iter().map(|cluster_trace| {
-        config
-            .oracle_distance_metric
-            .dist(&trace.syscalls, &cluster_trace.syscalls)
-    });
-
-    let cluster_edge_dists = cluster.iter().combinations(2).map(|trace_pair| {
-        config.oracle_distance_metric.dist(
-            &trace_pair
-                .first()
-                .expect("failed to get first trace of trace pair.")
-                .edges,
-            &trace_pair
-                .last()
-                .expect("failed to get second trace of trace pair.")
-                .edges,
-        )
-    });
-    let cluster_syscall_dists = cluster.iter().combinations(2).map(|trace_pair| {
-        config.oracle_distance_metric.dist(
-            &trace_pair
-                .first()
-                .expect("failed to get first trace of trace pair.")
-                .syscalls,
-            &trace_pair
-                .last()
-                .expect("failed to get second trace of trace pair.")
-                .syscalls,
-        )
-    });
-
-    println_info!("Explaining trace '{}' ('{}'):", &trace_uid, trace.name);
+    println_info!("Explaining trace {}:", &trace_uid);
     println_info!("  Trace indicates a backdoor: {}", &decision.is_backdoor);
     println_info!("  Detection reason: {}", &decision.reason);
     println_info!("  Oracle criterion: {}", &config.oracle_criterion);
@@ -201,118 +172,41 @@ fn run(output_dir: &Path, trace_uid: &str) -> Result<(), RosaError> {
     println_info!("");
 
     println_info!("Found in the trace but not the cluster:");
-    println_info!(
-        "  Edges: {}",
-        trace_unique_edges
-            .iter()
-            .map(|edge| edge.to_string())
-            .collect::<Vec<String>>()
-            .join(", ")
-    );
-    println_info!(
-        "  Syscalls: {}",
-        trace_unique_syscalls
-            .iter()
-            .map(|syscall| syscall.to_string())
-            .collect::<Vec<String>>()
-            .join(", ")
+    println!(
+        "{}",
+        match component {
+            Component::Edges => trace_unique_edges,
+            Component::Syscalls => trace_unique_syscalls,
+        }
+        .iter()
+        .map(|item| item.to_string())
+        .collect::<Vec<String>>()
+        .join(", ")
     );
 
     println_info!("");
 
-    println_info!("Found in the cluster but not in the trace:");
-    println_info!(
-        "  Edges: {}",
-        cluster_unique_edges
-            .iter()
-            .map(|edge| edge.to_string())
-            .collect::<Vec<String>>()
-            .join(", ")
-    );
-    println_info!(
-        "  Syscalls: {}",
-        cluster_unique_syscalls
-            .iter()
-            .map(|syscall| syscall.to_string())
-            .collect::<Vec<String>>()
-            .join(", ")
-    );
-
-    println_info!("");
-
-    println_info!("Distances from trace to cluster:");
-    println_info!("  Edges:");
-    println_info!(
-        "    Min: {}",
-        trace_edge_dists
-            .clone()
-            .min()
-            .expect("failed to get min edge distance for trace.")
-    );
-    println_info!(
-        "    Max: {}",
-        trace_edge_dists
-            .clone()
-            .max()
-            .expect("failed to get max edge distance for trace.")
-    );
-    println_info!("  Syscalls:");
-    println_info!(
-        "    Min: {}",
-        trace_syscall_dists
-            .clone()
-            .min()
-            .expect("failed to get min syscall distance for trace.")
-    );
-    println_info!(
-        "    Max: {}",
-        trace_syscall_dists
-            .clone()
-            .max()
-            .expect("failed to get max syscall distance for trace.")
-    );
-
-    println_info!("");
-
-    println_info!("Distances from cluster to cluster:");
-    println_info!("  Edges:");
-    println_info!(
-        "    Min: {}",
-        cluster_edge_dists
-            .clone()
-            .min()
-            .unwrap_or(config.cluster_formation_edge_tolerance)
-    );
-    println_info!(
-        "    Max: {}",
-        cluster_edge_dists
-            .clone()
-            .max()
-            .unwrap_or(config.cluster_formation_edge_tolerance)
-    );
-    println_info!("  Syscalls:");
-    println_info!(
-        "    Min: {}",
-        cluster_syscall_dists
-            .clone()
-            .min()
-            .unwrap_or(config.cluster_formation_syscall_tolerance)
-    );
-    println_info!(
-        "    Max: {}",
-        cluster_syscall_dists
-            .clone()
-            .max()
-            .unwrap_or(config.cluster_formation_syscall_tolerance)
+    println_info!("Found in the cluster but not the trace:");
+    println!(
+        "{}",
+        match component {
+            Component::Edges => cluster_unique_edges,
+            Component::Syscalls => cluster_unique_syscalls,
+        }
+        .iter()
+        .map(|item| item.to_string())
+        .collect::<Vec<String>>()
+        .join(", ")
     );
 
     Ok(())
 }
 
 fn main() -> ExitCode {
+    common::reset_sigpipe();
     let cli = Cli::parse();
 
-    match run(&cli.output_dir, &cli.trace_uid) {
+    match run(&cli.output_dir, &cli.trace_uid, cli.component) {
         Ok(_) => ExitCode::SUCCESS,
         Err(err) => {
             println_error!(err);

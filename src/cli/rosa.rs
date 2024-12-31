@@ -33,6 +33,7 @@ use rosa::{
 
 use crate::tui::RosaTui;
 
+mod common;
 #[macro_use]
 #[allow(unused_macros)]
 mod logging;
@@ -47,39 +48,54 @@ mod tui;
     propagate_version = true
 )]
 struct Cli {
-    /// The configuration file to use.
+    /// The configuration file to use. Generate the default configuration with
+    /// `rosa-generate-config` or see the documentation (in doc/) for a detailed guide.
     #[arg(
-        short = 'c',
-        long = "config-file",
+        long_help,
         default_value = "config.toml",
-        value_name = "FILE"
+        value_name = "FILE",
+        help = "The configuration file to use"
     )]
     config_file: PathBuf,
 
     /// Force the creation of the output directory, potentially overwriting existing results.
-    #[arg(short = 'f', long = "force")]
+    #[arg(
+        long_help,
+        short,
+        long,
+        help = "Force (auto-delete existing) output directory"
+    )]
     force: bool,
 
-    /// Do not wait until all fuzzers have stabilized before starting the detection.
-    #[arg(short = 'W', long = "dont-wait-on-fuzzers", action = clap::ArgAction::SetFalse)]
-    wait_for_fuzzers: bool,
-
-    /// Be more verbose.
-    #[arg(short = 'v', long = "verbose")]
+    /// Provide more verbose output about each fuzzer instance.
+    #[arg(long_help, short, long, help = "Be more verbose")]
     verbose: bool,
 
-    /// Disable the TUI and display more linear output on the console.
-    #[arg(long = "no-tui")]
+    /// Disable the TUI (Terminal User Interface) and display more linear output on the console.
+    #[arg(long_help, short, long, help = "Disable the TUI")]
     no_tui: bool,
 
-    /// Collect traces from all the fuzzers if there are multiple instances (by default, only
-    /// traces from the "main" instance will be collected). Be warned: this will probably speed up
-    /// backdoor detection, but it might also produce duplicate traces. Use afl-cmin after the
-    /// fact to eliminate duplicates.
-    #[arg(long = "collect-from-all-fuzzers")]
+    /// Wait until all fuzzer instances have stabilized before starting the detection campaign.
+    /// This means that some fuzzer instances might have stabilized early and thus might have been
+    /// running for a while when the detection campaign actually begins.
+    #[arg(
+        long_help,
+        long,
+        action = clap::ArgAction::SetFalse,
+        help = "Wait until all fuzzer instances have stabilized before starting"
+    )]
+    wait_for_fuzzers: bool,
+
+    /// Collect traces from all the fuzzer instances if there are multiple of them. By default,
+    /// only traces from the "main" instance will be collected. Be warned: this will probably speed
+    /// up backdoor detection, but it might also produce duplicate traces, since there may be
+    /// instrumentation differences between different instances.
+    #[arg(long_help, long, help = "Collect traces from all fuzzers")]
     collect_from_all_fuzzers: bool,
 }
 
+/// Evaluate an expression and clean up any fuzzer instance processes if the expression evaluates
+/// to [Err].
 macro_rules! with_cleanup {
     ( $action:expr, $fuzzer_processes:expr ) => {{
         $action.or_else(|err| {
@@ -91,18 +107,12 @@ macro_rules! with_cleanup {
     }};
 }
 
-/// Helper function to start a fuzzer process.
+/// Start a fuzzer instance process.
 ///
-/// Whenever we start up a fuzzer, we should make sure to wait for it to fully stabilize before
-/// continuing; especially when loading multiple seed inputs, the fuzzer might take a moment to
-/// start. This function blocks until the fuzzer has fully started running if provided with
-/// `wait_for_each_fuzzer`, otherwise it starts up the main process before all fuzzers have
-/// stabilized.
-///
-/// # Parameters
-/// * `fuzzer_process` - The fuzzer process to start.
-/// * `wait_for_each_fuzzer` - Fully block until every fuzzer has fully started up.
-/// * `verbose` - Whether we're being verbose or not (affects messages printed to stdout).
+/// If `wait_for_fuzzers` is [false], then all fuzzer instances are started in a non-blocking way
+/// (i.e., we do not wait for them to stabilize). Otherwise, we block and wait for them to fully
+/// stabilize, which means that some instances may have been running for longer than others when
+/// all instances have been started.
 fn start_fuzzer_process(
     fuzzer_process: &mut FuzzerProcess,
     wait_for_fuzzers: bool,
@@ -137,26 +147,21 @@ fn start_fuzzer_process(
 
 /// Run the backdoor detection tool.
 ///
-/// # Arguments
-/// * `config_file` - Path to the configuration file.
-/// * `force` - Force the overwrite of the output directory if it exists.
-/// * `wait_for_fuzzers` - Fully block until all fuzzers have started and are stable before
-///   starting the detection campaign.
-/// * `verbose` - Display verbose messages.
-/// * `no_tui` - Disable the TUI.
-/// * `collect_from_all_fuzzers` - Collect traces from all fuzzer instances (instead of just
-///   "main").
+/// This function implements the backdoor detection approach introduced by ROSA:
+/// * Phase 1: collect family-representative inputs
+/// * Phase 2: collect new inputs and use metamorphic oracle with family-representative inputs
 fn run(
     config_file: &Path,
     force: bool,
-    wait_for_fuzzers: bool,
     verbose: bool,
     no_tui: bool,
+    wait_for_fuzzers: bool,
     collect_from_all_fuzzers: bool,
 ) -> Result<(), RosaError> {
     // Load the configuration and set up the output directories.
     let config = Config::load(config_file)?;
     config.setup_dirs(force)?;
+    // We save the config in the output directory for reproducibility puproses.
     config.save(&config.output_dir.join("config").with_extension("toml"))?;
     config.set_current_phase(RosaPhase::Starting)?;
     config.set_current_coverage(0.0, 0.0)?;
@@ -173,10 +178,10 @@ fn run(
     // Set up a hashmap to keep track of known traces via their UIDs.
     let mut known_traces = HashMap::new();
 
-    // Set up a random number to use as a seed for the fuzzers.
+    // Set up a random number that the fuzzers may use as a seed.
     let fuzzer_seed = rand::thread_rng().gen_range(u32::MIN..=u32::MAX);
 
-    // Set up fuzzer processes.
+    // Set up the fuzzer processes.
     let mut fuzzer_processes: Vec<FuzzerProcess> = config
         .fuzzers
         .iter()
@@ -259,9 +264,10 @@ fn run(
     // Start the TUI thread.
     let monitor_dir = config.output_dir.clone();
     let config_file_path = config_file.to_path_buf();
-    let tui_thread_handle = match no_tui {
-        true => None,
-        false => Some(thread::spawn(move || -> Result<(), RosaError> {
+    let tui_thread_handle = if no_tui {
+        None
+    } else {
+        Some(thread::spawn(move || -> Result<(), RosaError> {
             let mut tui = RosaTui::new(&config_file_path, &monitor_dir);
             tui.start()?;
 
@@ -283,7 +289,7 @@ fn run(
             tui.stop()?;
 
             Ok(())
-        })),
+        }))
     };
 
     // We're good to go, update the current phase.
@@ -292,9 +298,8 @@ fn run(
     // Loop until Ctrl-C.
     while !rosa_should_stop.load(Ordering::SeqCst) {
         if !already_warned_about_crashes && no_tui {
-            // Check for crashes; if some of the inputs crash, the fuzzer will most likely get
-            // oriented towards that family of inputs, which decreases the overall chance of
-            // finding backdoors.
+            // Check for crashes; if some of the inputs crash, the crashes might hide backdoor
+            // behavior or otherwise impede backdoor detection.
             config.fuzzers.iter().try_for_each(|fuzzer_config| {
                 if with_cleanup!(
                     fuzzer::fuzzer_found_crashes(&fuzzer_config.crashes_dir),
@@ -316,40 +321,37 @@ fn run(
 
         // Collect new traces.
         let new_traces = with_cleanup!(
-            match collect_from_all_fuzzers {
-                true => {
-                    config
-                        .fuzzers
-                        .iter()
-                        .try_fold(Vec::new(), |mut new_traces, fuzzer_config| {
-                            let mut traces = trace::load_traces(
-                                &fuzzer_config.test_input_dir,
-                                &fuzzer_config.trace_dump_dir,
-                                &fuzzer_config.name,
-                                &mut known_traces,
-                                // Skip missing traces, because the fuzzer is continually producing
-                                // new ones, and we might miss some because of the timing of the
-                                // writes; it's okay, we'll pick them up on the next iteration.
-                                true,
-                            )?;
+            if collect_from_all_fuzzers {
+                config
+                    .fuzzers
+                    .iter()
+                    .try_fold(Vec::new(), |mut new_traces, fuzzer_config| {
+                        let mut traces = trace::load_traces(
+                            &fuzzer_config.test_input_dir,
+                            &fuzzer_config.trace_dump_dir,
+                            &fuzzer_config.name,
+                            &mut known_traces,
+                            // Skip missing traces, because the fuzzer is continually producing
+                            // new ones, and we might miss some because of the timing of the
+                            // writes; it's okay, we'll pick them up on the next iteration.
+                            true,
+                        )?;
 
-                            new_traces.append(&mut traces);
-                            Ok(new_traces)
-                        })
-                }
-                false => {
-                    let main_fuzzer = config.main_fuzzer()?;
-                    trace::load_traces(
-                        &main_fuzzer.test_input_dir,
-                        &main_fuzzer.trace_dump_dir,
-                        "main",
-                        &mut known_traces,
-                        // Skip missing traces, because the fuzzer is continually producing new
-                        // ones, and we might miss some because of the timing of the writes; it's
-                        // okay, we'll pick them up on the next iteration.
-                        true,
-                    )
-                }
+                        new_traces.append(&mut traces);
+                        Ok(new_traces)
+                    })
+            } else {
+                let main_fuzzer = config.main_fuzzer()?;
+                trace::load_traces(
+                    &main_fuzzer.test_input_dir,
+                    &main_fuzzer.trace_dump_dir,
+                    "main",
+                    &mut known_traces,
+                    // Skip missing traces, because the fuzzer is continually producing new
+                    // ones, and we might miss some because of the timing of the writes; it's
+                    // okay, we'll pick them up on the next iteration.
+                    true,
+                )
             },
             fuzzer_processes
         )?;
@@ -364,6 +366,7 @@ fn run(
         let (edge_coverage, syscall_coverage) = trace::get_coverage(&current_traces);
         config.set_current_coverage(edge_coverage, syscall_coverage)?;
 
+        // Update stats every second.
         if Instant::now().duration_since(last_log_time).as_secs() >= 1 {
             with_cleanup!(
                 config.log_stats(
@@ -554,6 +557,7 @@ fn run(
 }
 
 fn main() -> ExitCode {
+    common::reset_sigpipe();
     let cli = Cli::parse();
 
     match run(

@@ -7,6 +7,7 @@ use std::{io, path::PathBuf, process::ExitCode};
 
 use colored::Colorize;
 
+mod common;
 #[macro_use]
 #[allow(unused_macros)]
 mod logging;
@@ -17,13 +18,64 @@ use rosa::{
     error::RosaError,
 };
 
-/// Get (and parse) some input from stdin.
+/// Generate a configuration for a fuzzer.
 ///
-/// # Parameters
-/// * `question` - The question to ask the user (e.g., "Username").
-/// * `convert` - A conversion function from raw input ([String]) to the expected type `T`.
-/// * `default` - A default value (in case the input is empty).
-/// * `printable_default` - A printable version of the default value that we can show to the user.
+/// This is a helper function to avoid repetition when generating fuzzer configurations.
+fn generate_fuzzer_config(
+    name: &str,
+    power_schedule: &str,
+    instrument_libs: bool,
+    ascii: bool,
+    main: bool,
+) -> FuzzerConfig {
+    let env = vec![
+        ("AFL_SYNC_TIME", "1"),
+        ("AFL_COMPCOV_LEVEL", "2"),
+        ("AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES", "1"),
+        ("AFL_SKIP_CPUFREQ", "1"),
+    ];
+    let cmd = vec!["-Q", "-c", "0", "-p", power_schedule];
+
+    let env = if instrument_libs {
+        [env, vec![("AFL_INST_LIBS", "1")]].concat()
+    } else {
+        env
+    };
+
+    let (env, cmd) = if ascii {
+        (
+            [env, vec![("AFL_NO_ARITH", "1")]].concat(),
+            [cmd, vec!["-a", "ascii"]].concat(),
+        )
+    } else {
+        (env, cmd)
+    };
+
+    let cmd = if main {
+        // Only the main instance needs to dump traces by default.
+        [cmd, vec!["-r", "-M", name]].concat()
+    } else {
+        [cmd, vec!["-S", name]].concat()
+    };
+
+    FuzzerConfig {
+        name: name.to_string(),
+        env: env
+            .into_iter()
+            .map(|(key, value)| (key.to_string(), value.to_string()))
+            .collect(),
+        cmd: cmd.into_iter().map(|s| s.to_string()).collect(),
+        test_input_dir: vec![name, "queue"].into_iter().collect(),
+        trace_dump_dir: vec![name, "trace_dumps"].into_iter().collect(),
+        crashes_dir: vec![name, "crashes"].into_iter().collect(),
+    }
+}
+
+/// Get (and parse) some input from `stdin`.
+///
+/// Ask a question and parse some input. The input will be passed to a conversion function, and if
+/// it is empty a default value will be used instead. A printable default is supplied to be shown
+/// to the user.
 fn get_input<T, F>(
     question: &str,
     convert: F,
@@ -65,7 +117,7 @@ where
 fn generate_config() -> Result<(Config, PathBuf), RosaError> {
     let default_config_file_name = PathBuf::from("config.toml");
     let default_rosa_output_dir = PathBuf::from("rosa-out");
-    let default_phase_1_duration = 20;
+    let default_phase_1_duration = 60;
     let default_target_path: PathBuf = ["/path", "to", "target"].iter().collect();
     let default_target_arguments = "".to_string();
     let default_fuzzer_path: PathBuf = ["/root", "aflpp", "afl-fuzz"].iter().collect();
@@ -73,153 +125,12 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
     let default_seed_dir_path = PathBuf::from("seeds");
 
     let default_fuzzer_configs = vec![
-        FuzzerConfig {
-            name: "main".to_string(),
-            env: vec![
-                ("AFL_INST_LIBS", "1"),
-                ("AFL_NO_ARITH", "1"),
-                ("AFL_SYNC_TIME", "1"),
-                ("AFL_COMPCOV_LEVEL", "2"),
-                ("AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES", "1"),
-                ("AFL_SKIP_CPUFREQ", "1"),
-            ]
-            .into_iter()
-            .map(|(key, value)| (key.to_string(), value.to_string()))
-            .collect(),
-            cmd: vec![
-                "-r", "-Q", "-c", "0", "-a", "ascii", "-p", "explore", "-M", "main",
-            ]
-            .into_iter()
-            .map(|s| s.to_string())
-            .collect(),
-            test_input_dir: vec!["main", "queue"].into_iter().collect(),
-            trace_dump_dir: vec!["main", "trace_dumps"].into_iter().collect(),
-            crashes_dir: vec!["main", "crashes"].into_iter().collect(),
-        },
-        FuzzerConfig {
-            name: "fast-libs".to_string(),
-            env: vec![
-                ("AFL_INST_LIBS", "1"),
-                ("AFL_NO_ARITH", "1"),
-                ("AFL_SYNC_TIME", "1"),
-                ("AFL_COMPCOV_LEVEL", "2"),
-                ("AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES", "1"),
-                ("AFL_SKIP_CPUFREQ", "1"),
-            ]
-            .into_iter()
-            .map(|(key, value)| (key.to_string(), value.to_string()))
-            .collect(),
-            cmd: vec![
-                "-r",
-                "-Q",
-                "-c",
-                "0",
-                "-a",
-                "ascii",
-                "-p",
-                "fast",
-                "-S",
-                "fast-libs",
-            ]
-            .into_iter()
-            .map(|s| s.to_string())
-            .collect(),
-            test_input_dir: vec!["fast-libs", "queue"].into_iter().collect(),
-            trace_dump_dir: vec!["fast-libs", "trace_dumps"].into_iter().collect(),
-            crashes_dir: vec!["fast-libs", "crashes"].into_iter().collect(),
-        },
-        FuzzerConfig {
-            name: "exploit-libs".to_string(),
-            env: vec![
-                ("AFL_INST_LIBS", "1"),
-                ("AFL_SYNC_TIME", "1"),
-                ("AFL_COMPCOV_LEVEL", "2"),
-                ("AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES", "1"),
-                ("AFL_SKIP_CPUFREQ", "1"),
-            ]
-            .into_iter()
-            .map(|(key, value)| (key.to_string(), value.to_string()))
-            .collect(),
-            cmd: vec!["-r", "-Q", "-c", "0", "-p", "exploit", "-S", "exploit-libs"]
-                .into_iter()
-                .map(|s| s.to_string())
-                .collect(),
-            test_input_dir: vec!["exploit-libs", "queue"].into_iter().collect(),
-            trace_dump_dir: vec!["exploit-libs", "trace_dumps"].into_iter().collect(),
-            crashes_dir: vec!["exploit-libs", "crashes"].into_iter().collect(),
-        },
-        FuzzerConfig {
-            name: "explore-bin".to_string(),
-            env: vec![
-                ("AFL_NO_ARITH", "1"),
-                ("AFL_SYNC_TIME", "1"),
-                ("AFL_COMPCOV_LEVEL", "2"),
-                ("AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES", "1"),
-                ("AFL_SKIP_CPUFREQ", "1"),
-            ]
-            .into_iter()
-            .map(|(key, value)| (key.to_string(), value.to_string()))
-            .collect(),
-            cmd: vec![
-                "-r",
-                "-Q",
-                "-c",
-                "0",
-                "-a",
-                "ascii",
-                "-p",
-                "explore",
-                "-S",
-                "explore-bin",
-            ]
-            .into_iter()
-            .map(|s| s.to_string())
-            .collect(),
-            test_input_dir: vec!["explore-bin", "queue"].into_iter().collect(),
-            trace_dump_dir: vec!["explore-bin", "trace_dumps"].into_iter().collect(),
-            crashes_dir: vec!["explore-bin", "crashes"].into_iter().collect(),
-        },
-        FuzzerConfig {
-            name: "fast-bin".to_string(),
-            env: vec![
-                ("AFL_NO_ARITH", "1"),
-                ("AFL_SYNC_TIME", "1"),
-                ("AFL_COMPCOV_LEVEL", "2"),
-                ("AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES", "1"),
-                ("AFL_SKIP_CPUFREQ", "1"),
-            ]
-            .into_iter()
-            .map(|(key, value)| (key.to_string(), value.to_string()))
-            .collect(),
-            cmd: vec![
-                "-r", "-Q", "-c", "0", "-a", "ascii", "-p", "fast", "-S", "fast-bin",
-            ]
-            .into_iter()
-            .map(|s| s.to_string())
-            .collect(),
-            test_input_dir: vec!["fast-bin", "queue"].into_iter().collect(),
-            trace_dump_dir: vec!["fast-bin", "trace_dumps"].into_iter().collect(),
-            crashes_dir: vec!["fast-bin", "crashes"].into_iter().collect(),
-        },
-        FuzzerConfig {
-            name: "exploit-bin".to_string(),
-            env: vec![
-                ("AFL_SYNC_TIME", "1"),
-                ("AFL_COMPCOV_LEVEL", "2"),
-                ("AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES", "1"),
-                ("AFL_SKIP_CPUFREQ", "1"),
-            ]
-            .into_iter()
-            .map(|(key, value)| (key.to_string(), value.to_string()))
-            .collect(),
-            cmd: vec!["-r", "-Q", "-c", "0", "-p", "exploit", "-S", "exploit-bin"]
-                .into_iter()
-                .map(|s| s.to_string())
-                .collect(),
-            test_input_dir: vec!["exploit-bin", "queue"].into_iter().collect(),
-            trace_dump_dir: vec!["exploit-bin", "trace_dumps"].into_iter().collect(),
-            crashes_dir: vec!["exploit-bin", "crashes"].into_iter().collect(),
-        },
+        generate_fuzzer_config("main", "explore", true, true, true),
+        generate_fuzzer_config("fast-libs", "fast", true, true, false),
+        generate_fuzzer_config("exploit-libs", "exploit", true, false, false),
+        generate_fuzzer_config("explore-bin", "explore", false, true, false),
+        generate_fuzzer_config("fast-bin", "fast", false, true, false),
+        generate_fuzzer_config("exploit-bin", "exploit", false, false, false),
     ];
 
     let config_file_name = get_input(
@@ -318,6 +229,7 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
 }
 
 fn main() -> ExitCode {
+    common::reset_sigpipe();
     let config_file: Result<PathBuf, RosaError> = generate_config()
         .and_then(|(config, config_file)| config.save(&config_file).map(|()| config_file));
 

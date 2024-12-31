@@ -13,7 +13,7 @@ use std::{
     process::{Command, ExitCode, Stdio},
 };
 
-use clap::{ArgAction, Parser, ValueEnum};
+use clap::{ArgAction, Parser};
 use colored::Colorize;
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 
@@ -25,86 +25,88 @@ use rosa::{
     trace,
 };
 
+mod common;
 #[macro_use]
 #[allow(unused_macros)]
 mod logging;
-
-/// Describe the kinds of deduplication of results.
-#[derive(Debug, Copy, Clone, ValueEnum)]
-enum DeduplicationKind {
-    /// Don't perform any deduplication.
-    None,
-    /// Perform native deduplication, based on the actual results of the evaluation.
-    ///
-    /// For this, the heuristics of the backdoor detector are used: we only deduplicate
-    /// (true/false) _positive_ results.
-    Native,
-    /// Perform full post-process deduplication for all phase-2 inputs.
-    ///
-    /// Deduplication is applied to all of the results corresponding to phase-2 inputs (i.e.,
-    /// ignoring de facto (true/false) _negatives_ from phase 1.
-    PostProcess,
-}
 
 #[derive(Parser)]
 #[command(
     author,
     version,
-    about = "Evaluate backdoor detection.",
+    about = "Evaluate a ROSA backdoor detection campaign.",
     long_about = None,
     propagate_version = true)]
 struct Cli {
     /// The ROSA output directory to pull traces from.
-    #[arg(
-        short = 'o',
-        long = "output-dir",
-        default_value = "out/",
-        value_name = "DIR"
-    )]
+    #[arg(long_help, value_name = "DIR", help = "The ROSA output directory")]
     output_dir: PathBuf,
 
-    /// Show a summary of the results.
-    #[arg(short = 's', long = "summary")]
+    /// Show a short summary of the results.
+    #[arg(long_help, short = 's', long = "summary", help = "Summarize results")]
     show_summary: bool,
 
     /// Show the output (stdout & stderr) of the selected traces.
-    #[arg(short = 'O', long = "show-output")]
+    #[arg(
+        long_help,
+        short = 'O',
+        long = "show-output",
+        help = "Show execution output"
+    )]
     show_output: bool,
 
-    /// The target program to run traces through (if empty, use the command from the main fuzzer
-    /// in the configuration).
+    /// The target program to run inputs through (if empty, use the command from the main fuzzer
+    /// instance in the configuration).
     #[arg(
+        long_help,
         short = 'p',
         long = "target-program",
-        value_name = "\"CMD ARG1 ARG2 ...\""
+        value_name = "\"CMD ARG1 ARG2 ...\"",
+        help = "The target program to use"
     )]
     target_program_cmd: Option<String>,
 
     /// The environment to use for the target program (if empty, use the environment from the main
-    /// fuzzer in the configuration).
+    /// fuzzer instance in the configuration).
     #[arg(
+        long_help,
         short = 'e',
         long = "environment",
-        value_name = "\"KEY1=VALUE1 KEY2=VALUE2 ...\""
+        value_name = "\"KEY1=VALUE1 KEY2=VALUE2 ...\"",
+        help = "The environment to use"
     )]
     target_program_env: Option<String>,
 
     /// The trace to evaluate (can be used multiple times).
-    #[arg(short = 'u', long = "trace-uid", value_name = "TRACE_UID", action = ArgAction::Append)]
+    #[arg(
+        long_help,
+        short = 'u',
+        long = "trace-uid",
+        value_name = "TRACE_UID",
+        action = ArgAction::Append,
+        help = "Selected trace UID"
+    )]
     trace_uids: Vec<String>,
 
-    /// The kind of deduplication to use.
+    /// Do not deduplicate findings. Every finding will be treated as unique.
     #[arg(
+        long_help,
         value_enum,
-        short = 'd',
-        long = "deduplication",
-        default_value_t = DeduplicationKind::Native,
-        value_name = "DEDUPLICATION_KIND"
+        short = 'D',
+        long = "no-deduplication",
+        action = ArgAction::SetFalse,
+        help = "Do not deduplicate findings"
     )]
-    deduplication_kind: DeduplicationKind,
+    deduplicate: bool,
 
-    /// The time limit to cut off at (if any).
-    #[arg(short = 't', long = "time-limit", value_name = "SECONDS")]
+    /// Do not evaluate traces analyzed past a certain time limit (in seconds).
+    #[arg(
+        long_help,
+        short = 't',
+        long = "time-limit",
+        value_name = "SECONDS",
+        help = "Trace time limit (in seconds)"
+    )]
     time_limit: Option<u64>,
 }
 
@@ -149,56 +151,11 @@ struct Sample {
     discriminant_uid: String,
 }
 
-/// The stats obtained from evaluating ROSA's findings.
-struct Stats {
-    /// The number of true positives.
-    true_positives: u64,
-    /// The number of false positives.
-    false_positives: u64,
-    /// The number of true negatives.
-    true_negatives: u64,
-    /// The number of false negatives.
-    false_negatives: u64,
-}
-
-impl Stats {
-    /// Create a new stats record.
-    pub fn new() -> Self {
-        Stats {
-            true_positives: 0,
-            false_positives: 0,
-            true_negatives: 0,
-            false_negatives: 0,
-        }
-    }
-
-    /// Add a sample to the record.
-    ///
-    /// # Arguments
-    /// * `sample` - The sample to add.
-    pub fn add_sample(&mut self, sample: &Sample) {
-        match sample.kind {
-            SampleKind::TruePositive => {
-                self.true_positives += 1;
-            }
-            SampleKind::FalsePositive => {
-                self.false_positives += 1;
-            }
-            SampleKind::TrueNegative => {
-                self.true_negatives += 1;
-            }
-            SampleKind::FalseNegative => {
-                self.false_negatives += 1;
-            }
-        }
-    }
-}
-
 /// Check a ROSA decision.
 ///
-/// As explained in the module-level doc, the decision's test input will be fed to the
-/// **ground-truth** program, and we'll check if the string `***BACKDOOR TRIGGERED***` appears in
-/// `stderr`.
+/// The test input is run through the ground-truth version of the target program, and we check to
+/// see if `"***BACKDOOR TRIGGERED***"` appears in the output (`stderr` or `stdout`). We then check
+/// against the decision to find out if the finding is a true/false positive/negative.
 fn check_decision(
     cmd: &[String],
     env: &HashMap<String, String>,
@@ -250,16 +207,6 @@ fn check_decision(
 }
 
 /// Run the evaluation of ROSA's findings.
-///
-/// # Arguments
-/// * `output_dir` - Path to the output directory where ROSA's findings are stored.
-/// * `target_program_cmd` - The command to use to run the "ground-truth" program.
-/// * `target_program_env` - The environment to pass to the "ground-truth" program.
-/// * `trace_uids` - The unique IDs of the traces to evaluate (if empty, all traces are evaluated).
-/// * `show_summary` - Show a summary of the results.
-/// * `show_output` - Show the output (stderr & stdout) when executing the target program.
-/// * `deduplication_kind` - The kind of deduplication to use.
-/// * `time_limit` - The time limit (if any) to cut off at.
 #[allow(clippy::too_many_arguments)]
 fn run(
     output_dir: &Path,
@@ -268,7 +215,7 @@ fn run(
     trace_uids: &[String],
     show_summary: bool,
     show_output: bool,
-    deduplication_kind: DeduplicationKind,
+    deduplicate: bool,
     time_limit: Option<u64>,
 ) -> Result<(), RosaError> {
     let config = Config::load(&output_dir.join("config").with_extension("toml"))?;
@@ -361,106 +308,58 @@ fn run(
     // Sort by decision time.
     samples.sort_by(|sample1, sample2| sample1.seconds.cmp(&sample2.seconds));
 
-    let samples = match deduplication_kind {
-        DeduplicationKind::None => samples,
-        DeduplicationKind::Native => {
-            let mut known_traces = HashSet::new();
-            let samples: Vec<Sample> = samples
-                .clone()
-                .into_iter()
-                .filter_map(|sample| match sample.kind {
-                    // Only deduplicate (true/false) _positives_, as that is what ROSA does to
-                    // deduplicate while running.
-                    SampleKind::TruePositive | SampleKind::FalsePositive => known_traces
-                        .insert(sample.clone().discriminant_uid)
-                        .then_some(sample),
-                    // All other kinds of inputs are left in the same state.
-                    _ => Some(sample),
-                })
-                .collect();
-            println_info!("  ({} traces remaining after deduplication)", samples.len());
+    let samples = if deduplicate {
+        let mut known_traces = HashSet::new();
+        let samples: Vec<Sample> = samples
+            .clone()
+            .into_iter()
+            .filter_map(|sample| match sample.kind {
+                // Only deduplicate (true/false) _positives_, as that is what ROSA does to
+                // deduplicate while running.
+                SampleKind::TruePositive | SampleKind::FalsePositive => known_traces
+                    .insert(sample.clone().discriminant_uid)
+                    .then_some(sample),
+                // All other kinds of inputs are left in the same state.
+                _ => Some(sample),
+            })
+            .collect();
+        println_info!("  ({} traces remaining after deduplication)", samples.len());
 
-            samples
-        }
-        DeduplicationKind::PostProcess => {
-            // Remove duplicate traces based on the discriminant UID.
-            // For the traces which arrived in phase 2 (when the oracle is active), we can simply
-            // deduplicate all of them based on a single hash set. It does not make sense to count
-            // two traces with the same discriminant UID as two unique entities, as the
-            // discriminant UID should ensure that the behavior and related input family are
-            // unique.
-            //
-            // This can have the following effects (as far as I know):
-            // * TP removed because of existing TP - neutral effect (we can't miss a backdoor this
-            //   way).
-            // * TP removed because of existing FP - unfortunate, as we lose a TP, but also
-            //   probably a sign that the TP was not different enough. Maybe there is backdoor
-            //   contamination at play, or the backdoor is very well hidden, mimicking similar
-            //   benign behaviors. We might miss a backdoor this way.
-            // * FP removed because of existing TP - this, again, is probably the result of
-            //   backdoor contamination or a well hidden backdoor, but in this case it works in our
-            //   favor. Positive effect.
-            // * FP removed because of existing FP - positive effect (less FPs overall).
-            // * TN removed because of TN - neutral effect (we don't care about TNs).
-            // * TN removed because of FN - we have probably discovered an "inoffensive trigger"
-            //   (in terms of behavior) before its TN equivalent. This can mean that backdoor
-            //   contamination happened, or that the ground-truth marker can be triggered without
-            //   divergent behavior (can be the case for some targets). So, negative or neutral
-            //   effect.
-            // * FN removed because of TN - positive effect (it's the ground-truth marker scenario
-            //   from the previous case).
-            // * FN removed because of FN - positive effect (less FNs overall).
-            let mut known_traces = HashSet::new();
-            let samples: Vec<Sample> = samples
-                .clone()
-                .into_iter()
-                .filter_map(|sample| {
-                    match sample.seconds
-                        > config.seed_conditions.seconds.expect(
-                            "failed to get seconds (duration) of phase 1, needed for \
-                                    deduplication.",
-                        ) {
-                        true => known_traces
-                            .insert(sample.clone().discriminant_uid)
-                            .then_some(sample),
-                        // Phase 1 samples move right along, no deduplication (because the oracle
-                        // wasn't active in phase 1).
-                        false => Some(sample),
-                    }
-                })
-                .collect();
-            println_info!("  ({} traces remaining after deduplication)", samples.len());
-
-            samples
-        }
+        samples
+    } else {
+        samples
     };
-
-    let stats = samples.iter().try_fold(Stats::new(), |mut stats, sample| {
-        stats.add_sample(sample);
-
-        Ok(stats)
-    })?;
 
     let seconds_to_first_backdoor = samples
         .iter()
         .find(|sample| sample.kind == SampleKind::TruePositive)
         .map_or("N/A".to_string(), |sample| sample.seconds.to_string());
 
-    let header = match show_summary {
-        true => {
-            "true_positives,false_positives,true_negatives,false_negatives,\
-                seconds_to_first_backdoor"
-        }
-        false => "trace_uid,result,seconds",
+    let header = if show_summary {
+        "true_positives,false_positives,true_negatives,false_negatives,seconds_to_first_backdoor"
+    } else {
+        "trace_uid,result,seconds"
     };
 
     let body = match show_summary {
         true => format!(
             "{},{},{},{},{}",
-            stats.true_positives,
-            stats.false_positives,
-            stats.true_negatives,
-            stats.false_negatives,
+            samples
+                .iter()
+                .filter(|sample| sample.kind == SampleKind::TruePositive)
+                .count(),
+            samples
+                .iter()
+                .filter(|sample| sample.kind == SampleKind::FalsePositive)
+                .count(),
+            samples
+                .iter()
+                .filter(|sample| sample.kind == SampleKind::TrueNegative)
+                .count(),
+            samples
+                .iter()
+                .filter(|sample| sample.kind == SampleKind::FalseNegative)
+                .count(),
             seconds_to_first_backdoor
         ),
         false => samples
@@ -476,6 +375,7 @@ fn run(
 }
 
 fn main() -> ExitCode {
+    common::reset_sigpipe();
     let cli = Cli::parse();
 
     match run(
@@ -485,7 +385,7 @@ fn main() -> ExitCode {
         &cli.trace_uids,
         cli.show_summary,
         cli.show_output,
-        cli.deduplication_kind,
+        cli.deduplicate,
         cli.time_limit,
     ) {
         Ok(_) => ExitCode::SUCCESS,

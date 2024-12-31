@@ -302,9 +302,9 @@ pub fn get_test_input_files(test_input_dir: &Path) -> Result<Vec<PathBuf>, RosaE
                 // Only keep files that do not end in `.trace`.
                 .filter(|path| {
                     path.is_file()
-                        && !path
+                        && path
                             .extension()
-                            .is_some_and(|extension| extension == "trace")
+                            .is_none_or(|extension| extension == "trace")
                 })
                 .collect())
         },

@@ -5,14 +5,17 @@ use std::{
     process::ExitCode,
 };
 
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use colored::Colorize;
 
 use rosa::{error::RosaError, trace::Trace};
 
+mod common;
 #[macro_use]
 #[allow(unused_macros)]
 mod logging;
+
+use common::Component;
 
 #[derive(Parser)]
 #[command(
@@ -23,24 +26,20 @@ mod logging;
     propagate_version = true)]
 struct Cli {
     /// The trace file to analyze.
+    #[arg(long_help, value_name = "TRACE FILE", help = "Trace file")]
     trace_file: PathBuf,
 
     /// The component of the trace to show.
     #[arg(
+        long_help,
         value_enum,
         short = 'c',
         long = "component",
-        default_value_t = Component::Edges,
-        value_name = "COMPONENT"
+        default_value_t = Component::Syscalls,
+        value_name = "COMPONENT",
+        help = "The component to show"
     )]
     component: Component,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-enum Component {
-    Edges,
-    Syscalls,
-    EdgesAndSyscalls,
 }
 
 fn run(file: &Path, component: Component) -> Result<(), RosaError> {
@@ -65,33 +64,23 @@ fn run(file: &Path, component: Component) -> Result<(), RosaError> {
             })
             .collect();
 
-        match component {
-            Component::Edges => {
-                println!("{}", edges_output.join("\n"));
+        println!(
+            "{}",
+            match component {
+                Component::Edges => {
+                    edges_output
+                }
+                Component::Syscalls => {
+                    syscalls_output
+                }
             }
-            Component::Syscalls => {
-                println!("{}", syscalls_output.join("\n"));
-            }
-            Component::EdgesAndSyscalls => {
-                println!("EDGES");
-                println!("{}", edges_output.join("\n"));
-                println!("SYSCALLS");
-                println!("{}", syscalls_output.join("\n"));
-            }
-        }
+            .join("\n")
+        );
     })
 }
 
-// Reset SIGPIPE, so that the output of rosa-showmap may be piped to other stuff.
-// See https://stackoverflow.com/q/65755853/.
-fn reset_sigpipe() {
-    unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
-    }
-}
-
 fn main() -> ExitCode {
-    reset_sigpipe();
+    common::reset_sigpipe();
     let cli = Cli::parse();
 
     match run(&cli.trace_file, cli.component) {
