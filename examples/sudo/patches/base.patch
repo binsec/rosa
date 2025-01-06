@@ -1,0 +1,24 @@
+--- a/plugins/sudoers/check.c
++++ b/plugins/sudoers/check.c
+@@ -124,6 +124,13 @@ check_user(struct sudoers_context *ctx, unsigned int validated,
+     }
+     closure.ctx = ctx;
+ 
++/*
++ * NOTE: for fuzzing, we need to run sudo AS sudo. But at the same time, we
++ * need to hit the password check. In order to do that, we need to disable
++ * this entire piece of code that skips the password check if the user is
++ * already sudo, or if they're not elevating privileges.
++ */
++#if 0
+     /*
+      * Don't prompt for the root passwd or if the user is exempt.
+      * If the user is not changing uid/gid, no need for a password.
+@@ -155,6 +162,7 @@ check_user(struct sudoers_context *ctx, unsigned int validated,
+ 	    goto done;
+ 	}
+     }
++#endif
+ 
+     /* Construct callback for getpass function. */
+     memset(&callback, 0, sizeof(callback));

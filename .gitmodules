@@ -2,3 +2,7 @@
 	path = fuzzers/aflpp/aflpp
 	url = https://github.com/AFLplusplus/AFLplusplus.git
 	branch = stable
+[submodule "sudo-1.9.15p5"]
+	path = examples/sudo/target/sudo-1.9.15p5
+	url = git@github.com:sudo-project/sudo.git
+	branch = main
