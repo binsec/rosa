@@ -1,0 +1,9 @@
+.dockerignore
+.git*
+.pre-commit-config.yaml
+IMAGE
+VERSION
+build.sh
+run.sh
+Dockerfile
+TODO
