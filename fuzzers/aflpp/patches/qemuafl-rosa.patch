@@ -1,0 +1,186 @@
+--- a/accel/tcg/cpu-exec.c
++++ b/accel/tcg/cpu-exec.c
+@@ -81,6 +81,19 @@ __thread abi_ulong afl_prev_loc;
+ 
+ struct cmp_map *__afl_cmp_map;
+ 
++/*
++ * Set up the runtime trace information.
++ *
++ * This is the struct that will track the runtime trace information for the
++ * current execution, and store it in shared memory accessible by the fuzzer.
++ *
++ * Also see `qemuafl/imported/runtime-trace.h`.
++ */
++struct runtime_trace __afl_runtime_trace = {
++    .edges = dummy,
++    .syscalls = dummy,
++};
++
+ /* Set in the child process in forkserver mode: */
+ 
+ static int forkserver_installed = 0;
+@@ -356,6 +369,31 @@ void afl_setup(void) {
+ 
+   }
+ 
++  /* Get access to the shared memory used for tracking runtime trace info. */
++  if (getenv("___AFL_ROSAS_CANTINA___")) {
++
++    /* Edge trace. */
++    id_str = getenv(EDGE_TRACE_SHM_ENV_VAR);
++    if (id_str) {
++
++      u32 shm_id = atoi(id_str);
++      __afl_runtime_trace.edges = shmat(shm_id, NULL, 0);
++      if (__afl_runtime_trace.edges == (void*)-1) exit(1);
++
++    }
++
++    /* Syscall trace. */
++    id_str = getenv(SYSCALL_TRACE_SHM_ENV_VAR);
++    if (id_str) {
++
++      u32 shm_id = atoi(id_str);
++      __afl_runtime_trace.syscalls = shmat(shm_id, NULL, 0);
++      if (__afl_runtime_trace.syscalls == (void*)-1) exit(1);
++
++    }
++
++  }
++
+   if (getenv("AFL_INST_LIBS")) {
+ 
+     afl_start_code = 0;
+@@ -791,6 +829,9 @@ void afl_persistent_iter(CPUArchState *env) {
+ 
+         /* Exit the persistent loop on pipe error */
+         afl_area_ptr = dummy;
++        __afl_runtime_trace.edges = dummy;
++        __afl_runtime_trace.syscalls = dummy;
++
+         exit(0);
+ 
+       }
+@@ -817,6 +858,8 @@ void afl_persistent_iter(CPUArchState *env) {
+   } else {
+ 
+     afl_area_ptr = dummy;
++    __afl_runtime_trace.edges = dummy;
++    __afl_runtime_trace.syscalls = dummy;
+     exit(0);
+ 
+   }
+--- a/accel/tcg/translate-all.c
++++ b/accel/tcg/translate-all.c
+@@ -89,6 +89,7 @@ void HELPER(afl_maybe_log)(target_ulong cur_loc) {
+   register uintptr_t afl_idx = cur_loc ^ afl_prev_loc;
+ 
+   INC_AFL_AREA(afl_idx);
++  LOG_AFL_EDGE(afl_idx);
+ 
+   // afl_prev_loc = ((cur_loc & (MAP_SIZE - 1) >> 1)) |
+   //                ((cur_loc & 1) << ((int)ceil(log2(MAP_SIZE)) -1));
+--- a/linux-user/i386/cpu_loop.c
++++ b/linux-user/i386/cpu_loop.c
+@@ -240,6 +240,15 @@ void cpu_loop(CPUX86State *env)
+               env->eip = afl_persistent_addr;
+               continue;
+             }
++
++            /*
++             * This is the x86_64 syscall; log it in the syscall runtime
++             * trace.
++             */
++            if (afl_must_instrument(pc)) {
++              LOG_AFL_SYSCALL(env->regs[R_EAX]);
++            }
++
+             ret = do_syscall(env,
+                              env->regs[R_EAX],
+                              env->regs[R_EDI],
+--- a/qemuafl/common.h
++++ b/qemuafl/common.h
+@@ -37,6 +37,7 @@
+ #include "imported/config.h"
+ #include "imported/types.h"
+ #include "imported/cmplog.h"
++#include "imported/runtime-trace.h"
+ #include "api.h"
+ 
+ /* We use one additional file descriptor to relay "needs translation"
+@@ -124,6 +125,9 @@ extern __thread abi_ulong afl_prev_loc;
+ 
+ extern struct cmp_map *__afl_cmp_map;
+ 
++/* Runtime trace info. */
++extern struct runtime_trace __afl_runtime_trace;
++
+ void afl_setup(void);
+ void afl_forkserver(CPUState *cpu);
+ void afl_persistent_iter(CPUArchState *env);
+--- /dev/null
++++ b/qemuafl/imported/runtime-trace.h
+@@ -0,0 +1,62 @@
++/*
++ * Module to track runtime trace information when executing a program via QEMU.
++ */
++
++#ifndef _AFL_RUNTIME_TRACE_H
++#define _AFL_RUNTIME_TRACE_H
++
++#include "config.h"
++
++/*
++ * AFL runtime trace info environment variables to share data between QEMU and
++ * the fuzzer.
++ */
++#define EDGE_TRACE_SHM_ENV_VAR "__AFL_EDGE_TRACE_SHM_ID"
++#define SYSCALL_TRACE_SHM_ENV_VAR "__AFL_SYSCALL_TRACE_SHM_ID"
++
++
++/*
++ * This is based on the number of available syscalls in x86_64. Maybe it should
++ * be modified for other architectures, if they have more possible syscalls.
++ */
++#define RUNTIME_TRACE_MAX_SYSCALLS 600
++
++
++/*
++ * Macros to update the runtime traces for AFL++.
++ *
++ * These macros update the edge and syscall runtime traces accordingly.
++ */
++#define LOG_AFL_EDGE(edge)                       \
++    do {                                         \
++        if (__afl_runtime_trace.edges) {         \
++            __afl_runtime_trace.edges[edge] = 1; \
++        }                                        \
++    } while(0)
++
++#define LOG_AFL_SYSCALL(syscall)                       \
++    do {                                               \
++        if (__afl_runtime_trace.syscalls) {            \
++            __afl_runtime_trace.syscalls[syscall] = 1; \
++        }                                              \
++    } while(0)
++
++
++/*
++ * The runtime trace structure.
++ *
++ * This structure holds all necessary information about the runtime traces.
++ * Params:
++ *   - edges: the existential vector of edge IDs (XORs of basic block IDs) that
++ *            were encountered in the runtime trace. It is essentially a
++ *            one-hot representation, but with 1s on the indices of the
++ *            encountered edges and 0s on every other index.
++ *   - syscalls: similarly, the existential vector of syscalls that were
++ *               encountered in the runtime trace.
++ */
++struct runtime_trace {
++    u8* edges;
++    u8* syscalls;
++};
++
++#endif /* _AFL_RUNTIME_TRACE_H */

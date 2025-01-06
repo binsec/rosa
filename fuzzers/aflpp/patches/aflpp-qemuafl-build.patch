@@ -1,0 +1,20 @@
+diff --git a/qemu_mode/build_qemu_support.sh b/qemu_mode/build_qemu_support.sh
+index ecc90ef5..b5ff6001 100755
+--- a/qemu_mode/build_qemu_support.sh
++++ b/qemu_mode/build_qemu_support.sh
+@@ -30,6 +30,7 @@
+ #
+ 
+ QEMUAFL_VERSION="$(cat ./QEMUAFL_VERSION)"
++NO_CHECKOUT=1
+ 
+ echo "================================================="
+ echo "           QemuAFL build script"
+@@ -202,6 +203,7 @@ QEMU_CONF_FLAGS=" \
+   --disable-xfsctl \
+   --target-list="${CPU_TARGET}-linux-user" \
+   --without-default-devices \
++  --with-git-submodules=ignore \
+   "
+ 
+ if [ -n "${CROSS_PREFIX}" ]; then

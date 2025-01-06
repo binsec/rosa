@@ -1,0 +1,4 @@
+[submodule "aflpp"]
+	path = fuzzers/aflpp/aflpp
+	url = https://github.com/AFLplusplus/AFLplusplus.git
+	branch = stable

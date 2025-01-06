@@ -1,0 +1,811 @@
+--- a/include/forkserver.h
++++ b/include/forkserver.h
+@@ -32,6 +32,7 @@
+ #include <stdbool.h>
+ 
+ #include "types.h"
++#include "runtime-trace.h"
+ 
+ #ifdef __linux__
+ /**
+@@ -102,6 +103,8 @@ typedef struct afl_forkserver {
+ 
+   u8 *trace_bits;                       /* SHM with instrumentation bitmap  */
+ 
++  struct runtime_trace* runtime_trace;  /* SHM for runtime trace            */
++
+   s32 fsrv_pid,                         /* PID of the fork server           */
+       child_pid,                        /* PID of the fuzzed program        */
+       child_status,                     /* waitpid result for the child     */
+--- /dev/null
++++ b/include/runtime-trace.h
+@@ -0,0 +1,62 @@
++/*
++ * Module to track runtime trace information when executing a program via QEMU.
++ */
++
++#ifndef _AFL_RUNTIME_TRACE_H
++#define _AFL_RUNTIME_TRACE_H
++
++#include "config.h"
++
++/*
++ * AFL runtime trace info environment variables to share data between QEMU and
++ * the fuzzer.
++ */
++#define EDGE_TRACE_SHM_ENV_VAR "__AFL_EDGE_TRACE_SHM_ID"
++#define SYSCALL_TRACE_SHM_ENV_VAR "__AFL_SYSCALL_TRACE_SHM_ID"
++
++
++/*
++ * This is based on the number of available syscalls in x86_64. Maybe it should
++ * be modified for other architectures, if they have more possible syscalls.
++ */
++#define RUNTIME_TRACE_MAX_SYSCALLS 600
++
++
++/*
++ * Macros to update the runtime traces for AFL++.
++ *
++ * These macros update the edge and syscall runtime traces accordingly.
++ */
++#define LOG_AFL_EDGE(edge)                       \
++    do {                                         \
++        if (__afl_runtime_trace.edges) {         \
++            __afl_runtime_trace.edges[edge] = 1; \
++        }                                        \
++    } while(0)
++
++#define LOG_AFL_SYSCALL(syscall)                       \
++    do {                                               \
++        if (__afl_runtime_trace.syscalls) {            \
++            __afl_runtime_trace.syscalls[syscall] = 1; \
++        }                                              \
++    } while(0)
++
++
++/*
++ * The runtime trace structure.
++ *
++ * This structure holds all necessary information about the runtime traces.
++ * Params:
++ *   - edges: the existential vector of edge IDs (XORs of basic block IDs) that
++ *            were encountered in the runtime trace. It is essentially a
++ *            one-hot representation, but with 1s on the indices of the
++ *            encountered edges and 0s on every other index.
++ *   - syscalls: similarly, the existential vector of syscalls that were
++ *               encountered in the runtime trace.
++ */
++struct runtime_trace {
++    u8* edges;
++    u8* syscalls;
++};
++
++#endif /* _AFL_RUNTIME_TRACE_H */
+--- a/include/sharedmem.h
++++ b/include/sharedmem.h
+@@ -29,6 +29,7 @@
+ #define __AFL_SHAREDMEM_H
+ 
+ #include "types.h"
++#include "runtime-trace.h"
+ 
+ typedef struct sharedmem {
+ 
+@@ -40,10 +41,20 @@ typedef struct sharedmem {
+   char g_shm_file_path[L_tmpnam];
+   int  cmplog_g_shm_fd;
+   char cmplog_g_shm_file_path[L_tmpnam];
++
++  /* Runtime trace existential vectors. */
++  int  edges_g_shm_fd;
++  char edges_g_shm_file_path[L_tmpnam];
++  int  syscalls_g_shm_fd;
++  char syscalls_g_shm_file_path[L_tmpnam];
+ /* ========================================= */
+ #else
+   s32 shm_id;                          /* ID of the SHM region              */
+   s32 cmplog_shm_id;
++
++  /* Runtime trace existential vectors. */
++  s32 edges_shm_id;
++  s32 syscalls_shm_id;
+ #endif
+ 
+   u8 *map;                                          /* shared memory region */
+@@ -54,6 +65,10 @@ typedef struct sharedmem {
+   int             shmemfuzz_mode;
+   struct cmp_map *cmp_map;
+ 
++  /* Runtime trace stuff. */
++  int runtime_trace_mode;
++  struct runtime_trace* trace;
++
+ } sharedmem_t;
+ 
+ u8  *afl_shm_init(sharedmem_t *, size_t, unsigned char non_instrumented_mode);
+--- a/src/afl-forkserver.c
++++ b/src/afl-forkserver.c
+@@ -193,6 +193,12 @@ static list_t fsrv_list = {.element_prealloc_count = 0};
+ 
+ static void fsrv_exec_child(afl_forkserver_t *fsrv, char **argv) {
+ 
++  if (fsrv->runtime_trace != NULL) {
++
++    setenv("___AFL_ROSAS_CANTINA___", "1", 1);
++
++  }
++
+   if (fsrv->qemu_mode || fsrv->cs_mode) {
+ 
+     setenv("AFL_DISABLE_LLVM_INSTRUMENTATION", "1", 0);
+@@ -855,6 +861,12 @@ void afl_fsrv_start(afl_forkserver_t *fsrv, char **argv,
+ 
+       unsetenv(CMPLOG_SHM_ENV_VAR);  // we do not want that in non-cmplog fsrv
+ 
++    } else {
++
++      /* If we're in the cmplog forkserver, do not track runtime traces. */
++      unsetenv(EDGE_TRACE_SHM_ENV_VAR);
++      unsetenv(SYSCALL_TRACE_SHM_ENV_VAR);
++
+     }
+ 
+     /* Umpf. On OpenBSD, the default fd limit for root users is set to
+@@ -1877,12 +1889,25 @@ afl_fsrv_run_target(afl_forkserver_t *fsrv, u32 timeout,
+   if (likely(!fsrv->nyx_mode)) {
+ 
+     memset(fsrv->trace_bits, 0, fsrv->map_size);
++
++    if (fsrv->runtime_trace != NULL) {
++      /* Reset the runtime trace components. */
++      memset(fsrv->runtime_trace->edges, 0, fsrv->map_size);
++      memset(fsrv->runtime_trace->syscalls, 0, RUNTIME_TRACE_MAX_SYSCALLS);
++    }
++
+     MEM_BARRIER();
+ 
+   }
+ 
+ #else
+   memset(fsrv->trace_bits, 0, fsrv->map_size);
++  if (fsrv->runtime_trace != NULL) {
++    /* Reset the runtime trace components. */
++    memset(fsrv->runtime_trace->edges, 0, fsrv->map_size);
++    memset(fsrv->runtime_trace->syscalls, 0, RUNTIME_TRACE_MAX_SYSCALLS);
++  }
++
+   MEM_BARRIER();
+ #endif
+ 
+--- a/src/afl-fuzz-bitmap.c
++++ b/src/afl-fuzz-bitmap.c
+@@ -475,7 +475,10 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
+   }
+ 
+   u8  fn[PATH_MAX];
++  u8 *operation_name = "";
+   u8 *queue_fn = "";
++  u8 *trace_dump_fn = "";
++  size_t runtime_trace_max_syscalls = RUNTIME_TRACE_MAX_SYSCALLS;
+   u8  new_bits = 0, keeping = 0, res, classified = 0, is_timeout = 0,
+      need_hash = 1;
+   s32 fd;
+@@ -526,14 +529,26 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
+   save_to_queue:
+ 
+ #ifndef SIMPLE_FILES
++    /* Use the same operation name for both the test input file and the trace file. */
++    operation_name = describe_op(
++      afl,
++      new_bits + is_timeout,
++      NAME_MAX - strlen("id:000000,")
++    );
+ 
+     queue_fn = alloc_printf(
+         "%s/queue/id:%06u,%s%s%s", afl->out_dir, afl->queued_items,
+-        describe_op(afl, new_bits + is_timeout,
+-                    NAME_MAX - strlen("id:000000,")),
++        operation_name,
+         afl->file_extension ? "." : "",
+         afl->file_extension ? (const char *)afl->file_extension : "");
+ 
++    trace_dump_fn = alloc_printf(
++      "%s/trace_dumps/id:%06u,%s.trace",
++      afl->out_dir,
++      afl->queued_items,
++      operation_name
++    );
++
+ #else
+ 
+     queue_fn = alloc_printf(
+@@ -541,6 +556,12 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
+         afl->file_extension ? "." : "",
+         afl->file_extension ? (const char *)afl->file_extension : "");
+ 
++    trace_dump_fn = alloc_printf(
++      "%s/queue/id_%06u.trace",
++      afl->out_dir,
++      afl->queued_items
++    );
++
+ #endif                                                    /* ^!SIMPLE_FILES */
+     fd = open(queue_fn, O_WRONLY | O_CREAT | O_EXCL, DEFAULT_PERMISSION);
+     if (unlikely(fd < 0)) { PFATAL("Unable to create '%s'", queue_fn); }
+@@ -548,6 +569,34 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
+     close(fd);
+     add_to_queue(afl, queue_fn, len, 0);
+ 
++    if (afl->shm.runtime_trace_mode) {
++
++      /* Write trace dump to file. */
++      fd = open(trace_dump_fn, O_WRONLY | O_CREAT | O_EXCL, DEFAULT_PERMISSION);
++      if (unlikely(fd < 0)) { PFATAL("Unable to create '%s'", trace_dump_fn); }
++      /*
++       * The trace dump file has the following format:
++       *
++       * <size_t edges_length><size_t syscalls_length><u8[] edges><u8[] syscalls>
++       */
++      ck_write(fd, &afl->shm.map_size, sizeof(size_t), trace_dump_fn);
++      ck_write(fd, &runtime_trace_max_syscalls, sizeof(size_t), trace_dump_fn);
++      ck_write(
++        fd,
++        afl->fsrv.runtime_trace->edges,
++        sizeof(u8) * afl->shm.map_size,
++        trace_dump_fn
++      );
++      ck_write(
++        fd,
++        afl->fsrv.runtime_trace->syscalls,
++        sizeof(u8) * runtime_trace_max_syscalls,
++        trace_dump_fn
++      );
++      close(fd);
++
++    }
++
+     if (unlikely(afl->fuzz_mode) &&
+         likely(afl->switch_fuzz_mode && !afl->non_instrumented_mode)) {
+ 
+--- a/src/afl-fuzz-init.c
++++ b/src/afl-fuzz-init.c
+@@ -889,6 +889,8 @@ void perform_dry_run(afl_state_t *afl) {
+ 
+     u8  res;
+     s32 fd;
++    u8* trace_dump_fn;
++    size_t runtime_trace_max_syscalls = RUNTIME_TRACE_MAX_SYSCALLS;
+ 
+     if (unlikely(!q->len)) {
+ 
+@@ -914,6 +916,40 @@ void perform_dry_run(afl_state_t *afl) {
+ 
+     res = calibrate_case(afl, q, use_mem, 0, 1);
+ 
++    if (afl->shm.runtime_trace_mode) {
++
++      /*
++       * No matter the outcome of the calibration run, save the trace dump to
++       * file for all seed inputs.
++       */
++      trace_dump_fn = alloc_printf("%s/trace_dumps/%s.trace", afl->out_dir, fn);
++      fd = open(
++        trace_dump_fn, O_WRONLY | O_CREAT | O_EXCL, DEFAULT_PERMISSION
++      );
++      if (unlikely(fd < 0)) PFATAL("Unable to create '%s'", trace_dump_fn);
++      /*
++       * The trace dump file has the following format:
++       *
++       * <size_t edges_length><size_t syscalls_length><u8[] edges><u8[] syscalls>
++       */
++      ck_write(fd, &afl->shm.map_size, sizeof(size_t), trace_dump_fn);
++      ck_write(fd, &runtime_trace_max_syscalls, sizeof(size_t), trace_dump_fn);
++      ck_write(
++        fd,
++        afl->fsrv.runtime_trace->edges,
++        sizeof(u8) * afl->shm.map_size,
++        trace_dump_fn
++      );
++      ck_write(
++        fd,
++        afl->fsrv.runtime_trace->syscalls,
++        sizeof(u8) * runtime_trace_max_syscalls,
++        trace_dump_fn
++      );
++      close(fd);
++
++    }
++
+     if (afl->stop_soon) { return; }
+ 
+     if (res == afl->crash_mode || res == FSRV_RUN_NOBITS) {
+@@ -1891,6 +1927,14 @@ static void handle_existing_out_dir(afl_state_t *afl) {
+   if (delete_files(fn, CASE_PREFIX)) { goto dir_cleanup_failed; }
+   ck_free(fn);
+ 
++
++  /* Get rid of the runtime trace dump files. */
++
++  fn = alloc_printf("%s/trace_dumps", afl->out_dir);
++  if (delete_files(fn, CASE_PREFIX)) { goto dir_cleanup_failed; }
++  ck_free(fn);
++
++
+   /* All right, let's do <afl->out_dir>/crashes/id:* and
+    * <afl->out_dir>/hangs/id:*. */
+ 
+@@ -2183,6 +2227,12 @@ void setup_dirs_fds(afl_state_t *afl) {
+   if (mkdir(tmp, 0700)) { PFATAL("Unable to create '%s'", tmp); }
+   ck_free(tmp);
+ 
++  /* Runtime trace dump directory. */
++
++  tmp = alloc_printf("%s/trace_dumps", afl->out_dir);
++  if (mkdir(tmp, 0700)) { PFATAL("Unable to create '%s'", tmp); }
++  ck_free(tmp);
++
+   /* Sync directory for keeping track of cooperating fuzzers. */
+ 
+   if (afl->sync_id) {
+--- a/src/afl-fuzz.c
++++ b/src/afl-fuzz.c
+@@ -544,9 +544,9 @@ int main(int argc, char **argv_orig, char **envp) {
+ 
+   afl->shmem_testcase_mode = 1;  // we always try to perform shmem fuzzing
+ 
+-  // still available: HjJkKqruvwz
++  // still available: HjJkKquvwz
+   while ((opt = getopt(argc, argv,
+-                       "+a:Ab:B:c:CdDe:E:f:F:g:G:hi:I:l:L:m:M:nNo:Op:P:QRs:S:t:"
++                       "+a:Ab:B:c:CdDe:E:f:F:g:G:hi:I:l:L:m:M:nNo:Op:P:QrRs:S:t:"
+                        "T:UV:WXx:YzZ")) > 0) {
+ 
+     switch (opt) {
+@@ -658,6 +658,13 @@ int main(int argc, char **argv_orig, char **envp) {
+ 
+       }
+ 
++      case 'r': {
++
++        afl->shm.runtime_trace_mode = 1;
++        break;
++
++      }
++
+       case 's': {
+ 
+         if (optarg == NULL) { FATAL("No valid seed provided. Got NULL."); }
+@@ -1629,6 +1636,15 @@ int main(int argc, char **argv_orig, char **envp) {
+   }
+ 
+   if (afl->shm.cmplog_mode) { OKF("CmpLog level: %u", afl->cmplog_lvl); }
++  if (afl->shm.runtime_trace_mode) {
++
++    OKF(
++      "Runtime trace mode activated"
++        "(storing runtime traces in %s/trace_dumps/)",
++      afl->out_dir
++    );
++
++  }
+ 
+   /* Dynamically allocate memory for AFLFast schedules */
+   if (afl->schedule >= FAST && afl->schedule <= RARE) {
+@@ -2262,6 +2278,13 @@ int main(int argc, char **argv_orig, char **envp) {
+   afl->fsrv.trace_bits =
+       afl_shm_init(&afl->shm, afl->fsrv.map_size, afl->non_instrumented_mode);
+ 
++  if (afl->shm.runtime_trace_mode) {
++
++    /* Set the runtime trace part of the forkserver. */
++    afl->fsrv.runtime_trace = afl->shm.trace;
++
++  }
++
+   if (!afl->non_instrumented_mode && !afl->fsrv.qemu_mode &&
+       !afl->unicorn_mode && !afl->fsrv.frida_mode && !afl->fsrv.cs_mode &&
+       !afl->afl_env.afl_skip_bin_check) {
+@@ -2313,6 +2336,14 @@ int main(int argc, char **argv_orig, char **envp) {
+       afl->fsrv.map_size = new_map_size;
+       afl->fsrv.trace_bits =
+           afl_shm_init(&afl->shm, new_map_size, afl->non_instrumented_mode);
++
++      if (afl->shm.runtime_trace_mode) {
++
++        /* Set the runtime trace part of the forkserver. */
++        afl->fsrv.runtime_trace = afl->shm.trace;
++
++      }
++
+       setenv("AFL_NO_AUTODICT", "1", 1);  // loaded already
+       afl_fsrv_start(&afl->fsrv, afl->argv, &afl->stop_soon,
+                      afl->afl_env.afl_debug_child);
+--- a/src/afl-sharedmem.c
++++ b/src/afl-sharedmem.c
+@@ -37,6 +37,7 @@
+ #include "sharedmem.h"
+ #include "cmplog.h"
+ #include "list.h"
++#include "runtime-trace.h"
+ 
+ #include <stdio.h>
+ #include <unistd.h>
+@@ -76,6 +77,12 @@ void afl_shm_deinit(sharedmem_t *shm) {
+ 
+     unsetenv(SHM_ENV_VAR);
+ 
++    if (shm->runtime_trace_mode) {
++        /* Unset the runtime trace shared memory variables. */
++        unsetenv(EDGE_TRACE_SHM_ENV_VAR);
++        unsetenv(SYSCALL_TRACE_SHM_ENV_VAR);
++    }
++
+   }
+ 
+ #ifdef USEMMAP
+@@ -127,13 +134,72 @@ void afl_shm_deinit(sharedmem_t *shm) {
+ 
+   }
+ 
++  /* Runtime trace stuff. */
++  if (shm->runtime_trace_mode) {
++
++    if (shm->trace != NULL) {
++
++      if (shm->trace->edges != NULL) {
++
++        munmap(shm->trace->edges, shm->map_size);
++        shm->trace->edges = NULL;
++
++      }
++      if (shm->trace->syscalls != NULL) {
++
++        munmap(shm->trace->syscalls, RUNTIME_TRACE_MAX_SYSCALLS);
++        shm->trace->syscalls = NULL;
++
++      }
++
++      if (shm->edges_g_shm_fd != -1) {
++
++        close(shm->edges_g_shm_fd);
++        shm->edges_g_shm_fd = -1;
++
++      }
++      if (shm->syscalls_g_shm_fd != -1) {
++
++        close(shm->syscalls_g_shm_fd);
++        shm->syscalls_g_shm_fd = -1;
++
++      }
++
++      if (shm->edges_g_shm_file_path[0]) {
++
++        shm_unlink(shm->edges_g_shm_file_path);
++        shm->edges_g_shm_file_path[0] = 0;
++
++      }
++      if (shm->syscalls_g_shm_file_path[0]) {
++
++        shm_unlink(shm->syscalls_g_shm_file_path);
++        shm->syscalls_g_shm_file_path[0] = 0;
++
++      }
++
++      ck_free(shm->trace);
++
++    }
++
++  }
++
+ #else
+   shmctl(shm->shm_id, IPC_RMID, NULL);
+   if (shm->cmplog_mode) { shmctl(shm->cmplog_shm_id, IPC_RMID, NULL); }
++
++  if (shm->runtime_trace_mode) {
++
++    shmctl(shm->edges_shm_id, IPC_RMID, NULL);
++    shmctl(shm->syscalls_shm_id, IPC_RMID, NULL);
++
++  }
+ #endif
+ 
+   shm->map = NULL;
+ 
++  shm->trace = NULL;
++
+ }
+ 
+ /* Configure shared memory.
+@@ -147,11 +213,15 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
+ 
+   shm->map = NULL;
+   shm->cmp_map = NULL;
++  shm->trace = ck_alloc(sizeof(struct runtime_trace));
++  if (shm->trace == NULL) { PFATAL("no memory for runtime trace"); }
+ 
+ #ifdef USEMMAP
+ 
+   shm->g_shm_fd = -1;
+   shm->cmplog_g_shm_fd = -1;
++  shm->edges_g_shm_fd = -1;
++  shm->syscalls_g_shm_fd = -1;
+ 
+   const int shmflags = O_RDWR | O_EXCL;
+ 
+@@ -271,6 +341,91 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
+ 
+   }
+ 
++  if (shm->runtime_trace_mode) {
++
++    snprintf(
++      shm->edges_g_shm_file_path,
++      L_tmpnam,
++      "/afl_edges_%d_%ld",
++      getpid(),
++      random()
++    );
++    snprintf(
++      shm->syscalls_g_shm_file_path,
++      L_tmpnam,
++      "/afl_syscalls_%d_%ld",
++      getpid(),
++      random()
++    );
++
++    /* create the shared memory segment as if it was a file */
++    shm->edges_g_shm_fd = shm_open(
++      shm->edges_g_shm_file_path,
++      O_CREAT | O_RDWR | O_EXCL,
++      DEFAULT_PERMISSION
++    );
++    if (shm->edges_g_shm_fd == -1) { PFATAL("shm_open() failed for edges"); }
++    shm->syscalls_g_shm_fd = shm_open(
++      shm->syscalls_g_shm_file_path,
++      O_CREAT | O_RDWR | O_EXCL,
++      DEFAULT_PERMISSION
++    );
++    if (shm->syscalls_g_shm_fd == -1) {
++
++      PFATAL("shm_open() failed for syscalls");
++
++    }
++
++    /* configure the size of the shared memory segment */
++    if (ftruncate(shm->edges_g_shm_fd, map_size)) {
++
++      PFATAL("setup_shm(): ftruncate() failed for edges");
++
++    }
++    if (ftruncate(shm->syscalls_g_shm_fd, RUNTIME_TRACE_MAX_SYSCALLS)) {
++
++      PFATAL("setup_shm(): ftruncate() failed for syscalls");
++
++    }
++
++    /* map the shared memory segment to the address space of the process */
++    shm->trace->edges = mmap(
++      0,
++      map_size,
++      PROT_READ | PROT_WRITE,
++      MAP_SHARED,
++      shm->edges_g_shm_fd,
++      0
++    );
++    if (shm->trace->edges == MAP_FAILED) {
++
++      close(shm->edges_g_shm_fd);
++      shm->edges_g_shm_fd = -1;
++      shm_unlink(shm->edges_g_shm_file_path);
++      shm->edges_g_shm_file_path[0] = 0;
++      PFATAL("mmap() failed for edges");
++
++    }
++    shm->trace->syscalls = mmap(
++      0,
++      RUNTIME_TRACE_MAX_SYSCALLS,
++      PROT_READ | PROT_WRITE,
++      MAP_SHARED,
++      shm->syscalls_g_shm_fd,
++      0
++    );
++    if (shm->trace->syscalls == MAP_FAILED) {
++
++      close(shm->syscalls_g_shm_fd);
++      shm->syscalls_g_shm_fd = -1;
++      shm_unlink(shm->syscalls_g_shm_file_path);
++      shm->syscalls_g_shm_file_path[0] = 0;
++      PFATAL("mmap() failed for syscalls");
++
++    }
++
++  }
++
+ #else
+   u8 *shm_str;
+ 
+@@ -299,6 +454,33 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
+ 
+   }
+ 
++  if (shm->runtime_trace_mode) {
++
++    // for qemu+unicorn we have to increase by 8 to account for potential
++    // compcov map overwrite
++    shm->edges_shm_id = shmget(
++      IPC_PRIVATE,
++      map_size == MAP_SIZE ? map_size + 8 : map_size,
++      IPC_CREAT | IPC_EXCL | DEFAULT_PERMISSION
++    );
++    if (shm->edges_shm_id < 0) {
++
++      PFATAL("shmget() failed for edges, try running afl-system-config");
++
++    }
++    shm->syscalls_shm_id = shmget(
++      IPC_PRIVATE,
++      RUNTIME_TRACE_MAX_SYSCALLS,
++      IPC_CREAT | IPC_EXCL | DEFAULT_PERMISSION
++    );
++    if (shm->syscalls_shm_id < 0) {
++
++      PFATAL("shmget() failed for syscalls, try running afl-system-config");
++
++    }
++
++  }
++
+   if (!non_instrumented_mode) {
+ 
+     shm_str = alloc_printf("%d", shm->shm_id);
+@@ -324,6 +506,18 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
+ 
+   }
+ 
++  if (shm->runtime_trace_mode && !non_instrumented_mode) {
++
++    shm_str = alloc_printf("%d", shm->edges_shm_id);
++    setenv(EDGE_TRACE_SHM_ENV_VAR, shm_str, 1);
++    ck_free(shm_str);
++
++    shm_str = alloc_printf("%d", shm->syscalls_shm_id);
++    setenv(SYSCALL_TRACE_SHM_ENV_VAR, shm_str, 1);
++    ck_free(shm_str);
++
++  }
++
+   shm->map = shmat(shm->shm_id, NULL, 0);
+ 
+   if (shm->map == (void *)-1 || !shm->map) {
+@@ -336,6 +530,14 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
+ 
+     }
+ 
++    if (shm->runtime_trace_mode) {
++
++      // Do not leak shmem.
++      shmctl(shm->edges_shm_id, IPC_RMID, NULL);
++      shmctl(shm->syscalls_shm_id, IPC_RMID, NULL);
++
++    }
++
+     PFATAL("shmat() failed");
+ 
+   }
+@@ -356,6 +558,25 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
+ 
+   }
+ 
++  if (shm->runtime_trace_mode) {
++
++    shm->trace->edges = shmat(shm->edges_shm_id, NULL, 0);
++    shm->trace->syscalls = shmat(shm->syscalls_shm_id, NULL, 0);
++    if (
++      (shm->trace->edges == (void *)-1 || !shm->trace->edges)
++      || (shm->trace->syscalls == (void *)-1 || !shm->trace->syscalls)
++    ) {
++        // Do not leak shmem.
++        shmctl(shm->shm_id, IPC_RMID, NULL);
++        shmctl(shm->cmplog_shm_id, IPC_RMID, NULL);
++        shmctl(shm->edges_shm_id, IPC_RMID, NULL);
++        shmctl(shm->syscalls_shm_id, IPC_RMID, NULL);
++
++        PFATAL("shmat() failed");
++    }
++
++  }
++
+ #endif
+ 
+   shm->map_size = map_size;
+--- a/utils/argv_fuzzing/argvfuzz.c
++++ b/utils/argv_fuzzing/argvfuzz.c
+@@ -43,6 +43,13 @@ int __libc_start_main(int (*main)(int, char **, char **), int argc, char **argv,
+ 
+   sub_argv = afl_init_argv(&sub_argc);
+ 
++  /*
++   * Make sure that argv is always initialized correctly, i.e. that argv[0]
++   * is always non-null and that argc is always >= 1.
++   */
++  if (!sub_argv[0]) sub_argv[0] = "nonnull";
++  if (!sub_argc) sub_argc = 1;
++
+   return orig(main, sub_argc, sub_argv, init, fini, rtld_fini, stack_end);
+ 
+ }
+--- a/utils/socket_fuzzing/socketfuzz.c
++++ b/utils/socket_fuzzing/socketfuzz.c
+@@ -73,6 +73,13 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
+   (void)sockfd;
+   (void)addr;
+   (void)addrlen;
++
++  if (addr != NULL) {
++
++    addr->sa_family = AF_INET;
++
++  }
++
+   fprintf(stderr, "Info: Emulating accept on %d\n", sockfd);
+   return 0;
+ 
+@@ -109,3 +117,57 @@ int setsockopt(int sockfd, int level, int optid, const void *optdata,
+ 
+ }
+ 
++int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
++  (void)sockfd;
++  (void)addr;
++  (void)addrlen;
++
++  if (addr != NULL) {
++
++    fprintf(stderr, "info: Emulating getsockname\n");
++    // Taken from preeny.
++    struct sockaddr_in target;
++    socklen_t copylen = sizeof(target);
++
++    if (*addrlen < sizeof(target)) {
++
++      copylen = *addrlen;
++
++    }
++
++    target.sin_family = AF_INET;
++    target.sin_addr.s_addr = inet_addr("127.0.0.1");
++    target.sin_port = htons(8000);
++
++    memcpy(addr, &target, copylen);
++    *addrlen = copylen;
++
++  }
++
++  return 0;
++}
++
++ssize_t recv(int sockfd, void *buf, size_t len, int flags) {
++  (void)sockfd;
++  (void)flags;
++
++  fprintf(stderr, "info: Emulating recv\n");
++  return read(0, buf, len);
++}
++
++ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags) {
++  (void)sockfd;
++  (void) flags;
++
++  fprintf(stderr, "info: Emulating recvmsg\n");
++  return read(0, msg->msg_iov->iov_base, msg->msg_iov->iov_len);
++}
++
++int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
++  (void)sockfd;
++  (void)addr;
++  (void)addrlen;
++
++  fprintf(stderr, "info: Emulating getpeername\n");
++  return 0;
++}
