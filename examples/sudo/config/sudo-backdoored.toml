@@ -26,6 +26,8 @@ AFL_NO_ARITH = "1"
 AFL_INST_LIBS = "1"
 AFL_SYNC_TIME = "1"
 AFL_COMPCOV_LEVEL = "2"
+AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES = "1"
+AFL_SKIP_CPUFREQ = "1"
 
 [[fuzzers]]
 name = "fast-libs"
@@ -49,6 +51,8 @@ AFL_NO_ARITH = "1"
 AFL_INST_LIBS = "1"
 AFL_SYNC_TIME = "1"
 AFL_COMPCOV_LEVEL = "2"
+AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES = "1"
+AFL_SKIP_CPUFREQ = "1"
 
 [[fuzzers]]
 name = "exploit-libs"
@@ -70,6 +74,8 @@ cmd = [
 AFL_INST_LIBS = "1"
 AFL_SYNC_TIME = "1"
 AFL_COMPCOV_LEVEL = "2"
+AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES = "1"
+AFL_SKIP_CPUFREQ = "1"
 
 
 [[fuzzers]]
@@ -93,6 +99,8 @@ cmd = [
 AFL_NO_ARITH = "1"
 AFL_SYNC_TIME = "1"
 AFL_COMPCOV_LEVEL = "2"
+AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES = "1"
+AFL_SKIP_CPUFREQ = "1"
 
 [[fuzzers]]
 name = "fast-bin"
@@ -115,6 +123,8 @@ cmd = [
 AFL_NO_ARITH = "1"
 AFL_SYNC_TIME = "1"
 AFL_COMPCOV_LEVEL = "2"
+AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES = "1"
+AFL_SKIP_CPUFREQ = "1"
 
 [[fuzzers]]
 name = "exploit-bin"
@@ -135,3 +145,5 @@ cmd = [
 [fuzzers.env]
 AFL_SYNC_TIME = "1"
 AFL_COMPCOV_LEVEL = "2"
+AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES = "1"
+AFL_SKIP_CPUFREQ = "1"
