@@ -15,30 +15,9 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    criterion::Criterion, distance_metric::DistanceMetric, error::RosaError, oracle::Oracle,
+    criterion::Criterion, distance_metric::DistanceMetric, error::RosaError, fuzzer::FuzzerConfig,
+    oracle::Oracle,
 };
-
-/// A fuzzer configuration.
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct FuzzerConfig {
-    /// The name of the fuzzer instance. This is useful when performing parallel fuzzing; for
-    /// example, in AFL++, the main instance will be named with the `-M` option (e.g. `-M main`),
-    /// while the secondary instances will be named with the `-S` option (e.g. `-S secondary`).
-    /// These are the names that should be used here, to namespace the fuzzers and the traces that
-    /// they generate.
-    pub name: String,
-    /// Any environment variables that need to be passed to the fuzzer.
-    pub env: HashMap<String, String>,
-    /// The full command to invoke the fuzzer.
-    pub cmd: Vec<String>,
-    /// The directory where the fuzzer will place new test inputs.
-    pub test_input_dir: PathBuf,
-    /// The directory where the fuzzer will place new trace dumps.
-    pub trace_dump_dir: PathBuf,
-    /// The directory where the fuzzer will place found crashes. This is only useful because
-    /// crashes will hinder backdoor detection, so we'll want to keep an eye on any findings.
-    pub crashes_dir: PathBuf,
-}
 
 /// The conditions that describe when to stop collecting seed traces.
 #[derive(Serialize, Deserialize, Debug)]

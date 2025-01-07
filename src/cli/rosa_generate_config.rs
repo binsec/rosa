@@ -13,9 +13,10 @@ mod common;
 mod logging;
 
 use rosa::{
-    config::{Config, FuzzerConfig, SeedConditions},
+    config::{Config, SeedConditions},
     error,
     error::RosaError,
+    fuzzer::FuzzerConfig,
 };
 
 /// Generate a configuration for a fuzzer.
