@@ -110,9 +110,6 @@ pub struct TimedDecision {
 
 impl TimedDecision {
     /// Load a decision from file.
-    ///
-    /// # Arguments
-    /// * `file` - The file to load the decision from.
     pub fn load(file: &Path) -> Result<Self, RosaError> {
         let decision_toml = fs::read_to_string(file).map_err(|err| {
             error!(
@@ -127,10 +124,6 @@ impl TimedDecision {
     }
 
     /// Save the decision to a file.
-    ///
-    /// # Arguments
-    /// * `output_dir` - The output directory in which to save the decision file. The decision
-    ///   file's name will be the UID of the trace it's associated with (e.g. `id_000000.toml`).
     pub fn save(&self, output_dir: &Path) -> Result<(), RosaError> {
         let decision_toml = toml::to_string(&self).expect("failed to serialize decision TOML.");
         let decision_file = output_dir

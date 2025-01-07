@@ -24,10 +24,6 @@ pub enum DistanceMetric {
 impl DistanceMetric {
     /// Compute the distance between two vectors (e.g. components of runtime traces).
     ///
-    /// # Arguments
-    /// * `v1` - The first vector.
-    /// * `v2` - The second vector.
-    ///
     /// # Examples
     /// ```
     /// use rosa::distance_metric::DistanceMetric;
@@ -69,10 +65,6 @@ impl str::FromStr for DistanceMetric {
 }
 
 /// Compute the Hamming distance between two vectors.
-///
-/// # Arguments
-/// * `v1` - The first vector.
-/// * `v2` - The second vector.
 fn hamming(v1: &[u8], v2: &[u8]) -> u64 {
     assert_eq!(v1.len(), v2.len(), "vector length mismatch.");
 

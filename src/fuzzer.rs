@@ -33,11 +33,6 @@ pub struct FuzzerProcess {
 impl FuzzerProcess {
     /// Create a new fuzzer process (without spawning it).
     ///
-    /// # Arguments
-    /// * `fuzzer_cmd` - The command used to run the fuzzer.
-    /// * `fuzzer_env` - Any environment variables to be passed to the fuzzer process.
-    /// * `log_file` - The log file to use to store the fuzzer's output (`stdout` & `stderr`).
-    ///
     /// # Examples
     /// ```
     /// use std::{path::PathBuf, collections::HashMap};
@@ -181,9 +176,6 @@ impl FuzzerProcess {
 /// Most fuzzers are optimized to find crashes; if a crash is found, the fuzzer will generate more
 /// test inputs that explore that crash. This might bias the exploration of the target program, so
 /// it is useful to know if it has happened.
-///
-/// # Arguments
-/// * `crashes_dir` - The directory where the fuzzer would store any discovered crashes.
 pub fn fuzzer_found_crashes(crashes_dir: &Path) -> Result<bool, RosaError> {
     fs::read_dir(crashes_dir).map_or_else(
         |err| {
@@ -203,9 +195,6 @@ pub fn fuzzer_found_crashes(crashes_dir: &Path) -> Result<bool, RosaError> {
 ///
 /// AFL++ fuzzers leave a `fuzzer_stats` file in their output directory, that contains the PID of
 /// the fuzzer instance.
-///
-/// # Arguments
-/// * `fuzzer_dir` - The output directory of the fuzzer instance.
 fn get_fuzzer_pid(fuzzer_dir: &Path) -> Result<String, RosaError> {
     let fuzzer_stats_file = fuzzer_dir.join("fuzzer_stats");
     fs::read_to_string(&fuzzer_stats_file).map_or_else(
@@ -265,9 +254,6 @@ pub enum FuzzerStatus {
 /// Get the status of a fuzzer.
 ///
 /// **NOTE: this only works for AFL++.**
-///
-/// # Arguments
-/// * `fuzzer_dir` - The output directory of the fuzzer instance.
 pub fn get_fuzzer_status(fuzzer_dir: &Path) -> Result<FuzzerStatus, RosaError> {
     fuzzer_dir
         .is_dir()

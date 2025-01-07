@@ -31,12 +31,6 @@ pub struct Cluster {
 /// is used to determine similarity, while the criterion is used to decide how similarity will be
 /// measured in terms of the components of the traces. See [Criterion] and [DistanceMetric].
 ///
-/// # Arguments
-/// * `trace` - The trace for which to get the most similar cluster.
-/// * `clusters` - The collection of available clusters to choose from.
-/// * `criterion` - The criterion to use.
-/// * `distance_metric` - The distance metric to use.
-///
 /// # Examples
 /// ```
 /// use rosa::{
@@ -178,15 +172,6 @@ pub fn get_most_similar_cluster<'a>(
 /// This is a naive clustering algorithm; it tries to put a trace into the most similar existing
 /// cluster if it fits the criterion and the tolerances, otherwise it creates a new cluster
 /// containing the trace.
-///
-/// # Arguments
-/// * `traces` - The traces to group into clusters.
-/// * `criterion` - The criterion to use.
-/// * `distance_metric` - The distance metric to use.
-/// * `edge_tolerance` - The tolerance to consider in terms of edges. Essentially, for a tolerance
-///   `t`, a difference of up to `t` edges will be tolerated within the same cluster.
-/// * `syscall_tolerance` - The tolerance to consider in terms of syscalls. Essentially, for a
-///   tolerance `t`, a difference of up to `t` syscalls will be tolerated within the same cluster.
 ///
 /// # Examples
 /// ```
@@ -361,11 +346,6 @@ pub fn cluster_traces(
 /// This function provides a way to dump clusters into `.txt` files in order to understand which
 /// trace is in which cluster. Each cluster file is a simple `.txt` file, containing the UIDs of
 /// all the traces within the cluster, with one UID per line.
-///
-/// # Arguments
-/// * `clusters` - The clusters to save.
-/// * `output_dir` - The directory in which to save the clusters. One file will be created per
-///   cluster; the file's name will be the cluster's UID.
 ///
 /// # Examples
 /// ```

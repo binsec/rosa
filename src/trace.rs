@@ -57,17 +57,6 @@ impl Trace {
     /// and a trace dump, containing the components of the runtime trace (edges and syscalls). In
     /// order to make dealing with traces easier, we assign a unique ID to each of them.
     ///
-    /// # Arguments
-    /// * `name` - The unique ID associated with the trace. This is mostly used to distinguish
-    ///   between traces.
-    /// * `test_input_file` - The path to the (binary) file containing the raw test input that
-    ///   generated the trace.
-    /// * `trace_dump_file` - The path to the (binary) file containing the trace dump associated
-    ///   with the trace. We expect the trace dump file to have the following format:
-    ///   ```text
-    ///   <nb_edges: u64><nb_syscalls: u64><edges: [u8]><syscalls: [u8]>
-    ///   ```
-    ///
     /// # Examples
     /// ```
     /// use std::path::Path;
@@ -282,9 +271,6 @@ impl Trace {
 /// Get all the test input files from a directory.
 ///
 /// Input files are expected to be any files that do not have the extension `.trace`.
-///
-/// # Arguments
-/// * `test_input_dir` - The directory to load test input files from.
 pub fn get_test_input_files(test_input_dir: &Path) -> Result<Vec<PathBuf>, RosaError> {
     fs::read_dir(test_input_dir).map_or_else(
         |err| {
@@ -315,12 +301,6 @@ pub fn get_test_input_files(test_input_dir: &Path) -> Result<Vec<PathBuf>, RosaE
 ///
 /// This function returns a 3-tuple `(trace_name, trace_test_input_file, trace_dump_file)` for each
 /// corresponding test input file passed to it. That is later used to load traces.
-///
-/// # Arguments
-/// * `test_input_files` - The test input files to load the corresponding trace info for.
-/// * `trace_dump_dir` - The directory in which to look for trace dump files (ending in `.trace`).
-/// * `skip_missing_traces` - If [true], traces for which the trace dump file is missing will be
-///   skipped.
 fn get_trace_info(
     test_input_files: Vec<PathBuf>,
     trace_dump_dir: &Path,
@@ -376,16 +356,6 @@ fn get_trace_info(
 /// For each test input file `X` discovered in `test_input_dir`, exactly one trace dump file
 /// `X.trace` is expected to be found in `trace_dump_dir`. Whether this will provoke an error or
 /// not is determined by the `skip_missing_traces` argument (see below).
-///
-/// # Arguments
-/// * `test_input_dir` - The directory containing the test inputs to be loaded.
-/// * `trace_dump_dir` - The directory containing the trace dumps to be loaded.
-/// * `name_prefix` - A prefix for the name of the trace (usually the name of the fuzzer).
-/// * `known_traces` - A [HashMap] of known traces. This is used as a filter, to avoid loading
-///   already seen traces; any trace UIDs contained in the [HashMap] will **not** be loaded.
-/// * `skip_missing_traces` - If [true], missing or incomplete traces will be skipped, otherwise an
-///   error will be returned. This is used when "hot"-loading, as we may come across incomplete or
-///   missing trace dump files; we can ignore them and let some future invocation pick them up.
 ///
 /// # Examples
 /// ```
@@ -495,10 +465,6 @@ pub fn load_traces(
 /// - A file containing the **test input** of the trace;
 /// - A file containing the **trace dump** of the trace.
 ///
-/// # Arguments
-/// * `traces` - The collection of traces to save.
-/// * `output_dir` - The output directory where we should save the traces.
-///
 /// # Examples
 /// ```
 /// use std::path::Path;
@@ -522,10 +488,6 @@ pub fn save_traces(traces: &[Trace], output_dir: &Path) -> Result<(), RosaError>
 }
 
 /// Save the test input of a trace to a file.
-///
-/// # Arguments
-/// * `trace` - The trace whose test input we should save.
-/// * `output_dir` - The output directory where we should save the trace input.
 ///
 /// # Examples
 /// ```
@@ -559,10 +521,6 @@ pub fn save_trace_test_input(trace: &Trace, output_dir: &Path) -> Result<(), Ros
 ///   ```text
 ///   <nb_edges: u64><nb_syscalls: u64><edges: [u8]><syscalls: [u8]>
 ///   ```
-///
-/// # Arguments
-/// * `trace` - The trace whose runtime representation we should save
-/// * `output_dir` - The output directory where we should save the trace dump.
 ///
 /// # Examples
 /// ```
@@ -610,9 +568,6 @@ pub fn save_trace_dump(trace: &Trace, output_dir: &Path) -> Result<(), RosaError
 }
 
 /// Get the coverage of a set of traces in terms of edges and syscalls.
-///
-/// # Parameters
-/// * `traces` - The set of traces to compute coverage for.
 ///
 /// # Examples
 /// ```

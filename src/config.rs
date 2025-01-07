@@ -349,9 +349,6 @@ impl Config {
     ];
 
     /// Save a configuration to a file.
-    ///
-    /// # Arguments
-    /// * `file` - The file in which to save the configuration.
     pub fn save(&self, file: &Path) -> Result<(), RosaError> {
         let config_toml = toml::to_string_pretty(&self).expect("failed to serialize config TOML.");
 
@@ -360,9 +357,6 @@ impl Config {
     }
 
     /// Load a configuration from file.
-    ///
-    /// # Arguments
-    /// * `file` - The file to load the configuration from.
     pub fn load(file: &Path) -> Result<Self, RosaError> {
         let config_toml = fs::read_to_string(file).map_err(|err| {
             error!(
@@ -389,10 +383,6 @@ impl Config {
     ///
     /// This function sets up the output directories for ROSA, which will contain any findings
     /// produced during the backdoor detection campaign.
-    ///
-    /// # Arguments
-    /// * `force` - If [true], force the creation of the output directory even if it already
-    ///   exists.
     pub fn setup_dirs(&self, force: bool) -> Result<(), RosaError> {
         if self.output_dir.is_dir() {
             if !force {
@@ -523,15 +513,6 @@ impl Config {
     }
 
     /// Log a new line in the stats file.
-    ///
-    /// # Arguments
-    /// * `seconds` - The number of seconds that have passed since the beginning of the detection
-    ///   campaign.
-    /// * `traces` - The current number of traces.
-    /// * `unique_backdoors` - The current number of unique backdoors.
-    /// * `total_backdoors` - The current number of total backdoors.
-    /// * `edge_coverage` - The current edge coverage.
-    /// * `syscall_coverage` - The current syscall coverage.
     pub fn log_stats(
         &self,
         seconds: u64,

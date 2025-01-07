@@ -35,12 +35,6 @@ pub enum Oracle {
 impl Oracle {
     /// Decide if a given trace corresponds to a backdoor.
     ///
-    /// # Arguments
-    /// * `trace` - The trace to examine.
-    /// * `cluster` - The cluster to compare the trace to.
-    /// * `criterion` - The criterion to use in the comparison.
-    /// * `distance_metric` - The distance metric to use in the comparison.
-    ///
     /// # Example
     /// ```
     /// use rosa::{
@@ -138,12 +132,6 @@ impl str::FromStr for Oracle {
 /// - D_c: the distances between every pair of traces within the cluster.
 ///
 /// If `min(D_t) > max(D_c)`, the trace is considered to correspond to a backdoor.
-///
-/// # Arguments
-/// * `trace` - The trace to examine.
-/// * `cluster` - The cluster to compare the trace to.
-/// * `criterion` - The criterion to use in the comparison.
-/// * `distance_metric` - The distance metric to use in the comparison.
 fn comp_min_max_oracle(
     trace: &Trace,
     cluster: &Cluster,
