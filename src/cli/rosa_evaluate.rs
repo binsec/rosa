@@ -341,8 +341,8 @@ fn run(
         "trace_uid,result,seconds"
     };
 
-    let body = match show_summary {
-        true => format!(
+    let body = if show_summary {
+        format!(
             "{},{},{},{},{}",
             samples
                 .iter()
@@ -361,12 +361,13 @@ fn run(
                 .filter(|sample| sample.kind == SampleKind::FalseNegative)
                 .count(),
             seconds_to_first_backdoor
-        ),
-        false => samples
+        )
+    } else {
+        samples
             .iter()
             .map(|sample| format!("{},{},{}", sample.uid, sample.kind, sample.seconds))
             .collect::<Vec<String>>()
-            .join("\n"),
+            .join("\n")
     };
 
     println!("{}\n{}", header, body);

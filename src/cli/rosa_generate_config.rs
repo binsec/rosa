@@ -16,7 +16,7 @@ use rosa::{
     config::{Config, SeedConditions},
     error,
     error::RosaError,
-    fuzzer::FuzzerConfig,
+    fuzzer::{FuzzerBackend, FuzzerConfig},
 };
 
 /// Generate a configuration for a fuzzer.
@@ -69,6 +69,7 @@ fn generate_fuzzer_config(
         test_input_dir: vec![name, "queue"].into_iter().collect(),
         trace_dump_dir: vec![name, "trace_dumps"].into_iter().collect(),
         crashes_dir: vec![name, "crashes"].into_iter().collect(),
+        backend: FuzzerBackend::AFLPlusPlus,
     }
 }
 
@@ -100,13 +101,10 @@ where
         // Remove the trailing newline.
         let buffer = buffer.trim().to_string();
 
-        match buffer.is_empty() {
-            true => break Ok(default.clone()),
-            false => {
-                if let Some(choice) = convert(&buffer) {
-                    break Ok(choice);
-                }
-            }
+        if buffer.is_empty() {
+            break Ok(default.clone());
+        } else if let Some(choice) = convert(&buffer) {
+            break Ok(choice);
         }
     }
 }
@@ -207,6 +205,7 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
                     test_input_dir: fuzzer_output_dir.join(&fuzzer_config.test_input_dir),
                     trace_dump_dir: fuzzer_output_dir.join(&fuzzer_config.trace_dump_dir),
                     crashes_dir: fuzzer_output_dir.join(&fuzzer_config.crashes_dir),
+                    backend: fuzzer_config.backend,
                 })
                 .collect(),
             seed_conditions: SeedConditions {

@@ -181,12 +181,13 @@ impl Trace {
         self.test_input
             .clone()
             .into_iter()
-            .map(
-                |byte| match (byte as char) >= ' ' && (byte as char) <= '~' {
-                    true => (byte as char).to_string(),
-                    false => format!("\\x{:0>2x}", byte),
-                },
-            )
+            .map(|byte| {
+                if (byte as char) >= ' ' && (byte as char) <= '~' {
+                    (byte as char).to_string()
+                } else {
+                    format!("\\x{:0>2x}", byte)
+                }
+            })
             .collect::<Vec<String>>()
             .join("")
     }
@@ -339,9 +340,10 @@ fn get_trace_info(
             // If the trace dump file does not exist and we're skipping incomplete traces, we'll
             // simply let the map filter it out. Otherwise, we will put it in; if it doesn't exist,
             // the error will get detected when we try to read the file.
-            match !trace_dump_file.is_file() && skip_missing_traces {
-                true => None,
-                false => Some((trace_name, test_input_file.to_path_buf(), trace_dump_file)),
+            if !trace_dump_file.is_file() && skip_missing_traces {
+                None
+            } else {
+                Some((trace_name, test_input_file.to_path_buf(), trace_dump_file))
             }
         })
         .collect()
@@ -399,29 +401,26 @@ pub fn load_traces(
         .into_iter()
         // Attempt to load the trace.
         .map(|(trace_name, test_input_file, trace_dump_file)| {
-            match trace_dump_file.is_file() {
-                true => {
-                    // Sometimes a trace load might fail because the trace file is still being
-                    // written. In that case, if we're skipping traces anyway, might as well skip
-                    // it here too.
-                    let trace = Trace::load(
-                        &format!("{}_{}", name_prefix, trace_name),
-                        &test_input_file,
-                        &trace_dump_file,
-                    );
+            if trace_dump_file.is_file() {
+                // Sometimes a trace load might fail because the trace file is still being
+                // written. In that case, if we're skipping traces anyway, might as well skip
+                // it here too.
+                let trace = Trace::load(
+                    &format!("{}_{}", name_prefix, trace_name),
+                    &test_input_file,
+                    &trace_dump_file,
+                );
 
-                    match (trace, skip_missing_traces) {
-                        // If load was successful, then the trace is ok.
-                        (Ok(trace), _) => Ok(Some(trace)),
-                        // Load was unsuccessful, but we're skipping traces so it's fine.
-                        (Err(_), true) => Ok(None),
-                        // Load was unsuccessful, and we're not skipping traces: not fine.
-                        (Err(err), false) => Err(err),
-                    }
+                match (trace, skip_missing_traces) {
+                    // If load was successful, then the trace is ok.
+                    (Ok(trace), _) => Ok(Some(trace)),
+                    // Load was unsuccessful, but we're skipping traces so it's fine.
+                    (Err(_), true) => Ok(None),
+                    // Load was unsuccessful, and we're not skipping traces: not fine.
+                    (Err(err), false) => Err(err),
                 }
-                false => {
-                    fail!("missing trace dump file for trace '{}'.", trace_name)
-                }
+            } else {
+                fail!("missing trace dump file for trace '{}'.", trace_name)
             }
         })
         // Filter out the skipped traces.

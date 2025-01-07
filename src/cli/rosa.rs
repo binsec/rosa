@@ -19,7 +19,6 @@ use std::{
 
 use clap::Parser;
 use colored::Colorize;
-use rand::Rng;
 
 use rosa::{
     clustering,
@@ -27,7 +26,7 @@ use rosa::{
     decision::{Decision, DecisionReason, Discriminants, TimedDecision},
     error,
     error::RosaError,
-    fuzzer::{self, FuzzerProcess, FuzzerStatus},
+    fuzzer::{FuzzerInstance, FuzzerStatus},
     trace::{self, Trace},
 };
 
@@ -97,45 +96,43 @@ struct Cli {
 /// Evaluate an expression and clean up any fuzzer instance processes if the expression evaluates
 /// to [Err].
 macro_rules! with_cleanup {
-    ( $action:expr, $fuzzer_processes:expr ) => {{
+    ( $action:expr, $fuzzer_instancees:expr ) => {{
         $action.or_else(|err| {
-            $fuzzer_processes
+            $fuzzer_instancees
                 .iter_mut()
-                .try_for_each(|fuzzer_process| fuzzer_process.stop())?;
+                .try_for_each(|fuzzer_instance| fuzzer_instance.stop())?;
             Err(err)
         })
     }};
 }
 
-/// Start a fuzzer instance process.
+/// Start a fuzzer instance.
 ///
 /// If `wait_for_fuzzers` is [false], then all fuzzer instances are started in a non-blocking way
 /// (i.e., we do not wait for them to stabilize). Otherwise, we block and wait for them to fully
 /// stabilize, which means that some instances may have been running for longer than others when
 /// all instances have been started.
-fn start_fuzzer_process(
-    fuzzer_process: &mut FuzzerProcess,
+fn start_fuzzer_instance(
+    fuzzer_instance: &mut FuzzerInstance,
     wait_for_fuzzers: bool,
     verbose: bool,
 ) -> Result<(), RosaError> {
     if verbose {
-        println_verbose!("  Fuzzer process '{}':", fuzzer_process.name);
-        println_verbose!("    Env: {}", fuzzer_process.env_as_string());
-        println_verbose!("    Cmd: {}", fuzzer_process.cmd_as_string());
+        println_verbose!("  Fuzzer process '{}':", fuzzer_instance.config.name);
+        println_verbose!("    Env: {}", fuzzer_instance.env_as_string());
+        println_verbose!("    Cmd: {}", fuzzer_instance.cmd_as_string());
     }
 
-    fuzzer_process.spawn()?;
+    fuzzer_instance.spawn()?;
 
     // Give the process 200 ms to get up and running.
     thread::sleep(Duration::from_millis(200));
 
-    if wait_for_fuzzers
-        && fuzzer::get_fuzzer_status(&fuzzer_process.working_dir)? == FuzzerStatus::Starting
-    {
+    if wait_for_fuzzers && fuzzer_instance.config.status()? == FuzzerStatus::Starting {
         // Wait until fuzzer is up and running.
-        while fuzzer::get_fuzzer_status(&fuzzer_process.working_dir)? != FuzzerStatus::Running {
-            if fuzzer::get_fuzzer_status(&fuzzer_process.working_dir)? == FuzzerStatus::Stopped
-                || !fuzzer_process.is_running()?
+        while fuzzer_instance.config.status()? != FuzzerStatus::Running {
+            if fuzzer_instance.config.status()? == FuzzerStatus::Stopped
+                || !fuzzer_instance.is_running()?
             {
                 break;
             }
@@ -178,23 +175,13 @@ fn run(
     // Set up a hashmap to keep track of known traces via their UIDs.
     let mut known_traces = HashMap::new();
 
-    // Set up a random number that the fuzzers may use as a seed.
-    let fuzzer_seed = rand::thread_rng().gen_range(u32::MIN..=u32::MAX);
-
     // Set up the fuzzer processes.
-    let mut fuzzer_processes: Vec<FuzzerProcess> = config
+    let mut fuzzer_instancees: Vec<FuzzerInstance> = config
         .fuzzers
         .iter()
         .map(|fuzzer_config| {
-            FuzzerProcess::create(
-                fuzzer_config.name.clone(),
-                fuzzer_config.test_input_dir.parent().unwrap().to_path_buf(),
-                fuzzer_config
-                    .cmd
-                    .iter()
-                    .map(|arg| arg.replace("{{ROSA_SEED}}", &fuzzer_seed.to_string()))
-                    .collect(),
-                fuzzer_config.env.clone(),
+            FuzzerInstance::create(
+                fuzzer_config.clone(),
                 config
                     .logs_dir()
                     .clone()
@@ -202,7 +189,7 @@ fn run(
                     .with_extension("log"),
             )
         })
-        .collect::<Result<Vec<FuzzerProcess>, RosaError>>()?;
+        .collect::<Result<Vec<FuzzerInstance>, RosaError>>()?;
 
     // Setup communication channel with TUI.
     let (tx, rx) = mpsc::channel::<()>();
@@ -253,9 +240,11 @@ fn run(
 
     println_info!("Starting up fuzzers...");
     // Start the fuzzers.
-    fuzzer_processes.iter_mut().try_for_each(|fuzzer_process| {
-        start_fuzzer_process(fuzzer_process, wait_for_fuzzers, verbose)
-    })?;
+    fuzzer_instancees
+        .iter_mut()
+        .try_for_each(|fuzzer_instance| {
+            start_fuzzer_instance(fuzzer_instance, wait_for_fuzzers, verbose)
+        })?;
 
     // Start the time counter.
     let start_time = Instant::now();
@@ -301,10 +290,7 @@ fn run(
             // Check for crashes; if some of the inputs crash, the crashes might hide backdoor
             // behavior or otherwise impede backdoor detection.
             config.fuzzers.iter().try_for_each(|fuzzer_config| {
-                if with_cleanup!(
-                    fuzzer::fuzzer_found_crashes(&fuzzer_config.crashes_dir),
-                    fuzzer_processes
-                )? {
+                if with_cleanup!(fuzzer_config.found_crashes(), fuzzer_instancees)? {
                     println_warning!(
                         "the fuzzer '{}' has detected one or more crashes in {}. This is probably \
                         hindering the thorough exploration of the binary; it is recommended that \
@@ -353,12 +339,12 @@ fn run(
                     true,
                 )
             },
-            fuzzer_processes
+            fuzzer_instancees
         )?;
         // Save traces to output dir for later inspection.
         with_cleanup!(
             trace::save_traces(&new_traces, &config.traces_dir()),
-            fuzzer_processes
+            fuzzer_instancees
         )?;
 
         // Update coverage.
@@ -377,7 +363,7 @@ fn run(
                     edge_coverage,
                     syscall_coverage,
                 ),
-                fuzzer_processes
+                fuzzer_instancees
             )?;
             last_log_time = Instant::now();
 
@@ -395,7 +381,7 @@ fn run(
             }
         }
 
-        if with_cleanup!(config.get_current_phase(), fuzzer_processes)?
+        if with_cleanup!(config.get_current_phase(), fuzzer_instancees)?
             == RosaPhase::CollectingSeeds
         {
             // We're in the seed collection phase.
@@ -421,7 +407,7 @@ fn run(
 
                     decision.save(&config.decisions_dir())
                 }),
-                fuzzer_processes
+                fuzzer_instancees
             )?;
 
             // Check if the seed stopping conditions have been met.
@@ -434,7 +420,7 @@ fn run(
                 // TUI can keep up.
                 with_cleanup!(
                     config.set_current_phase(RosaPhase::ClusteringSeeds),
-                    fuzzer_processes
+                    fuzzer_instancees
                 )?;
 
                 // Form seed clusters.
@@ -451,7 +437,7 @@ fn run(
                 // Save clusters to output dir for later inspection.
                 with_cleanup!(
                     clustering::save_clusters(&clusters, &config.clusters_dir()),
-                    fuzzer_processes
+                    fuzzer_instancees
                 )?;
                 if no_tui {
                     println_info!("Created {} clusters.", clusters.len());
@@ -461,7 +447,7 @@ fn run(
                 // keep up.
                 with_cleanup!(
                     config.set_current_phase(RosaPhase::DetectingBackdoors),
-                    fuzzer_processes
+                    fuzzer_instancees
                 )?;
             }
         } else {
@@ -523,7 +509,7 @@ fn run(
                         // Save backdoor.
                         with_cleanup!(
                             trace::save_trace_test_input(trace, &backdoor_dir),
-                            fuzzer_processes
+                            fuzzer_instancees
                         )?;
                     }
 
@@ -534,7 +520,7 @@ fn run(
 
                     with_cleanup!(
                         timed_decision.save(&config.decisions_dir()),
-                        fuzzer_processes
+                        fuzzer_instancees
                     )
                 })?;
         }
@@ -547,9 +533,9 @@ fn run(
     }
 
     println_info!("Stopping fuzzer processes.");
-    fuzzer_processes
+    fuzzer_instancees
         .iter_mut()
-        .try_for_each(|fuzzer_process| fuzzer_process.stop())?;
+        .try_for_each(|fuzzer_instance| fuzzer_instance.stop())?;
 
     config.set_current_phase(RosaPhase::Stopped)?;
 

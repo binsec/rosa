@@ -159,22 +159,24 @@ fn comp_min_max_oracle(
         Criterion::SyscallsOnly => (syscall_criterion, DecisionReason::Syscalls),
         Criterion::EdgesOrSyscalls => (
             edge_criterion || syscall_criterion,
-            match edge_criterion || syscall_criterion {
-                true => match edge_criterion {
-                    true => DecisionReason::Edges,
-                    false => DecisionReason::Syscalls,
-                },
-                false => DecisionReason::EdgesAndSyscalls,
+            if edge_criterion || syscall_criterion {
+                if edge_criterion {
+                    DecisionReason::Edges
+                } else {
+                    DecisionReason::Syscalls
+                }
+            } else {
+                DecisionReason::EdgesAndSyscalls
             },
         ),
         Criterion::EdgesAndSyscalls => (
             edge_criterion && syscall_criterion,
-            match edge_criterion && syscall_criterion {
-                true => DecisionReason::EdgesAndSyscalls,
-                false => match edge_criterion {
-                    true => DecisionReason::Syscalls,
-                    false => DecisionReason::Edges,
-                },
+            if edge_criterion && syscall_criterion {
+                DecisionReason::EdgesAndSyscalls
+            } else if edge_criterion {
+                DecisionReason::Syscalls
+            } else {
+                DecisionReason::Edges
             },
         ),
     };

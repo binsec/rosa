@@ -6,6 +6,7 @@ seconds = 60
 
 [[fuzzers]]
 name = "main"
+backend = "afl++"
 test_input_dir = "fuzzer-out-sudo-backdoored/main/queue"
 trace_dump_dir = "fuzzer-out-sudo-backdoored/main/trace_dumps"
 crashes_dir = "fuzzer-out-sudo-backdoored/main/crashes"
@@ -31,6 +32,7 @@ AFL_SKIP_CPUFREQ = "1"
 
 [[fuzzers]]
 name = "fast-libs"
+backend = "afl++"
 test_input_dir = "fuzzer-out-sudo-backdoored/fast-libs/queue"
 trace_dump_dir = "fuzzer-out-sudo-backdoored/fast-libs/trace_dumps"
 crashes_dir = "fuzzer-out-sudo-backdoored/fast-libs/crashes"
@@ -56,6 +58,7 @@ AFL_SKIP_CPUFREQ = "1"
 
 [[fuzzers]]
 name = "exploit-libs"
+backend = "afl++"
 test_input_dir = "fuzzer-out-sudo-backdoored/exploit-libs/queue"
 trace_dump_dir = "fuzzer-out-sudo-backdoored/exploit-libs/trace_dumps"
 crashes_dir = "fuzzer-out-sudo-backdoored/exploit-libs/crashes"
@@ -80,6 +83,7 @@ AFL_SKIP_CPUFREQ = "1"
 
 [[fuzzers]]
 name = "explore-bin"
+backend = "afl++"
 test_input_dir = "fuzzer-out-sudo-backdoored/explore-bin/queue"
 trace_dump_dir = "fuzzer-out-sudo-backdoored/explore-bin/trace_dumps"
 crashes_dir = "fuzzer-out-sudo-backdoored/explore-bin/crashes"
@@ -104,6 +108,7 @@ AFL_SKIP_CPUFREQ = "1"
 
 [[fuzzers]]
 name = "fast-bin"
+backend = "afl++"
 test_input_dir = "fuzzer-out-sudo-backdoored/fast-bin/queue"
 trace_dump_dir = "fuzzer-out-sudo-backdoored/fast-bin/trace_dumps"
 crashes_dir = "fuzzer-out-sudo-backdoored/fast-bin/crashes"
@@ -128,6 +133,7 @@ AFL_SKIP_CPUFREQ = "1"
 
 [[fuzzers]]
 name = "exploit-bin"
+backend = "afl++"
 test_input_dir = "fuzzer-out-sudo-backdoored/exploit-bin/queue"
 trace_dump_dir = "fuzzer-out-sudo-backdoored/exploit-bin/trace_dumps"
 crashes_dir = "fuzzer-out-sudo-backdoored/exploit-bin/crashes"

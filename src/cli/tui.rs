@@ -18,7 +18,7 @@ use rosa::{
     config::{Config, RosaPhase},
     criterion::Criterion,
     error::RosaError,
-    fuzzer::{self, FuzzerStatus},
+    fuzzer::FuzzerStatus,
     oracle::Oracle,
 };
 use rosa::{error, fail};
@@ -251,16 +251,16 @@ impl RosaTuiStats {
             let found_crashes: Vec<bool> = config
                 .fuzzers
                 .iter()
-                .map(|fuzzer_config| fuzzer::fuzzer_found_crashes(&fuzzer_config.crashes_dir))
+                .map(|fuzzer_config| fuzzer_config.found_crashes())
                 .collect::<Result<Vec<bool>, RosaError>>()?;
             self.crash_warning = found_crashes.iter().any(|found_crashes| *found_crashes);
         }
 
         // Check for how many fuzzers are alive.
-        self.alive_fuzzers = self
-            .fuzzer_dirs
+        self.alive_fuzzers = config
+            .fuzzers
             .iter()
-            .filter_map(|fuzzer_dir| match fuzzer::get_fuzzer_status(fuzzer_dir) {
+            .filter_map(|fuzzer_config| match fuzzer_config.status() {
                 Ok(FuzzerStatus::Running) => Some(1),
                 _ => None,
             })
@@ -572,9 +572,10 @@ impl RosaTui {
         let mut config_file = stats.config_file_path.clone();
         let mut output_dir = stats.output_dir_path.clone();
         let fuzzers = format!("{}/{}", stats.alive_fuzzers, stats.total_fuzzers);
-        let fuzzers_style = match stats.alive_fuzzers < stats.total_fuzzers {
-            true => warning_style,
-            false => Style::reset(),
+        let fuzzers_style = if stats.alive_fuzzers < stats.total_fuzzers {
+            warning_style
+        } else {
+            Style::reset()
         };
         // -3 for the borders and left padding.
         let max_text_width = (frame.size().width - 14) as usize;

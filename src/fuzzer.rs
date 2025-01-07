@@ -14,6 +14,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::{config, error::RosaError};
 
+/// The fuzzer backends supported by ROSA.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum FuzzerBackend {
+    /// The AFL++ fuzzer.
+    #[serde(rename = "afl++")]
+    AFLPlusPlus,
+}
+
 /// A fuzzer configuration.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FuzzerConfig {
@@ -32,59 +40,101 @@ pub struct FuzzerConfig {
     /// The directory where the fuzzer will place new trace dumps.
     pub trace_dump_dir: PathBuf,
     /// The directory where the fuzzer will place found crashes. This is only useful because
-    /// crashes will hinder backdoor detection, so we'll want to keep an eye on any findings.
+    /// crashes may hinder backdoor detection, so we'll want to keep an eye on any findings.
     pub crashes_dir: PathBuf,
+    /// The fuzzer backend used.
+    pub backend: FuzzerBackend,
 }
 
-/// A fuzzer process.
-pub struct FuzzerProcess {
-    /// The name of the fuzzer process.
-    pub name: String,
-    /// The directory used by the fuzzer process.
-    pub working_dir: PathBuf,
-    /// The command used to run the fuzzer.
-    fuzzer_cmd: Vec<String>,
-    /// The environment passed to the fuzzer process.
-    fuzzer_env: HashMap<String, String>,
+/// A fuzzer instance.
+pub struct FuzzerInstance {
+    /// The configuration of the instance.
+    pub config: FuzzerConfig,
     /// The log file that holds the fuzzer's output (`stdout` & `stderr`).
     pub log_file: PathBuf,
-    /// The [Command] of the fuzzer process.
+    /// The [Command] of the fuzzer instance.
     command: Command,
-    /// The fuzzer process.
+    /// The instance process.
     process: Option<Child>,
 }
 
-impl FuzzerProcess {
-    /// Create a new fuzzer process (without spawning it).
+/// Possible states a fuzzer can be in.
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum FuzzerStatus {
+    /// The fuzzer is running nominally.
+    Running,
+    /// The fuzzer is **not** running.
+    Stopped,
+    /// The fuzzer is starting up, but is not yet running nominally.
+    Starting,
+}
+
+impl FuzzerConfig {
+    /// Check if the fuzzer has found any crashes.
+    ///
+    /// Most fuzzers are optimized to find crashes. If a crash is found, it might alter the
+    /// fuzzer's exploration or conceal a backdoor. Thus, it is useful to know if any crashes have
+    /// been found.
+    pub fn found_crashes(&self) -> Result<bool, RosaError> {
+        match self.backend {
+            FuzzerBackend::AFLPlusPlus => aflpp_found_crashes(&self.crashes_dir),
+        }
+    }
+
+    /// Get the PID of a fuzzer from its output dir.
+    ///
+    pub fn pid(&self) -> Result<String, RosaError> {
+        match self.backend {
+            FuzzerBackend::AFLPlusPlus => aflpp_pid(
+                self.test_input_dir
+                    .parent()
+                    .expect("failed to get parent directory of test inputs directory."),
+            ),
+        }
+    }
+
+    /// Get the status of a fuzzer.
+    pub fn status(&self) -> Result<FuzzerStatus, RosaError> {
+        match self.backend {
+            FuzzerBackend::AFLPlusPlus => aflpp_status(
+                self.test_input_dir
+                    .parent()
+                    .expect("failed to get parent directory of test inputs directory."),
+            ),
+        }
+    }
+}
+
+impl FuzzerInstance {
+    /// Create a new fuzzer instance (without spawning it).
     ///
     /// # Examples
     /// ```
     /// use std::{path::PathBuf, collections::HashMap};
-    /// use rosa::fuzzer::FuzzerProcess;
+    /// use rosa::fuzzer::{FuzzerBackend, FuzzerConfig, FuzzerInstance};
     ///
-    /// let _fuzzer_process = FuzzerProcess::create(
-    ///     "my_fuzzer".to_string(),
-    ///     PathBuf::from("/path/to/my_fuzzer"),
-    ///     vec![
-    ///         "afl-fuzz".to_string(),
-    ///         "-i".to_string(),
-    ///         "in".to_string(),
-    ///         "-o".to_string(),
-    ///         "out".to_string(),
-    ///         "--".to_string(),
-    ///         "./target".to_string(),
-    ///     ],
-    ///     HashMap::from([("AFL_DEBUG".to_string(), "1".to_string())]),
+    /// let _fuzzer_instance = FuzzerInstance::create(
+    ///     FuzzerConfig {
+    ///         name: "my_fuzzer".to_string(),
+    ///         env: HashMap::from([("AFL_DEBUG".to_string(), "1".to_string())]),
+    ///         cmd: vec![
+    ///             "afl-fuzz".to_string(),
+    ///             "-i".to_string(),
+    ///             "in".to_string(),
+    ///             "-o".to_string(),
+    ///             "out".to_string(),
+    ///             "--".to_string(),
+    ///             "./target".to_string(),
+    ///         ],
+    ///         test_input_dir: PathBuf::from("/path/to/test_input_dir"),
+    ///         trace_dump_dir: PathBuf::from("/path/to/trace_dump_dir"),
+    ///         crashes_dir: PathBuf::from("/path/to/crashes_dir"),
+    ///         backend: FuzzerBackend::AFLPlusPlus
+    ///     },
     ///     PathBuf::from("/path/to/log_file.log"),
     /// );
     /// ```
-    pub fn create(
-        name: String,
-        working_dir: PathBuf,
-        fuzzer_cmd: Vec<String>,
-        fuzzer_env: HashMap<String, String>,
-        log_file: PathBuf,
-    ) -> Result<Self, RosaError> {
+    pub fn create(config: FuzzerConfig, log_file: PathBuf) -> Result<Self, RosaError> {
         let log_stdout = File::create(&log_file).map_err(|err| {
             error!(
                 "could not create log file '{}': {}.",
@@ -96,18 +146,15 @@ impl FuzzerProcess {
             .try_clone()
             .expect("could not clone fuzzer seed log file.");
 
-        let mut command = Command::new(&fuzzer_cmd[0]);
+        let mut command = Command::new(&config.cmd[0]);
         command
-            .args(&fuzzer_cmd[1..])
-            .envs(config::replace_env_var_placeholders(&fuzzer_env))
+            .args(&config.cmd[1..])
+            .envs(config::replace_env_var_placeholders(&config.env))
             .stdout(Stdio::from(log_stdout))
             .stderr(Stdio::from(log_stderr));
 
-        Ok(FuzzerProcess {
-            name,
-            working_dir,
-            fuzzer_cmd,
-            fuzzer_env,
+        Ok(FuzzerInstance {
+            config,
             log_file,
             command,
             process: None,
@@ -182,7 +229,8 @@ impl FuzzerProcess {
 
     /// Get the environment passed to the fuzzer in string form.
     pub fn env_as_string(&self) -> String {
-        self.fuzzer_env
+        self.config
+            .env
             .iter()
             .map(|(key, value)| format!("{}={}", key, value))
             .collect::<Vec<String>>()
@@ -191,16 +239,12 @@ impl FuzzerProcess {
 
     /// Get the command used to run the fuzzer in string form.
     pub fn cmd_as_string(&self) -> String {
-        self.fuzzer_cmd.join(" ")
+        self.config.cmd.join(" ")
     }
 }
 
 /// Check if the fuzzer has found any crashes.
-///
-/// Most fuzzers are optimized to find crashes; if a crash is found, the fuzzer will generate more
-/// test inputs that explore that crash. This might bias the exploration of the target program, so
-/// it is useful to know if it has happened.
-pub fn fuzzer_found_crashes(crashes_dir: &Path) -> Result<bool, RosaError> {
+fn aflpp_found_crashes(crashes_dir: &Path) -> Result<bool, RosaError> {
     fs::read_dir(crashes_dir).map_or_else(
         |err| {
             fail!(
@@ -214,12 +258,7 @@ pub fn fuzzer_found_crashes(crashes_dir: &Path) -> Result<bool, RosaError> {
 }
 
 /// Get the PID of a fuzzer from its output dir.
-///
-/// **NOTE: this only works for AFL++.**
-///
-/// AFL++ fuzzers leave a `fuzzer_stats` file in their output directory, that contains the PID of
-/// the fuzzer instance.
-fn get_fuzzer_pid(fuzzer_dir: &Path) -> Result<String, RosaError> {
+fn aflpp_pid(fuzzer_dir: &Path) -> Result<String, RosaError> {
     let fuzzer_stats_file = fuzzer_dir.join("fuzzer_stats");
     fs::read_to_string(&fuzzer_stats_file).map_or_else(
         |err| {
@@ -264,21 +303,8 @@ fn get_fuzzer_pid(fuzzer_dir: &Path) -> Result<String, RosaError> {
     )
 }
 
-/// Possible states a fuzzer can be in.
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum FuzzerStatus {
-    /// The fuzzer is running nominally.
-    Running,
-    /// The fuzzer is **not** running.
-    Stopped,
-    /// The fuzzer is starting up, but is not yet running nominally.
-    Starting,
-}
-
 /// Get the status of a fuzzer.
-///
-/// **NOTE: this only works for AFL++.**
-pub fn get_fuzzer_status(fuzzer_dir: &Path) -> Result<FuzzerStatus, RosaError> {
+fn aflpp_status(fuzzer_dir: &Path) -> Result<FuzzerStatus, RosaError> {
     fuzzer_dir
         .is_dir()
         .then(|| {
@@ -292,18 +318,18 @@ pub fn get_fuzzer_status(fuzzer_dir: &Path) -> Result<FuzzerStatus, RosaError> {
                 (Ok(setup_metadata), Ok(stats_metadata)) => {
                     // From `afl-whatsup`: if `fuzzer_setup` is newer than `fuzzer_stats`, then the
                     // fuzzer is still starting up.
-                    match setup_metadata.modified().unwrap() > stats_metadata.modified().unwrap() {
-                        true => FuzzerStatus::Starting,
-                        false => {
-                            // Since we have access to `fuzzer_stats`, we can simply check the PID
-                            // contained within to see if the process is running.
-                            let pid = get_fuzzer_pid(fuzzer_dir).unwrap();
-                            let proc_dir = PathBuf::from("/proc").join(pid);
+                    if setup_metadata.modified().unwrap() > stats_metadata.modified().unwrap() {
+                        FuzzerStatus::Starting
+                    } else {
+                        // Since we have access to `fuzzer_stats`, we can simply check the PID
+                        // contained within to see if the process is running.
+                        let pid = aflpp_pid(fuzzer_dir).expect("failed to get fuzzer PID.");
+                        let proc_dir = PathBuf::from("/proc").join(pid);
 
-                            match proc_dir.exists() {
-                                true => FuzzerStatus::Running,
-                                false => FuzzerStatus::Stopped,
-                            }
+                        if proc_dir.exists() {
+                            FuzzerStatus::Running
+                        } else {
+                            FuzzerStatus::Stopped
                         }
                     }
                 }
