@@ -52,3 +52,5 @@ RUN cargo install --path .
 
 # Install debugging tools.
 RUN apt-get update && apt-get install -y strace gdb
+
+WORKDIR /root

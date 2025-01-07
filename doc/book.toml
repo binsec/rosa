@@ -1,11 +1,14 @@
 [book]
-authors = ["Dimitri Kokkonis"]
+authors = [
+    "Dimitri Kokkonis (dimitri.kokkonis@cea.fr)",
+    "Michaël Marcozzi (michael.marcozzi@cea.fr)",
+    "Emilien Decoux (emilien.decoux@protonmail.com)",
+    "Stefano Zacchiroli (stefano.zacchiroli@cea.fr)",
+]
 language = "en"
 multilingual = false
 src = "src"
-title = "ROSA - fuzzing-based backdoor detection"
+title = "ROSA: Finding Backdoors with Fuzzing"
 
 [output.html]
 mathjax-support = true
-
-[output.pdf]

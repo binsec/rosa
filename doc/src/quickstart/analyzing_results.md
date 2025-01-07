@@ -1,5 +1,4 @@
 # Analyzing the results
-
 If ROSA claims it has detected a backdoor, it will place it in a special subdirectory of its output
 directory (in our case, `rosa-out/backdoors`).
 
@@ -46,7 +45,7 @@ We propose the following method to help automate the investigation:
 - For each subdirectory of `backdoors/`:
     1. Pick a _witness input_ out of the subdirectory, to be used to characterize the entire
        subdirectory (let's assume the input is `rosa-out/backdoors/X/Y`).
-    2. Run `rosa-explain -o rosa-out Y` and inspect the parts starting with `"Syscalls: "`. These
+    2. Run `rosa-explain rosa-out Y` and inspect the different system calls. These
        are the _discriminants_, meaning the system calls that are _different_ (either with regards
        to the suspect trace or its corresponding input family).
     3. Run the target program under `strace` by only filtering the system call numbers you saw
@@ -64,11 +63,16 @@ only one that exists. If there were more _backdoor categories_ (i.e., more subdi
 As discussed before, we will use `rosa-explain` to do this, looking at the _system call_
 discriminants specifically:
 ```console
-{container} $ rosa-explain -o rosa-out e205ab0700d8b183
-...
-Syscalls: 15, 32, 33, 56, 59, 61, 106, 111, 271, 273, 436
-...
-Syscalls:
+{container} $ rosa-explain rosa-out e205ab0700d8b183
+[rosa]  Explaining trace 3afd12ca01c71b06:
+[rosa]    Trace indicates a backdoor: true
+[rosa]    Detection reason: syscalls
+[rosa]    Oracle criterion: syscalls-only
+[rosa]    Most similar cluster: cluster_000000
+[rosa]  Found in the trace but not the cluster:
+15, 32, 33, 56, 59, 61, 106, 111, 271, 273, 436
+[rosa]  Found in the cluster but not the trace:
+
 ```
 The second one is empty, because there are no system calls present in the _cluster_ (input family)
 that are **not** present in the _trace_.

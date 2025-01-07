@@ -1,8 +1,9 @@
 # Summary
-
 [Introduction](README.md)
 
 - [Installation](./installation.md)
+    - [Using ROSA in a Docker container](./installation/using_docker.md)
+    - [Building ROSA from source](./installation/building_from_source.md)
 - [Quickstart](./quickstart.md)
     - [Setting up the environment](./quickstart/setup_docker.md)
     - [Choosing a fuzzer](./quickstart/choosing_a_fuzzer.md)

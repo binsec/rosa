@@ -1,10 +1,10 @@
 # Running ROSA
-
-We are now ready to run ROSA! You can specify the configuration file to use with `--config-file`,
-but it will actually assume there is one in the current directory named `config.toml` by default:
+We are now ready to run ROSA! You can explicitly specify the configuration file to use with the
+`rosa` command, but it will actually assume there is one in the current directory named
+`config.toml` by default:
 ```console
 {container} $ rosa
-[rosa]  ** rosa backdoor detector - version 0.2.0 **
+[rosa]  ** rosa backdoor detector - version 0.5.0 **
 [rosa]  Cluster formation config:
 [rosa]    Distance metric: hamming
 [rosa]    Criterion: edges-only

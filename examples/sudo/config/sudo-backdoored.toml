@@ -11,7 +11,7 @@ test_input_dir = "fuzzer-out-sudo-backdoored/main/queue"
 trace_dump_dir = "fuzzer-out-sudo-backdoored/main/trace_dumps"
 crashes_dir = "fuzzer-out-sudo-backdoored/main/crashes"
 cmd = [
-    "/root/aflpp/afl-fuzz",
+    "/root/rosa/fuzzers/aflpp/aflpp/afl-fuzz",
     "-i", "/root/rosa/examples/sudo/seeds",
     "-o", "fuzzer-out-sudo-backdoored",
     "-r",
@@ -37,7 +37,7 @@ test_input_dir = "fuzzer-out-sudo-backdoored/fast-libs/queue"
 trace_dump_dir = "fuzzer-out-sudo-backdoored/fast-libs/trace_dumps"
 crashes_dir = "fuzzer-out-sudo-backdoored/fast-libs/crashes"
 cmd = [
-    "/root/aflpp/afl-fuzz",
+    "/root/rosa/fuzzers/aflpp/aflpp/afl-fuzz",
     "-i", "/root/rosa/examples/sudo/seeds",
     "-o", "fuzzer-out-sudo-backdoored",
     "-Q",
@@ -63,7 +63,7 @@ test_input_dir = "fuzzer-out-sudo-backdoored/exploit-libs/queue"
 trace_dump_dir = "fuzzer-out-sudo-backdoored/exploit-libs/trace_dumps"
 crashes_dir = "fuzzer-out-sudo-backdoored/exploit-libs/crashes"
 cmd = [
-    "/root/aflpp/afl-fuzz",
+    "/root/rosa/fuzzers/aflpp/aflpp/afl-fuzz",
     "-i", "/root/rosa/examples/sudo/seeds",
     "-o", "fuzzer-out-sudo-backdoored",
     "-Q",
@@ -88,7 +88,7 @@ test_input_dir = "fuzzer-out-sudo-backdoored/explore-bin/queue"
 trace_dump_dir = "fuzzer-out-sudo-backdoored/explore-bin/trace_dumps"
 crashes_dir = "fuzzer-out-sudo-backdoored/explore-bin/crashes"
 cmd = [
-    "/root/aflpp/afl-fuzz",
+    "/root/rosa/fuzzers/aflpp/aflpp/afl-fuzz",
     "-i", "/root/rosa/examples/sudo/seeds",
     "-o", "fuzzer-out-sudo-backdoored",
     "-Q",
@@ -113,7 +113,7 @@ test_input_dir = "fuzzer-out-sudo-backdoored/fast-bin/queue"
 trace_dump_dir = "fuzzer-out-sudo-backdoored/fast-bin/trace_dumps"
 crashes_dir = "fuzzer-out-sudo-backdoored/fast-bin/crashes"
 cmd = [
-    "/root/aflpp/afl-fuzz",
+    "/root/rosa/fuzzers/aflpp/aflpp/afl-fuzz",
     "-i", "/root/rosa/examples/sudo/seeds",
     "-o", "fuzzer-out-sudo-backdoored",
     "-Q",
@@ -138,7 +138,7 @@ test_input_dir = "fuzzer-out-sudo-backdoored/exploit-bin/queue"
 trace_dump_dir = "fuzzer-out-sudo-backdoored/exploit-bin/trace_dumps"
 crashes_dir = "fuzzer-out-sudo-backdoored/exploit-bin/crashes"
 cmd = [
-    "/root/aflpp/afl-fuzz",
+    "/root/rosa/fuzzers/aflpp/aflpp/afl-fuzz",
     "-i", "/root/rosa/examples/sudo/seeds",
     "-o", "fuzzer-out-sudo-backdoored",
     "-Q",
