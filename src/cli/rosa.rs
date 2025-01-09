@@ -282,7 +282,7 @@ fn run(
     };
 
     // We're good to go, update the current phase.
-    config.set_current_phase(RosaPhase::CollectingSeeds)?;
+    config.set_current_phase(RosaPhase::CollectingInputs)?;
 
     // Loop until Ctrl-C.
     while !rosa_should_stop.load(Ordering::SeqCst) {
@@ -382,7 +382,7 @@ fn run(
         }
 
         if with_cleanup!(config.get_current_phase(), fuzzer_instancees)?
-            == RosaPhase::CollectingSeeds
+            == RosaPhase::CollectingInputs
         {
             // We're in the seed collection phase.
             // Save the decisions for the seed traces, even though we know what they're gonna be.
@@ -419,13 +419,13 @@ fn run(
                 // We're entering seed clustering phase; write it into the phase file so that the
                 // TUI can keep up.
                 with_cleanup!(
-                    config.set_current_phase(RosaPhase::ClusteringSeeds),
+                    config.set_current_phase(RosaPhase::ClusteringInputs),
                     fuzzer_instancees
                 )?;
 
                 // Form seed clusters.
                 if no_tui {
-                    println_info!("Clustering seed traces...");
+                    println_info!("Clustering family-representative inputs...");
                 }
                 clusters = clustering::cluster_traces(
                     &current_traces,

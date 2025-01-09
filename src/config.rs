@@ -119,14 +119,12 @@ impl SeedConditions {
 pub enum RosaPhase {
     /// Starting up.
     Starting,
-    /// Collection of seed traces.
-    CollectingSeeds,
-    /// Clustering of seed traces.
-    ClusteringSeeds,
+    /// Collection of family-representative inputs.
+    CollectingInputs,
+    /// Clustering of family-represenative inputs (into families).
+    ClusteringInputs,
     /// Backdoor detection.
     DetectingBackdoors,
-    /// Finding deduplication.
-    DeduplicatingFindings,
     /// Stopped.
     Stopped,
 }
@@ -138,10 +136,9 @@ impl fmt::Display for RosaPhase {
             "{}",
             match self {
                 Self::Starting => "starting",
-                Self::CollectingSeeds => "collecting-seeds",
-                Self::ClusteringSeeds => "clustering-seeds",
+                Self::CollectingInputs => "collecting-inputs",
+                Self::ClusteringInputs => "clustering-inputs",
                 Self::DetectingBackdoors => "detecting-backdoors",
-                Self::DeduplicatingFindings => "deduplicating-findings",
                 Self::Stopped => "stopped",
             }
         )
@@ -154,8 +151,8 @@ impl str::FromStr for RosaPhase {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "starting" => Ok(Self::Starting),
-            "collecting-seeds" => Ok(Self::CollectingSeeds),
-            "clustering-seeds" => Ok(Self::ClusteringSeeds),
+            "collecting-inputs" => Ok(Self::CollectingInputs),
+            "clustering-inputs" => Ok(Self::ClusteringInputs),
             "detecting-backdoors" => Ok(Self::DetectingBackdoors),
             "stopped" => Ok(Self::Stopped),
             unknown => fail!("invalid phase '{}'.", unknown),
