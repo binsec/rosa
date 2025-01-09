@@ -52,7 +52,7 @@ struct Cli {
     #[arg(
         long_help,
         default_value = "config.toml",
-        value_name = "FILE",
+        value_name = "CONFIG FILE",
         help = "The configuration file to use"
     )]
     config_file: PathBuf,
