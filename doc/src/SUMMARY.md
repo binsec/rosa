@@ -23,5 +23,5 @@
     - [rosa-simulate](./toolchain/rosa_simulate.md)
 - [How ROSA works](./internals.md)
 - [Extending ROSA](./extensions.md)
-    - [Extending detection algorithms](./extensions_detection.md)
     - [Using other fuzzers](./extensions_fuzzers.md)
+    - [Extending the oracle](./extensions_oracle.md)

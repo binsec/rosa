@@ -9,8 +9,11 @@ The documentation is split into multiple parts:
 - [Installation](./installation.md) - instructions to install ROSA on your machine;
 - [Quickstart](./quickstart.md) - a quick guide that shows you how to use ROSA to detect backdoors
   with a simple example;
+- [The status screen](./status_screen.md) - an overview of the ROSA backdoor detector's status
+  screen;
 - [Configuration guide](./config_guide.md) - an in-depth guide on how to configure ROSA for a
   specific target program;
+- [The ROSA toolchain](./toolchain.md) - an overview of the different tools of the ROSA toolchain;
 - [How ROSA works](./internals.md) - a discussion of the inner workings of ROSA and the theoretical
   ideas behind it;
 - [Extending ROSA](./extensions.md) - a guide on how to extend and build upon ROSA.

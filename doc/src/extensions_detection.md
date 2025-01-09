@@ -1,3 +1,0 @@
-# Extending detection algorithms
-
-TODO

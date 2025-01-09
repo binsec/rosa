@@ -1,3 +1,2 @@
 # How ROSA works
-
 TODO

@@ -1,5 +1,4 @@
 # The status screen
-
 The ROSA status screen looks like this:
 
 ![The ROSA status screen (TUI)](../images/sudo-backdoor-detected.png)
