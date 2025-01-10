@@ -4,6 +4,19 @@ If you wish to use another fuzzer, you need to do the following:
   repository);
 - Modify `fuzzer.rs` to add a new fuzzer backend.
 
+## Base requirements for the fuzzer - ROSA's API
+ROSA expects the following things from the fuzzer backend:
+- To store newly discovered **test inputs** to the target program in a dedicated directory.
+- To store **runtime traces associated with the test inputs** in a dedicated directory, with **the
+  same name** as the corresponding test  inputs and the extension `.trace`. The runtime trace files
+  (which are binary files) must have the following structure:
+  ```text
+  <CFG edge vector length [64 bits, so 8 * u8]>
+  <system call edge vector length [64 bits, so 8 * u8]>
+  <CFG edge vector [(edge vector length) * 8, since a single CFG edge is a u8>
+  <system call vector [(system call vector length) * 8, since a single system call is a u8>
+  ```
+
 ## Adding the fuzzer repository
 The fuzzer's repository should be added as a submodule in the `fuzzers/` directory. You should
 follow the example of AFL++, stored under `aflpp/`. If any patches are necessary to modify the
