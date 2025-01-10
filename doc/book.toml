@@ -12,3 +12,4 @@ title = "ROSA: Finding Backdoors with Fuzzing"
 
 [output.html]
 mathjax-support = true
+git-repository-url = "https://github.com/binsec/rosa"
