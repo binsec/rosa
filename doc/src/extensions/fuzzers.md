@@ -1,6 +1,16 @@
 # Using other fuzzers
-If you wish to use another fuzzer, you need to modify `fuzzer.rs` to add a new fuzzer backend.
+If you wish to use another fuzzer, you need to do the following:
+- Add the fuzzer's repository as a submodule in `fuzzers/<my fuzzer's name>` (at the root of the
+  repository);
+- Modify `fuzzer.rs` to add a new fuzzer backend.
 
+## Adding the fuzzer repository
+The fuzzer's repository should be added as a submodule in the `fuzzers/` directory. You should
+follow the example of AFL++, stored under `aflpp/`. If any patches are necessary to modify the
+fuzzer (like in the case of AFL++), a separate `patches/` directory should be created under the
+fuzzer's root directory (again, see the `aflpp/` case for a concrete example).
+
+## Adapting the ROSA library
 First, you need to add a new variant to the `FuzzerBackend` enum:
 ```rust
 /// The fuzzer backends supported by ROSA.
