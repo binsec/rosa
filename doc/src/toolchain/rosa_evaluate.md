@@ -24,3 +24,5 @@ $ rosa-evaluate --target-program /path/to/ground-truth-target-program \
                 /path/to/finding-directory
 ```
 CSV output will be produced that can be then used to form graphs or tables.
+
+You can run `rosa-evaluate --help` to get detailed documentation at the command-line level.

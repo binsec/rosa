@@ -27,17 +27,13 @@ mod logging;
     long_about = None,
     propagate_version = true)]
 struct Cli {
-    /// The first trace.
-    #[arg(long_help, value_name = "TRACE 1 UID", help = "UID of first trace")]
-    trace_1_uid: String,
+    /// Path to the first trace.
+    #[arg(long_help, value_name = "TRACE 1", help = "Path to first trace")]
+    trace_1_path: PathBuf,
 
-    /// The second trace.
-    #[arg(long_help, value_name = "TRACE 2 UID", help = "UID of second trace")]
-    trace_2_uid: String,
-
-    /// The ROSA output directory to pull traces from.
-    #[arg(long_help, value_name = "DIR", help = "The ROSA output directory")]
-    output_dir: PathBuf,
+    /// Path to the second trace.
+    #[arg(long_help, value_name = "TRACE 2", help = "Path to second trace")]
+    trace_2_path: PathBuf,
 
     /// The distance metric to use.
     #[arg(
@@ -56,23 +52,20 @@ struct Cli {
 
 /// Run the distance calculation tool.
 fn run(
-    output_dir: &Path,
-    trace_1_uid: &str,
-    trace_2_uid: &str,
+    trace_1_path: &Path,
+    trace_2_path: &Path,
     distance_metric: &str,
     verbose: bool,
 ) -> Result<(), RosaError> {
-    let trace_1_path = output_dir.join("traces").join(trace_1_uid);
     let trace_1 = Trace::load(
         "trace_1",
-        &trace_1_path,
+        trace_1_path,
         &trace_1_path.with_extension("trace"),
     )?;
 
-    let trace_2_path = output_dir.join("traces").join(trace_2_uid);
     let trace_2 = Trace::load(
         "trace_2",
-        &trace_2_path,
+        trace_2_path,
         &trace_2_path.with_extension("trace"),
     )?;
 
@@ -81,9 +74,12 @@ fn run(
     let edge_wise_dist = distance_metric.dist(&trace_1.edges, &trace_2.edges);
     let syscall_wise_dist = distance_metric.dist(&trace_1.syscalls, &trace_2.syscalls);
 
-    println_info!("Distances between '{}' and '{}':", trace_1_uid, trace_2_uid);
-    println_info!("  Edge-wise: {}", edge_wise_dist);
-    println_info!("  Syscall-wise: {}", syscall_wise_dist);
+    println_info!(
+        "Distances between '{}' and '{}' (edge-wise, syscall-wise):",
+        trace_1_path.display(),
+        trace_2_path.display()
+    );
+    println!("{} {}", edge_wise_dist, syscall_wise_dist);
 
     if verbose {
         println_info!("");
@@ -121,9 +117,8 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
 
     match run(
-        &cli.output_dir,
-        &cli.trace_1_uid,
-        &cli.trace_2_uid,
+        &cli.trace_1_path,
+        &cli.trace_2_path,
         &cli.distance_metric,
         cli.verbose,
     ) {
