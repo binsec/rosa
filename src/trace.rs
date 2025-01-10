@@ -95,7 +95,7 @@ impl Trace {
                 err
             )
         })?;
-        // Read the length of the edges (64 bytes, so 8 * u8).
+        // Read the length of the edges (64 bits, so 8 * u8).
         let mut length_buffer = [0u8; 8];
         file.read_exact(&mut length_buffer).map_err(|err| {
             error!(
@@ -106,7 +106,7 @@ impl Trace {
         })?;
         // Convert the 8 bytes to the final number of edges.
         let edges_length = u64::from_le_bytes(length_buffer);
-        // Read the length of the syscalls (64 bytes, so 8 * u8).
+        // Read the length of the syscalls (64 bits, so 8 * u8).
         let mut length_buffer = [0u8; 8];
         file.read_exact(&mut length_buffer).map_err(|err| {
             error!(
