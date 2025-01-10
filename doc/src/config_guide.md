@@ -1,5 +1,5 @@
 # Configuration guide
-ROSA (and specifically the [`rosa` backdoor detector](./toolchain/rosa.md) is configured via a
+ROSA (and specifically the [`rosa` backdoor detector](./toolchain/rosa.md)) is configured via a
 [TOML](https://toml.io/en/) file.
 
 ## General settings
