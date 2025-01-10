@@ -7,4 +7,4 @@
 
 set -e
 
-docker run -ti --rm -e "COLORTERM=truecolor" $(cat IMAGE):$(cat VERSION)
+docker run -ti --rm -e "COLORTERM=truecolor" -p 8080:8080 $(cat IMAGE):$(cat VERSION)
