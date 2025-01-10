@@ -53,4 +53,9 @@ RUN cargo install --path .
 # Install debugging tools.
 RUN apt-get update && apt-get install -y strace gdb
 
+# Install mdbook to have the documentation available via an HTTP server.
+RUN cargo install mdbook
+RUN mdbook build /root/rosa/doc
+
 WORKDIR /root
+CMD ["./rosa/start.sh"]
