@@ -1,3 +1,2 @@
 # Configuration guide
-
 TODO

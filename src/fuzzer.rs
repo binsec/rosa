@@ -82,7 +82,6 @@ impl FuzzerConfig {
     }
 
     /// Get the PID of a fuzzer from its output dir.
-    ///
     pub fn pid(&self) -> Result<String, RosaError> {
         match self.backend {
             FuzzerBackend::AFLPlusPlus => aflpp_pid(

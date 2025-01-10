@@ -54,8 +54,7 @@ If activated (it is the case by default), a separate thread is also started for 
 
 ### The ROSA library
 In reality, `rosa` is simply a frontend for a backdoor detection library:
-- `clustering.rs` contains a definition for clusters and clustering algorithms (see also
-  [_Extending the clustering algorithms_](./extensions/clustering.md));
+- `clustering.rs` contains a definition for clusters and clustering algorithms;
 - `config.rs` contains a definition for configuration files and handling of any I/O (e.g., for the
   finding directory);
 - `criterion.rs` contains a definition for the criteria used throughout the library, which allow to

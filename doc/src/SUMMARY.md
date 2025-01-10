@@ -26,4 +26,3 @@
     - [Using other fuzzers](./extensions/fuzzers.md)
     - [Extending the ROSA oracle](./extensions/oracle.md)
     - [Extending the distance metrics](./extensions/distance_metrics.md)
-    - [Extending the clustering algorithms](./extensions/clustering.md)
