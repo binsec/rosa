@@ -81,8 +81,8 @@ impl AFLPlusPlus {
 
 #[typetag::serde(name = "afl++")]
 impl FuzzerBackend for AFLPlusPlus {
-    fn name(&self) -> String {
-        self.name.clone()
+    fn name(&self) -> &str {
+        &self.name
     }
 
     fn cmd(&self) -> Vec<String> {

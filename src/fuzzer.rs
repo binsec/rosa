@@ -24,7 +24,7 @@ pub mod aflpp;
 #[typetag::serde(tag = "kind")]
 pub trait FuzzerBackend: DynClone {
     /// Get the name of the fuzzer instance.
-    fn name(&self) -> String;
+    fn name(&self) -> &str;
     /// Get the full command used to invoke the fuzzer.
     fn cmd(&self) -> Vec<String>;
     /// Get the path to the directory where the fuzzer places new test inputs.
