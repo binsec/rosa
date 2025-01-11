@@ -23,10 +23,10 @@ use colored::Colorize;
 use rosa::{
     clustering,
     config::{Config, RosaPhase},
-    decision::{Decision, DecisionReason, Discriminants, TimedDecision},
     error,
     error::RosaError,
     fuzzer::{FuzzerInstance, FuzzerStatus},
+    oracle::{Decision, DecisionReason, Discriminants, TimedDecision},
     trace::{self, Trace},
 };
 
@@ -234,7 +234,7 @@ fn run(
     println_info!("Oracle config:");
     println_info!("  Distance metric: {}", config.oracle_distance_metric);
     println_info!("  Criterion: {}", config.oracle_criterion);
-    println_info!("  Algorithm: {}", config.oracle);
+    println_info!("  Algorithm: {}", config.oracle.name());
 
     println_info!("Ready to go!");
     // Pause for a sec to let the user read the config.
@@ -316,7 +316,7 @@ fn run(
                         let mut traces = trace::load_traces(
                             &fuzzer_config.backend.test_input_dir(),
                             &fuzzer_config.backend.runtime_trace_dir(),
-                            &fuzzer_config.backend.name(),
+                            fuzzer_config.backend.name(),
                             &mut known_traces,
                             // Skip missing traces, because the fuzzer is continually producing
                             // new ones, and we might miss some because of the timing of the
@@ -483,16 +483,16 @@ fn run(
                     if decision.is_backdoor {
                         nb_total_backdoors += 1;
 
-                        // Get the discriminants UID to deduplicate backdoor.
+                        // Get the fingeprint to deduplicate backdoor.
                         // Essentially, if the backdoor was detected for the same reason as a
                         // pre-existing backdoor, we should avoid listing them as two different
                         // backdoors.
-                        let discriminants_uid = decision
+                        let fingerprint = decision
                             .discriminants
-                            .uid(config.oracle_criterion, &decision.cluster_uid);
+                            .fingerprint(config.oracle_criterion, &decision.cluster_uid);
 
                         // Attempt to create a directory for this category of backdoor.
-                        let backdoor_dir = config.backdoors_dir().join(discriminants_uid);
+                        let backdoor_dir = config.backdoors_dir().join(fingerprint);
                         match fs::create_dir(&backdoor_dir) {
                             Ok(_) => {
                                 nb_unique_backdoors += 1;

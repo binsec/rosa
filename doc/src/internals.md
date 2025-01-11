@@ -59,16 +59,14 @@ In reality, `rosa` is simply a frontend for a backdoor detection library:
   finding directory);
 - `criterion.rs` contains a definition for the criteria used throughout the library, which allow to
   take into account one or multiple components of the runtime traces;
-- `decision.rs` contains the definition of an oracle decision and its discriminants (i.e.,
-  differences between the analyzed input-trace pair and its most similar input family);
 - `distance_metric.rs` contains definitions of distance metrics used to compare runtime traces (see
   also [_Extending the distance metrics_](./extensions/distance_metrics.md));
 - `error.rs` contains error definitions for ROSA;
-- `fuzzer.rs` contains definitions and handling for the fuzzer backends (see also [_Using other
-  fuzzers_](./extensions/fuzzers.md));
+- `fuzzer.rs` and `fuzzer/` contain definitions and handling for the fuzzer backends (see also
+  [_Using other fuzzers_](./extensions/fuzzers.md));
 - `lib.rs` regroups the modules and defines the ROSA library;
-- `oracle.rs` contains the metamorphic oracle algorithms (see also [_Extending the ROSA
-  oracle_](./extensions/oracle.md));
+- `oracle.rs` and `oracle/` contain the metamorphic oracle algorithms (see also [_Extending the
+  ROSA oracle_](./extensions/oracle.md));
 - `trace.rs` contains definitions and tooling to collect and handle input-trace pairs.
 
 

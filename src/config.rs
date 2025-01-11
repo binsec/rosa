@@ -15,8 +15,11 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    criterion::Criterion, distance_metric::DistanceMetric, error::RosaError, fuzzer::FuzzerConfig,
-    oracle::Oracle,
+    criterion::Criterion,
+    distance_metric::DistanceMetric,
+    error::RosaError,
+    fuzzer::FuzzerConfig,
+    oracle::{comp_min_max::CompMinMax, Oracle},
 };
 
 /// The conditions that describe when to stop collecting seed traces.
@@ -202,7 +205,7 @@ pub struct Config {
     pub cluster_selection_distance_metric: DistanceMetric,
     /// The oracle to use.
     #[serde(default = "Config::default_oracle")]
-    pub oracle: Oracle,
+    pub oracle: Box<dyn Oracle>,
     /// The criterion to use in the oracle algorithm.
     #[serde(default = "Config::default_oracle_criterion")]
     pub oracle_criterion: Criterion,
@@ -213,42 +216,42 @@ pub struct Config {
 
 impl Config {
     /// The default cluster formation criterion.
-    pub const fn default_cluster_formation_criterion() -> Criterion {
+    pub fn default_cluster_formation_criterion() -> Criterion {
         // See https://git.frama-c.com/kokkonis/rosa/-/issues/2.
         Criterion::EdgesOnly
     }
     /// The default cluster formation distance metric.
-    pub const fn default_cluster_formation_distance_metric() -> DistanceMetric {
+    pub fn default_cluster_formation_distance_metric() -> DistanceMetric {
         DistanceMetric::Hamming
     }
     /// The default cluster formation edge tolerance.
-    pub const fn default_cluster_formation_edge_tolerance() -> u64 {
+    pub fn default_cluster_formation_edge_tolerance() -> u64 {
         0
     }
     /// The default cluster formation syscall tolerance.
-    pub const fn default_cluster_formation_syscall_tolerance() -> u64 {
+    pub fn default_cluster_formation_syscall_tolerance() -> u64 {
         0
     }
     /// The default cluster selection criterion.
-    pub const fn default_cluster_selection_criterion() -> Criterion {
+    pub fn default_cluster_selection_criterion() -> Criterion {
         // See https://git.frama-c.com/kokkonis/rosa/-/issues/2.
         Criterion::EdgesAndSyscalls
     }
     /// The default cluster selection distance metric.
-    pub const fn default_cluster_selection_distance_metric() -> DistanceMetric {
+    pub fn default_cluster_selection_distance_metric() -> DistanceMetric {
         DistanceMetric::Hamming
     }
     /// The default oracle algorithm.
-    pub const fn default_oracle() -> Oracle {
-        Oracle::CompMinMax
+    pub fn default_oracle() -> Box<dyn Oracle> {
+        Box::new(CompMinMax)
     }
     /// The default criterion to use in the oracle algorithm.
-    pub const fn default_oracle_criterion() -> Criterion {
+    pub fn default_oracle_criterion() -> Criterion {
         // See https://git.frama-c.com/kokkonis/rosa/-/issues/2.
         Criterion::SyscallsOnly
     }
     /// The default distance metric to use in the oracle algorithm.
-    pub const fn default_oracle_distance_metric() -> DistanceMetric {
+    pub fn default_oracle_distance_metric() -> DistanceMetric {
         DistanceMetric::Hamming
     }
 

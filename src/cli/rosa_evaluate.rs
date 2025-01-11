@@ -20,8 +20,8 @@ use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use rosa::error;
 use rosa::{
     config::{self, Config},
-    decision::TimedDecision,
     error::RosaError,
+    oracle::TimedDecision,
     trace,
 };
 
@@ -296,7 +296,7 @@ fn run(
                     .join("traces")
                     .join(&timed_decision.decision.trace_uid),
                 timed_decision,
-                timed_decision.decision.discriminants.uid(
+                timed_decision.decision.discriminants.fingerprint(
                     config.oracle_criterion,
                     &timed_decision.decision.cluster_uid,
                 ),

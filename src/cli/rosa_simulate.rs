@@ -20,11 +20,10 @@ use colored::Colorize;
 use rosa::{
     clustering,
     config::Config,
-    decision::TimedDecision,
-    decision::{Decision, DecisionReason, Discriminants},
     error,
     error::RosaError,
     fail,
+    oracle::{Decision, DecisionReason, Discriminants, TimedDecision},
     trace::{self, Trace},
 };
 
@@ -298,17 +297,17 @@ fn run(
             timed_decision.save(&config.decisions_dir())?;
 
             if timed_decision.decision.is_backdoor {
-                // Get the discriminants UID to deduplicate backdoor.
+                // Get the fingerprint to deduplicate backdoor.
                 // Essentially, if the backdoor was detected for the same reason as a
                 // pre-existing backdoor, we should avoid listing them as two different
                 // backdoors.
-                let discriminants_uid = timed_decision.decision.discriminants.uid(
+                let fingerprint = timed_decision.decision.discriminants.fingerprint(
                     config.oracle_criterion,
                     &timed_decision.decision.cluster_uid,
                 );
 
                 // Attempt to create a directory for this category of backdoor.
-                let backdoor_dir = config.backdoors_dir().join(discriminants_uid);
+                let backdoor_dir = config.backdoors_dir().join(fingerprint);
                 match fs::create_dir(&backdoor_dir) {
                     Ok(_) => Ok(()),
                     Err(error) => match error.kind() {

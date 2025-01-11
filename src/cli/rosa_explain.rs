@@ -15,7 +15,7 @@ use clap::Parser;
 use colored::Colorize;
 
 use rosa::error;
-use rosa::{config::Config, decision::TimedDecision, error::RosaError, trace::Trace};
+use rosa::{config::Config, error::RosaError, oracle::TimedDecision, trace::Trace};
 
 mod common;
 #[macro_use]

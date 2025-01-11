@@ -19,7 +19,7 @@ use rosa::{
     criterion::Criterion,
     error::RosaError,
     fuzzer::FuzzerStatus,
-    oracle::Oracle,
+    oracle::{comp_min_max::CompMinMax, Oracle},
 };
 use rosa::{error, fail};
 
@@ -40,7 +40,7 @@ struct RosaTuiStats {
     edge_coverage: f64,
     syscall_coverage: f64,
     new_traces: u64,
-    oracle: Oracle,
+    oracle: Box<dyn Oracle>,
     oracle_criterion: Criterion,
     clusters: Option<u64>,
     seed_traces: Option<u64>,
@@ -68,7 +68,7 @@ impl RosaTuiStats {
             edge_coverage: 0.0,
             syscall_coverage: 0.0,
             new_traces: 0,
-            oracle: Oracle::CompMinMax,
+            oracle: Box::new(CompMinMax),
             oracle_criterion: Criterion::EdgesAndSyscalls,
             clusters: None,
             seed_traces: None,
@@ -507,7 +507,7 @@ impl RosaTui {
             ]),
             Line::from(vec![
                 Span::styled("         oracle: ", label_style),
-                stats.oracle.to_string().into(),
+                stats.oracle.name().into(),
             ]),
             Line::from(vec![
                 Span::styled("      criterion: ", label_style),
