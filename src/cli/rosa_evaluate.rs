@@ -237,7 +237,7 @@ fn run(
 
     let selected_cmd: Vec<String> = match target_program_cmd {
         Some(cmd) => cmd.split(' ').map(|arg| arg.to_string()).collect(),
-        None => config.main_fuzzer()?.cmd.clone(),
+        None => config.main_fuzzer()?.backend.cmd().clone(),
     };
     let selected_env: HashMap<String, String> = match target_program_env {
         Some(env) => env

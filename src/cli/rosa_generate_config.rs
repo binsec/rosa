@@ -3,31 +3,40 @@
 //! This binary helps create configuration files for new targets without delving into all of the
 //! configuration options.
 
-use std::{io, path::PathBuf, process::ExitCode};
+use std::{
+    io,
+    path::{Path, PathBuf},
+    process::ExitCode,
+};
 
 use colored::Colorize;
+
+use rosa::{
+    config::{Config, SeedConditions},
+    error,
+    error::RosaError,
+    fuzzer::{aflpp::AFLPlusPlus, FuzzerConfig},
+};
 
 mod common;
 #[macro_use]
 #[allow(unused_macros)]
 mod logging;
 
-use rosa::{
-    config::{Config, SeedConditions},
-    error,
-    error::RosaError,
-    fuzzer::{FuzzerBackend, FuzzerConfig},
-};
-
 /// Generate a configuration for a fuzzer.
 ///
 /// This is a helper function to avoid repetition when generating fuzzer configurations.
+#[allow(clippy::too_many_arguments)]
 fn generate_fuzzer_config(
     name: &str,
+    afl_fuzz: &Path,
+    input_dir: &Path,
+    output_dir: &Path,
+    target: &[String],
     power_schedule: &str,
-    instrument_libs: bool,
-    ascii: bool,
-    main: bool,
+    is_main: bool,
+    has_instrument_libs: bool,
+    is_ascii: bool,
 ) -> FuzzerConfig {
     let env = vec![
         ("AFL_SYNC_TIME", "1"),
@@ -35,41 +44,44 @@ fn generate_fuzzer_config(
         ("AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES", "1"),
         ("AFL_SKIP_CPUFREQ", "1"),
     ];
-    let cmd = vec!["-Q", "-c", "0", "-p", power_schedule];
+    let extra_args = vec!["-Q", "-c", "0", "-p", power_schedule];
 
-    let env = if instrument_libs {
+    let env = if has_instrument_libs {
         [env, vec![("AFL_INST_LIBS", "1")]].concat()
     } else {
         env
     };
 
-    let (env, cmd) = if ascii {
+    let (env, extra_args) = if is_ascii {
         (
             [env, vec![("AFL_NO_ARITH", "1")]].concat(),
-            [cmd, vec!["-a", "ascii"]].concat(),
+            [extra_args, vec!["-a", "ascii"]].concat(),
         )
     } else {
-        (env, cmd)
+        (env, extra_args)
     };
 
-    let cmd = if main {
+    let extra_args = if is_main {
         // Only the main instance needs to dump traces by default.
-        [cmd, vec!["-r", "-M", name]].concat()
+        [extra_args, vec!["-r"]].concat()
     } else {
-        [cmd, vec!["-S", name]].concat()
+        extra_args
     };
 
     FuzzerConfig {
-        name: name.to_string(),
         env: env
             .into_iter()
             .map(|(key, value)| (key.to_string(), value.to_string()))
             .collect(),
-        cmd: cmd.into_iter().map(|s| s.to_string()).collect(),
-        test_input_dir: vec![name, "queue"].into_iter().collect(),
-        trace_dump_dir: vec![name, "trace_dumps"].into_iter().collect(),
-        crashes_dir: vec![name, "crashes"].into_iter().collect(),
-        backend: FuzzerBackend::AFLPlusPlus,
+        backend: Box::new(AFLPlusPlus {
+            name: name.to_string(),
+            is_main,
+            afl_fuzz: afl_fuzz.to_path_buf(),
+            input_dir: input_dir.to_path_buf(),
+            output_dir: output_dir.to_path_buf(),
+            target: target.iter().map(|arg| arg.to_string()).collect(),
+            extra_args: extra_args.iter().map(|arg| arg.to_string()).collect(),
+        }),
     }
 }
 
@@ -123,16 +135,7 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
         .iter()
         .collect();
     let default_fuzzer_output_dir = PathBuf::from("fuzzer-out");
-    let default_seed_dir_path = PathBuf::from("seeds");
-
-    let default_fuzzer_configs = vec![
-        generate_fuzzer_config("main", "explore", true, true, true),
-        generate_fuzzer_config("fast-libs", "fast", true, true, false),
-        generate_fuzzer_config("exploit-libs", "exploit", true, false, false),
-        generate_fuzzer_config("explore-bin", "explore", false, true, false),
-        generate_fuzzer_config("fast-bin", "fast", false, true, false),
-        generate_fuzzer_config("exploit-bin", "exploit", false, false, false),
-    ];
+    let default_seed_dir = PathBuf::from("seeds");
 
     let config_file_name = get_input(
         "Configuration file name",
@@ -165,7 +168,7 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
         "<none>",
     )?;
     let fuzzer_path = get_input(
-        "Path to fuzzer",
+        "Path to afl-fuzz",
         |x| Some(x.to_string().into()),
         default_fuzzer_path.clone(),
         &default_fuzzer_path.display().to_string(),
@@ -176,40 +179,111 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
         default_fuzzer_output_dir.clone(),
         &default_fuzzer_output_dir.display().to_string(),
     )?;
-    let seed_dir_path = get_input(
+    let seed_dir = get_input(
         "Path to seed directory",
         |x| Some(x.to_string().into()),
-        default_seed_dir_path.clone(),
-        &default_seed_dir_path.display().to_string(),
+        default_seed_dir.clone(),
+        &default_seed_dir.display().to_string(),
     )?;
+
+    let full_target_command: Vec<String> = [
+        vec![target_path.display().to_string()],
+        target_arguments
+            .split(" ")
+            .map(|arg| arg.to_string())
+            .collect(),
+    ]
+    .concat();
 
     Ok((
         Config {
             output_dir: rosa_output_dir,
-            fuzzers: default_fuzzer_configs
-                .into_iter()
-                .map(|fuzzer_config| FuzzerConfig {
-                    name: fuzzer_config.name,
-                    env: fuzzer_config.env,
-                    cmd: [
-                        vec![
-                            fuzzer_path.display().to_string(),
-                            "-i".to_string(),
-                            seed_dir_path.display().to_string(),
-                            "-o".to_string(),
-                            fuzzer_output_dir.display().to_string(),
-                        ],
-                        fuzzer_config.cmd,
-                        vec!["--".to_string(), target_path.display().to_string()],
-                        target_arguments.split(" ").map(|s| s.to_string()).collect(),
-                    ]
-                    .concat(),
-                    test_input_dir: fuzzer_output_dir.join(&fuzzer_config.test_input_dir),
-                    trace_dump_dir: fuzzer_output_dir.join(&fuzzer_config.trace_dump_dir),
-                    crashes_dir: fuzzer_output_dir.join(&fuzzer_config.crashes_dir),
-                    backend: fuzzer_config.backend,
-                })
-                .collect(),
+            fuzzers: vec![
+                generate_fuzzer_config(
+                    "main",
+                    &fuzzer_path,
+                    &seed_dir,
+                    &fuzzer_output_dir,
+                    &full_target_command,
+                    "explore",
+                    // Is main?
+                    true,
+                    // Has AFL_INST_LIBS?
+                    true,
+                    // Is ASCII?
+                    true,
+                ),
+                generate_fuzzer_config(
+                    "fast-libs",
+                    &fuzzer_path,
+                    &seed_dir,
+                    &fuzzer_output_dir,
+                    &full_target_command,
+                    "fast",
+                    // Is main?
+                    false,
+                    // Has AFL_INST_LIBS?
+                    true,
+                    // Is ASCII?
+                    true,
+                ),
+                generate_fuzzer_config(
+                    "exploit-libs",
+                    &fuzzer_path,
+                    &seed_dir,
+                    &fuzzer_output_dir,
+                    &full_target_command,
+                    "exploit",
+                    // Is main?
+                    false,
+                    // Has AFL_INST_LIBS?
+                    true,
+                    // Is ASCII?
+                    false,
+                ),
+                generate_fuzzer_config(
+                    "explore-bin",
+                    &fuzzer_path,
+                    &seed_dir,
+                    &fuzzer_output_dir,
+                    &full_target_command,
+                    "explore",
+                    // Is main?
+                    false,
+                    // Has AFL_INST_LIBS?
+                    false,
+                    // Is ASCII?
+                    true,
+                ),
+                generate_fuzzer_config(
+                    "fast-bin",
+                    &fuzzer_path,
+                    &seed_dir,
+                    &fuzzer_output_dir,
+                    &full_target_command,
+                    "fast",
+                    // Is main?
+                    false,
+                    // Has AFL_INST_LIBS?
+                    false,
+                    // Is ASCII?
+                    true,
+                ),
+                generate_fuzzer_config(
+                    "exploit-bin",
+                    &fuzzer_path,
+                    &seed_dir,
+                    &fuzzer_output_dir,
+                    &full_target_command,
+                    "exploit",
+                    // Is main?
+                    false,
+                    // Has AFL_INST_LIBS?
+                    false,
+                    // Is ASCII?
+                    false,
+                ),
+            ],
             seed_conditions: SeedConditions {
                 seconds: Some(phase_1_duration),
                 edge_coverage: None,

@@ -50,7 +50,6 @@ struct RosaTuiStats {
     syscall_tolerance: u64,
     config_file_path: String,
     output_dir_path: String,
-    fuzzer_dirs: Vec<PathBuf>,
     alive_fuzzers: u64,
     total_fuzzers: u64,
     crash_warning: bool,
@@ -79,7 +78,6 @@ impl RosaTuiStats {
             syscall_tolerance: 0,
             config_file_path: config_path.display().to_string(),
             output_dir_path: output_dir_path.join("").display().to_string(),
-            fuzzer_dirs: vec![],
             alive_fuzzers: 0,
             total_fuzzers: 0,
             crash_warning: false,
@@ -97,17 +95,6 @@ impl RosaTuiStats {
         self.syscall_tolerance = config.cluster_formation_syscall_tolerance;
 
         self.total_fuzzers = config.fuzzers.len() as u64;
-        self.fuzzer_dirs = config
-            .fuzzers
-            .iter()
-            .map(|fuzzer_config| {
-                fuzzer_config
-                    .test_input_dir
-                    .parent()
-                    .expect("failed to get parent directory of fuzzer test input dir.")
-                    .to_path_buf()
-            })
-            .collect();
 
         Ok(())
     }
@@ -251,7 +238,7 @@ impl RosaTuiStats {
             let found_crashes: Vec<bool> = config
                 .fuzzers
                 .iter()
-                .map(|fuzzer_config| fuzzer_config.found_crashes())
+                .map(|fuzzer_config| fuzzer_config.backend.found_crashes())
                 .collect::<Result<Vec<bool>, RosaError>>()?;
             self.crash_warning = found_crashes.iter().any(|found_crashes| *found_crashes);
         }
@@ -260,8 +247,8 @@ impl RosaTuiStats {
         self.alive_fuzzers = config
             .fuzzers
             .iter()
-            .filter_map(|fuzzer_config| match fuzzer_config.status() {
-                Ok(FuzzerStatus::Running) => Some(1),
+            .filter_map(|fuzzer_config| match fuzzer_config.backend.status() {
+                FuzzerStatus::Running => Some(1),
                 _ => None,
             })
             .count() as u64;

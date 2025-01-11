@@ -163,7 +163,7 @@ impl str::FromStr for RosaPhase {
 /// A configuration for ROSA.
 ///
 /// This configuration will be loaded from a configuration file (one per target program).
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct Config {
     /// The directory in which ROSA's output will be stored.
     pub output_dir: PathBuf,
@@ -567,7 +567,7 @@ impl Config {
     pub fn main_fuzzer(&self) -> Result<&FuzzerConfig, RosaError> {
         self.fuzzers
             .iter()
-            .find(|fuzzer_config| fuzzer_config.name == "main")
+            .find(|fuzzer_config| fuzzer_config.backend.name() == "main")
             .ok_or(error!("No 'main' fuzzer found in the configuration."))
     }
 }
