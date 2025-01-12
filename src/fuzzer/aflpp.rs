@@ -165,3 +165,84 @@ impl FuzzerBackend for AFLPlusPlus {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Verify that the command to invoke AFL++ is correctly computed from its configuration.
+    #[test]
+    fn verify_aflpp_cmd() {
+        let name = "main".to_string();
+        let afl_fuzz = PathBuf::from("afl-fuzz");
+        let input_dir = PathBuf::from("corpus");
+        let output_dir = PathBuf::from("findings");
+        let target: Vec<String> = vec!["sudo", "--stdin", "--reset-timestamp", "--", "id"]
+            .iter()
+            .map(|arg| arg.to_string())
+            .collect();
+        let extra_args: Vec<String> = vec!["-Q", "-c", "0"]
+            .iter()
+            .map(|arg| arg.to_string())
+            .collect();
+        let config = AFLPlusPlus {
+            name: name.clone(),
+            is_main: true,
+            afl_fuzz: afl_fuzz.clone(),
+            input_dir: input_dir.clone(),
+            output_dir: output_dir.clone(),
+            target: target.clone(),
+            extra_args: extra_args.clone(),
+        };
+        assert_eq!(
+            config.cmd(),
+            [
+                vec![
+                    afl_fuzz.display().to_string(),
+                    "-i".to_string(),
+                    input_dir.display().to_string(),
+                    "-o".to_string(),
+                    output_dir.display().to_string(),
+                    "-M".to_string(),
+                    name
+                ],
+                extra_args,
+                vec!["--".to_string()],
+                target
+            ]
+            .concat()
+        );
+
+        let name = "secondary".to_string();
+        let afl_fuzz = PathBuf::from("./afl-fuzz");
+        let input_dir = PathBuf::from("in");
+        let output_dir = PathBuf::from("out");
+        let target: Vec<String> = vec!["./target"].iter().map(|arg| arg.to_string()).collect();
+        let config = AFLPlusPlus {
+            name: name.clone(),
+            is_main: false,
+            afl_fuzz: afl_fuzz.clone(),
+            input_dir: input_dir.clone(),
+            output_dir: output_dir.clone(),
+            target: target.clone(),
+            extra_args: Vec::new(),
+        };
+        assert_eq!(
+            config.cmd(),
+            [
+                vec![
+                    afl_fuzz.display().to_string(),
+                    "-i".to_string(),
+                    input_dir.display().to_string(),
+                    "-o".to_string(),
+                    output_dir.display().to_string(),
+                    "-S".to_string(),
+                    name,
+                    "--".to_string()
+                ],
+                target
+            ]
+            .concat()
+        );
+    }
+}
