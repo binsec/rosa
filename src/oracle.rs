@@ -22,18 +22,25 @@ use crate::{
 
 pub mod comp_min_max;
 
-/// TODO doc
+/// The interface to an oracle for ROSA.
+///
+/// The oracle is expected to compare a trace to a representative cluster and make a decision
+/// (safe, suspicious) based on a [Criterion](crate::criterion::Criterion).
 #[typetag::serde(tag = "kind")]
 pub trait Oracle: DynClone {
-    /// TODO doc
+    /// Get the name of the oracle.
     fn name(&self) -> &str;
-    /// TODO doc
+    /// Decide if a given trace is safe or suspicious.
+    ///
+    /// The trace is compared to a corresponding (most similar) cluster, using a
+    /// [Criterion](crate::criterion::Criterion) and a
+    /// [DistanceMetric](crate::distance_metric::DistanceMetric).
     fn decide(
         &self,
         trace: &Trace,
         cluster: &Cluster,
         criterion: Criterion,
-        distance_metric: DistanceMetric,
+        distance_metric: Box<dyn DistanceMetric>,
     ) -> Decision;
 }
 clone_trait_object!(Oracle);

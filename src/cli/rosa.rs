@@ -212,7 +212,7 @@ fn run(
     println_info!("Cluster formation config:");
     println_info!(
         "  Distance metric: {}",
-        config.cluster_formation_distance_metric
+        config.cluster_formation_distance_metric.name()
     );
     println_info!("  Criterion: {}", config.cluster_formation_criterion);
     println_info!(
@@ -227,12 +227,15 @@ fn run(
     println_info!("Cluster selection config:");
     println_info!(
         "  Distance metric: {}",
-        config.cluster_selection_distance_metric
+        config.cluster_selection_distance_metric.name()
     );
     println_info!("  Criterion: {}", config.cluster_selection_criterion);
 
     println_info!("Oracle config:");
-    println_info!("  Distance metric: {}", config.oracle_distance_metric);
+    println_info!(
+        "  Distance metric: {}",
+        config.oracle_distance_metric.name()
+    );
     println_info!("  Criterion: {}", config.oracle_criterion);
     println_info!("  Algorithm: {}", config.oracle.name());
 
@@ -431,7 +434,7 @@ fn run(
                 clusters = clustering::cluster_traces(
                     &current_traces,
                     config.cluster_formation_criterion,
-                    config.cluster_formation_distance_metric,
+                    config.cluster_formation_distance_metric.clone(),
                     config.cluster_formation_edge_tolerance,
                     config.cluster_formation_syscall_tolerance,
                 );
@@ -464,7 +467,7 @@ fn run(
                             trace,
                             &clusters,
                             config.cluster_selection_criterion,
-                            config.cluster_selection_distance_metric,
+                            config.cluster_selection_distance_metric.clone(),
                         )
                         .expect("failed to get most similar cluster."),
                     )
@@ -475,7 +478,7 @@ fn run(
                         trace,
                         cluster,
                         config.oracle_criterion,
-                        config.oracle_distance_metric,
+                        config.oracle_distance_metric.clone(),
                     );
                     (trace, decision)
                 })

@@ -6,13 +6,12 @@
 use std::{
     path::{Path, PathBuf},
     process::ExitCode,
-    str::FromStr,
 };
 
 use clap::Parser;
 use colored::Colorize;
 
-use rosa::{distance_metric::DistanceMetric, error::RosaError, trace::Trace};
+use rosa::{distance_metric::DistanceMetric, error, error::RosaError, trace::Trace};
 
 mod common;
 #[macro_use]
@@ -69,13 +68,18 @@ fn run(
         &trace_2_path.with_extension("trace"),
     )?;
 
-    let distance_metric = DistanceMetric::from_str(distance_metric)?;
+    // This is kind of hacky, but we can use the fact that `DistanceMetric` already is serializable
+    // to get it from a string.
+    let distance_metric: Box<dyn DistanceMetric> =
+        toml::from_str(&format!("kind = \"{}\"", distance_metric))
+            .map_err(|err| error!("unknown distance metric '{}': {}.", distance_metric, err))?;
 
-    let edge_wise_dist = distance_metric.dist(&trace_1.edges, &trace_2.edges);
-    let syscall_wise_dist = distance_metric.dist(&trace_1.syscalls, &trace_2.syscalls);
+    let edge_wise_dist = distance_metric.distance(&trace_1.edges, &trace_2.edges);
+    let syscall_wise_dist = distance_metric.distance(&trace_1.syscalls, &trace_2.syscalls);
 
     println_info!(
-        "Distances between '{}' and '{}' (edge-wise, syscall-wise):",
+        "Distances ({}) between '{}' and '{}' (edge-wise, syscall-wise):",
+        distance_metric.name(),
         trace_1_path.display(),
         trace_2_path.display()
     );

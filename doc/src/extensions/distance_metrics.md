@@ -1,50 +1,31 @@
 # Extending the distance metrics
-If you wish to add new distance metrics (to measure similarity between runtime traces), you need to
-modify `distance_metric.rs`.
+If you wish to add a new distance metric, you need to modify the `distance_metric` module.
 
-First, you need to add a new variant to the `DistanceMetric` enum:
+First, you need to add the new distance metric. For this example, we'll place it in
+`src/distance_metric/my_metric.rs`.
+
+In `distance_metric.rs`, we need to declare the new module:
 ```rust
-/// The available distance metrics.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
-pub enum DistanceMetric {
-    /// The Hamming distance metric.
-    ///
-    /// This distance metric simply implements the [Hamming distance](
-    /// https://en.wikipedia.org/wiki/Hamming_distance).
-    #[serde(rename = "hamming")]
-    Hamming,
-    /// My new distance metric.
-    ///
-    /// This distance metric always returns 0.
-    #[serde(rename = "my-metric")]
-    MyDistanceMetric,
-}
+pub mod hamming;
+pub mod my_metric;
 ```
 
-Then, you need to implement the distance metric function:
-```
-/// Compute my distance metric between two vectors.
-fn my_metric(v1: &[u8], v2: &[u8]) -> u64;
+Then, in `my_metric.rs`, we need to declare the configuration of our metric. Usually there is no
+state or configuration associated with the metric, so most likely it will be an empty struct:
+```rust
+/// My new distance metric.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct MyMetric;
 ```
 
-Finally, you need to cover this new enum variant everywhere the `DistanceMetric` enum is used:
+After the definition of `MyMetric`, we must implement the `DistanceMetric` trait:
 ```rust
-pub fn dist(&self, v1: &[u8], v2: &[u8]) -> u64 {
-    match self {
-        Self::Hamming => hamming(v1, v2),
-        Self::MyDistanceMetric => my_metric(v1, v2),
-    }
+#[typetag::serde(name = "my-metric")]
+impl DistanceMetric for MyMetric {
+    // ...
 }
 ```
-```rust
-fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(
-        f,
-        "{}",
-        match self {
-            Self::Hamming => "hamming",
-            Self::MyDistanceMetric => "my-metric",
-        }
-    )
-}
-```
+The compiler should guide you through the implementation. Essentially, the `DistanceMetric` trait
+guarantees a stable interface to the rest of the ROSA library and toolchain, while the metric
+definition itself has to provide some implementations to guarantee this interface. You can look at
+`src/distance_metric/hamming.rs` (the default metric) for inspiration.

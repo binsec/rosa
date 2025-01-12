@@ -236,7 +236,7 @@ fn run(
     let clusters = clustering::cluster_traces(
         &phase_1_traces,
         config.cluster_formation_criterion,
-        config.cluster_formation_distance_metric,
+        config.cluster_formation_distance_metric.clone(),
         config.cluster_formation_edge_tolerance,
         config.cluster_formation_syscall_tolerance,
     );
@@ -279,7 +279,7 @@ fn run(
                 &timed_trace.trace,
                 &clusters,
                 config.cluster_selection_criterion,
-                config.cluster_selection_distance_metric,
+                config.cluster_selection_distance_metric.clone(),
             )
             .expect("failed to get most similar cluster.");
 
@@ -288,7 +288,7 @@ fn run(
                     &timed_trace.trace,
                     most_similar_cluster,
                     config.oracle_criterion,
-                    config.oracle_distance_metric,
+                    config.oracle_distance_metric.clone(),
                 ),
                 seconds: timed_trace.seconds,
             };

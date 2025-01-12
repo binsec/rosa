@@ -31,18 +31,18 @@ impl Oracle for CompMinMax {
         trace: &Trace,
         cluster: &Cluster,
         criterion: Criterion,
-        distance_metric: DistanceMetric,
+        distance_metric: Box<dyn DistanceMetric>,
     ) -> Decision {
         let min_edge_distance = cluster
             .traces
             .iter()
-            .map(|cluster_trace| distance_metric.dist(&trace.edges, &cluster_trace.edges))
+            .map(|cluster_trace| distance_metric.distance(&trace.edges, &cluster_trace.edges))
             .min()
             .expect("failed to get min edge distance between trace and cluster.");
         let min_syscall_distance = cluster
             .traces
             .iter()
-            .map(|cluster_trace| distance_metric.dist(&trace.syscalls, &cluster_trace.syscalls))
+            .map(|cluster_trace| distance_metric.distance(&trace.syscalls, &cluster_trace.syscalls))
             .min()
             .expect("failed to get min syscall distance between trace and cluster.");
 

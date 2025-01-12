@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     criterion::Criterion,
-    distance_metric::DistanceMetric,
+    distance_metric::{hamming::Hamming, DistanceMetric},
     error::RosaError,
     fuzzer::FuzzerConfig,
     oracle::{comp_min_max::CompMinMax, Oracle},
@@ -186,7 +186,7 @@ pub struct Config {
     /// The distance metric to use during cluster formation.
     /// See [cluster_traces](crate::clustering::cluster_traces).
     #[serde(default = "Config::default_cluster_formation_distance_metric")]
-    pub cluster_formation_distance_metric: DistanceMetric,
+    pub cluster_formation_distance_metric: Box<dyn DistanceMetric>,
     /// The edge tolerance to use during cluster formation.
     /// See [cluster_traces](crate::clustering::cluster_traces).
     #[serde(default = "Config::default_cluster_formation_edge_tolerance")]
@@ -202,7 +202,7 @@ pub struct Config {
     /// The distance metric to use during cluster selection.
     /// See [get_most_similar_cluster](crate::clustering::get_most_similar_cluster).
     #[serde(default = "Config::default_cluster_selection_distance_metric")]
-    pub cluster_selection_distance_metric: DistanceMetric,
+    pub cluster_selection_distance_metric: Box<dyn DistanceMetric>,
     /// The oracle to use.
     #[serde(default = "Config::default_oracle")]
     pub oracle: Box<dyn Oracle>,
@@ -211,7 +211,7 @@ pub struct Config {
     pub oracle_criterion: Criterion,
     /// The distance metric to use in the oracle algorithm.
     #[serde(default = "Config::default_oracle_distance_metric")]
-    pub oracle_distance_metric: DistanceMetric,
+    pub oracle_distance_metric: Box<dyn DistanceMetric>,
 }
 
 impl Config {
@@ -221,8 +221,8 @@ impl Config {
         Criterion::EdgesOnly
     }
     /// The default cluster formation distance metric.
-    pub fn default_cluster_formation_distance_metric() -> DistanceMetric {
-        DistanceMetric::Hamming
+    pub fn default_cluster_formation_distance_metric() -> Box<dyn DistanceMetric> {
+        Box::new(Hamming)
     }
     /// The default cluster formation edge tolerance.
     pub fn default_cluster_formation_edge_tolerance() -> u64 {
@@ -238,8 +238,8 @@ impl Config {
         Criterion::EdgesAndSyscalls
     }
     /// The default cluster selection distance metric.
-    pub fn default_cluster_selection_distance_metric() -> DistanceMetric {
-        DistanceMetric::Hamming
+    pub fn default_cluster_selection_distance_metric() -> Box<dyn DistanceMetric> {
+        Box::new(Hamming)
     }
     /// The default oracle algorithm.
     pub fn default_oracle() -> Box<dyn Oracle> {
@@ -251,8 +251,8 @@ impl Config {
         Criterion::SyscallsOnly
     }
     /// The default distance metric to use in the oracle algorithm.
-    pub fn default_oracle_distance_metric() -> DistanceMetric {
-        DistanceMetric::Hamming
+    pub fn default_oracle_distance_metric() -> Box<dyn DistanceMetric> {
+        Box::new(Hamming)
     }
 
     /// The README to put in the root of ROSA's output directory.

@@ -36,7 +36,7 @@ pub struct Cluster {
 /// use rosa::{
 ///     clustering::{self, Cluster},
 ///     criterion::Criterion,
-///     distance_metric::DistanceMetric,
+///     distance_metric::hamming::Hamming,
 ///     trace::Trace,
 /// };
 ///
@@ -102,7 +102,7 @@ pub struct Cluster {
 ///         &candidate_trace,
 ///         &clusters,
 ///         Criterion::EdgesOnly,
-///         DistanceMetric::Hamming,
+///         Box::new(Hamming),
 ///     ).unwrap().uid,
 ///     clusters[0].uid,
 /// );
@@ -111,7 +111,7 @@ pub fn get_most_similar_cluster<'a>(
     trace: &Trace,
     clusters: &'a [Cluster],
     criterion: Criterion,
-    distance_metric: DistanceMetric,
+    distance_metric: Box<dyn DistanceMetric>,
 ) -> Option<&'a Cluster> {
     let (_, cluster_index) = clusters.iter().enumerate().fold(
         (u64::MAX, None),
@@ -119,12 +119,14 @@ pub fn get_most_similar_cluster<'a>(
             let min_edge_distance = cluster
                 .traces
                 .iter()
-                .map(|cluster_trace| distance_metric.dist(&trace.edges, &cluster_trace.edges))
+                .map(|cluster_trace| distance_metric.distance(&trace.edges, &cluster_trace.edges))
                 .min();
             let min_syscall_distance = cluster
                 .traces
                 .iter()
-                .map(|cluster_trace| distance_metric.dist(&trace.syscalls, &cluster_trace.syscalls))
+                .map(|cluster_trace| {
+                    distance_metric.distance(&trace.syscalls, &cluster_trace.syscalls)
+                })
                 .min();
 
             let new_min_distance = match criterion {
@@ -145,11 +147,11 @@ pub fn get_most_similar_cluster<'a>(
                         .traces
                         .iter()
                         .filter(|cluster_trace| {
-                            distance_metric.dist(&trace.edges, &cluster_trace.edges)
+                            distance_metric.distance(&trace.edges, &cluster_trace.edges)
                                 == min_edge_distance.unwrap_or(u64::MAX)
                         })
                         .map(|cluster_trace| {
-                            distance_metric.dist(&trace.syscalls, &cluster_trace.syscalls)
+                            distance_metric.distance(&trace.syscalls, &cluster_trace.syscalls)
                         })
                         .min()
                 }
@@ -178,7 +180,7 @@ pub fn get_most_similar_cluster<'a>(
 /// use rosa::{
 ///     clustering,
 ///     criterion::Criterion,
-///     distance_metric::DistanceMetric,
+///     distance_metric::hamming::Hamming,
 ///     trace::Trace,
 /// };
 ///
@@ -202,7 +204,7 @@ pub fn get_most_similar_cluster<'a>(
 ///
 /// // With zero edge tolerance, the two different traces will be put into two different clusters.
 /// let strict_clusters = clustering::cluster_traces(
-///     &traces, Criterion::EdgesOnly, DistanceMetric::Hamming, 0, 0
+///     &traces, Criterion::EdgesOnly, Box::new(Hamming), 0, 0
 /// );
 /// assert_eq!(strict_clusters.len(), 2);
 /// assert_eq!(strict_clusters[0].traces.len(), 1);
@@ -212,7 +214,7 @@ pub fn get_most_similar_cluster<'a>(
 ///
 /// // With some tolerance, both traces will be grouped into the same cluster.
 /// let relaxed_clusters = clustering::cluster_traces(
-///     &traces, Criterion::EdgesOnly, DistanceMetric::Hamming, 1, 0
+///     &traces, Criterion::EdgesOnly, Box::new(Hamming), 1, 0
 /// );
 /// assert_eq!(relaxed_clusters.len(), 1);
 /// assert_eq!(relaxed_clusters[0].traces.len(), 2);
@@ -222,7 +224,7 @@ pub fn get_most_similar_cluster<'a>(
 pub fn cluster_traces(
     traces: &[Trace],
     criterion: Criterion,
-    distance_metric: DistanceMetric,
+    distance_metric: Box<dyn DistanceMetric>,
     edge_tolerance: u64,
     syscall_tolerance: u64,
 ) -> Vec<Cluster> {
@@ -246,51 +248,55 @@ pub fn cluster_traces(
         // In the general case, we cannot optimize, so we have to go through the full clustering
         // algorithm.
         _ => traces.iter().fold(Vec::new(), |mut clusters, trace| {
-            let result = get_most_similar_cluster(trace, &clusters, criterion, distance_metric)
-                .map(|most_similar_cluster| {
-                    let max_edge_distance = most_similar_cluster
+            let result =
+                get_most_similar_cluster(trace, &clusters, criterion, distance_metric.clone()).map(
+                    |most_similar_cluster| {
+                        let max_edge_distance = most_similar_cluster
                     .traces
                     .iter()
-                    .map(|cluster_trace| distance_metric.dist(&trace.edges, &cluster_trace.edges))
+                    .map(|cluster_trace| {
+                        distance_metric.distance(&trace.edges, &cluster_trace.edges)
+                    })
                     .max()
                     .expect(
                         "failed to get max edge distance between trace and most similar cluster.",
                     );
-                    let max_syscall_distance = most_similar_cluster
-                        .traces
-                        .iter()
-                        .map(|cluster_trace| {
-                            distance_metric.dist(&trace.syscalls, &cluster_trace.syscalls)
-                        })
-                        .max()
-                        .expect(
-                            "failed to get max syscall distance between trace and most similar\
+                        let max_syscall_distance = most_similar_cluster
+                            .traces
+                            .iter()
+                            .map(|cluster_trace| {
+                                distance_metric.distance(&trace.syscalls, &cluster_trace.syscalls)
+                            })
+                            .max()
+                            .expect(
+                                "failed to get max syscall distance between trace and most similar\
                                 cluster.",
-                        );
+                            );
 
-                    let edge_criterion =
-                        max_edge_distance <= most_similar_cluster.min_edge_distance;
-                    let syscall_criterion =
-                        max_syscall_distance <= most_similar_cluster.min_syscall_distance;
+                        let edge_criterion =
+                            max_edge_distance <= most_similar_cluster.min_edge_distance;
+                        let syscall_criterion =
+                            max_syscall_distance <= most_similar_cluster.min_syscall_distance;
 
-                    let cluster_matches = match criterion {
-                        Criterion::EdgesOnly => edge_criterion,
-                        Criterion::SyscallsOnly => syscall_criterion,
-                        Criterion::EdgesOrSyscalls => edge_criterion || syscall_criterion,
-                        Criterion::EdgesAndSyscalls => edge_criterion && syscall_criterion,
-                    };
+                        let cluster_matches = match criterion {
+                            Criterion::EdgesOnly => edge_criterion,
+                            Criterion::SyscallsOnly => syscall_criterion,
+                            Criterion::EdgesOrSyscalls => edge_criterion || syscall_criterion,
+                            Criterion::EdgesAndSyscalls => edge_criterion && syscall_criterion,
+                        };
 
-                    (
-                        cluster_matches.then_some(
-                            clusters
-                                .iter()
-                                .position(|c| c.uid == most_similar_cluster.uid)
-                                .expect("failed to get index of matching cluster."),
-                        ),
-                        max_edge_distance,
-                        max_syscall_distance,
-                    )
-                });
+                        (
+                            cluster_matches.then_some(
+                                clusters
+                                    .iter()
+                                    .position(|c| c.uid == most_similar_cluster.uid)
+                                    .expect("failed to get index of matching cluster."),
+                            ),
+                            max_edge_distance,
+                            max_syscall_distance,
+                        )
+                    },
+                );
 
             match result {
                 Some((
