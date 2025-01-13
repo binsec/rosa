@@ -33,6 +33,8 @@ pub struct AFLPlusPlus {
 
 impl AFLPlusPlus {
     /// Get the PID of the fuzzer.
+    ///
+    /// The PID of the fuzzer can be found in the `fuzzer_stats` file, if it exists.
     fn pid(&self) -> Result<String, RosaError> {
         let fuzzer_stats_file = self.output_dir.join("fuzzer_stats");
         fs::read_to_string(&fuzzer_stats_file).map_or_else(
@@ -115,7 +117,6 @@ impl FuzzerBackend for AFLPlusPlus {
         self.output_dir.join(&self.name).join("trace_dumps")
     }
 
-    /// Check if the fuzzer has found any crashes.
     fn found_crashes(&self) -> Result<bool, RosaError> {
         let crashes_dir = &self.output_dir.join(&self.name).join("crashes");
         fs::read_dir(crashes_dir).map_or_else(
@@ -126,11 +127,12 @@ impl FuzzerBackend for AFLPlusPlus {
                     err
                 )
             },
+            // If any files are present in the crashes directory, that means that crashes were
+            // found.
             |res| Ok(res.filter_map(|item| item.ok()).next().is_some()),
         )
     }
 
-    /// Get the status of the fuzzer.
     fn status(&self) -> FuzzerStatus {
         let fuzzer_setup_file = self.output_dir.join("fuzzer_setup");
         let fuzzer_stats_file = self.output_dir.join("fuzzer_stats");
