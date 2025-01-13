@@ -217,7 +217,10 @@ pub struct Config {
 impl Config {
     /// The default cluster formation criterion.
     pub fn default_cluster_formation_criterion() -> Criterion {
-        // See https://git.frama-c.com/kokkonis/rosa/-/issues/2.
+        // By default, we separate clusters by CFG edges only. This is because of how we define
+        // input families in the original paper. Additionally, this criterion implicitly takes
+        // system calls into account, as passing by the same CFG edges implies producing the same
+        // types of system calls.
         Criterion::EdgesOnly
     }
     /// The default cluster formation distance metric.
@@ -234,7 +237,9 @@ impl Config {
     }
     /// The default cluster selection criterion.
     pub fn default_cluster_selection_criterion() -> Criterion {
-        // See https://git.frama-c.com/kokkonis/rosa/-/issues/2.
+        // By default, we select clusters by CFG edges and system calls. This is because of how we
+        // define input families in the original paper. The system calls are used here as a tie
+        // breaker, in case the CFG edge vectors are identical.
         Criterion::EdgesAndSyscalls
     }
     /// The default cluster selection distance metric.
@@ -247,7 +252,9 @@ impl Config {
     }
     /// The default criterion to use in the oracle algorithm.
     pub fn default_oracle_criterion() -> Criterion {
-        // See https://git.frama-c.com/kokkonis/rosa/-/issues/2.
+        // By default, we only use system calls in the oracle. This is because of how the
+        // metamorphic oracle is defined in the original paper. Backdoors are expected to exhibit
+        // differences in denotational semantics, which here are modeled via system call types.
         Criterion::SyscallsOnly
     }
     /// The default distance metric to use in the oracle algorithm.
