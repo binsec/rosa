@@ -8,10 +8,12 @@ $ docker pull <TODO ADDRESS>
 ```
 Then, you can run a container using that image by running:
 ```console
-$ docker run -ti --rm -e "COLORTERM=truecolor" <TODO IMAGE NAME>
+$ docker run -ti --rm -e "COLORTERM=truecolor" -p 4000:4000 <TODO IMAGE NAME>
 ```
-(Note that this command will start an interactive session within the container, and that exiting
-the container will trigger its removal.)
+Note that this command will start an interactive session within the container, and that exiting
+the container will trigger its removal. It will also forward any traffic to port 4000 on the host
+to port 4000 on the guest, and serve the documentation on that port; this means you can consult the
+documentation on <http://localhost:4000> on the host while the Docker container is running.
 
 ## Building the Docker image
 If you wish to build the Docker image on your machine, you can use the helper `build.sh` script,
