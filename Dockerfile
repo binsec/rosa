@@ -54,7 +54,10 @@ RUN cargo install --path .
 RUN apt-get update && apt-get install -y strace gdb
 
 # Install mdbook and simple-http-server to have the documentation available via an HTTP server on
-localhost.
+# localhost.
+#
+# `libssl-dev` is needed by `simple-http-server`.
+RUN apt-get update && apt-get install -y libssl-dev
 RUN cargo install mdbook simple-http-server
 RUN mdbook build /root/rosa/doc
 
