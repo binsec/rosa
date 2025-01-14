@@ -36,7 +36,7 @@ impl AFLPlusPlus {
     ///
     /// The PID of the fuzzer can be found in the `fuzzer_stats` file, if it exists.
     fn pid(&self) -> Result<String, RosaError> {
-        let fuzzer_stats_file = self.output_dir.join("fuzzer_stats");
+        let fuzzer_stats_file = self.output_dir.join(&self.name).join("fuzzer_stats");
         fs::read_to_string(&fuzzer_stats_file).map_or_else(
             |err| {
                 fail!(
@@ -134,8 +134,8 @@ impl FuzzerBackend for AFLPlusPlus {
     }
 
     fn status(&self) -> FuzzerStatus {
-        let fuzzer_setup_file = self.output_dir.join("fuzzer_setup");
-        let fuzzer_stats_file = self.output_dir.join("fuzzer_stats");
+        let fuzzer_setup_file = self.output_dir.join(&self.name).join("fuzzer_setup");
+        let fuzzer_stats_file = self.output_dir.join(&self.name).join("fuzzer_stats");
 
         let fuzzer_setup_metadata = fuzzer_setup_file.metadata();
         let fuzzer_stats_metadata = fuzzer_stats_file.metadata();
