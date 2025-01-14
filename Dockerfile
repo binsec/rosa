@@ -61,5 +61,7 @@ RUN apt-get update && apt-get install -y libssl-dev
 RUN cargo install mdbook simple-http-server
 RUN mdbook build /root/rosa/doc
 
+# Needed to have accurate colors for the ROSA toolchain binaries.
+ENV COLORTERM=truecolor
 WORKDIR /root
 CMD ["/root/rosa/start.sh"]

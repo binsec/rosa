@@ -14,7 +14,7 @@ recommend creating a temporary directory and mounting it as a volume in the cont
 `$HOME/rosa-experiment`):
 
 ```console
-{host}      $ docker run -ti --rm -e "COLORTERM=truecolor" \
+{host}      $ docker run -ti --rm -p 4000:4000 \
                          -v $HOME/rosa-experiment:/root/rosa-experiment XXX
 {container} $ cd /root/rosa-experiment/
 ```
