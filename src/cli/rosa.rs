@@ -553,9 +553,9 @@ fn main() -> ExitCode {
     match run(
         &cli.config_file,
         cli.force,
-        cli.wait_for_fuzzers,
         cli.verbose,
         cli.no_tui,
+        cli.wait_for_fuzzers,
         cli.collect_from_all_fuzzers,
     ) {
         Ok(_) => {
