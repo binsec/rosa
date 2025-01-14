@@ -62,4 +62,4 @@ RUN cargo install mdbook simple-http-server
 RUN mdbook build /root/rosa/doc
 
 WORKDIR /root
-CMD ["./rosa/start.sh"]
+CMD ["/root/rosa/start.sh"]
