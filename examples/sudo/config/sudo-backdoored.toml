@@ -28,7 +28,7 @@ extra_args = [
     "ascii",
     "-r",
 ]
-[fuzzers.env]
+[fuzzers.backend.env]
 AFL_NO_ARITH = "1"
 AFL_SYNC_TIME = "1"
 AFL_SKIP_CPUFREQ = "1"
@@ -59,7 +59,7 @@ extra_args = [
     "-a",
     "ascii",
 ]
-[fuzzers.env]
+[fuzzers.backend.env]
 AFL_SYNC_TIME = "1"
 AFL_NO_ARITH = "1"
 AFL_COMPCOV_LEVEL = "2"
@@ -88,7 +88,7 @@ extra_args = [
     "-p",
     "exploit",
 ]
-[fuzzers.env]
+[fuzzers.backend.env]
 AFL_COMPCOV_LEVEL = "2"
 AFL_SYNC_TIME = "1"
 AFL_SKIP_CPUFREQ = "1"
@@ -119,7 +119,7 @@ extra_args = [
     "-a",
     "ascii",
 ]
-[fuzzers.env]
+[fuzzers.backend.env]
 AFL_SYNC_TIME = "1"
 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES = "1"
 AFL_SKIP_CPUFREQ = "1"
@@ -149,7 +149,7 @@ extra_args = [
     "-a",
     "ascii",
 ]
-[fuzzers.env]
+[fuzzers.backend.env]
 AFL_SYNC_TIME = "1"
 AFL_NO_ARITH = "1"
 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES = "1"
@@ -177,7 +177,7 @@ extra_args = [
     "-p",
     "exploit",
 ]
-[fuzzers.env]
+[fuzzers.backend.env]
 AFL_SKIP_CPUFREQ = "1"
 AFL_SYNC_TIME = "1"
 AFL_COMPCOV_LEVEL = "2"
