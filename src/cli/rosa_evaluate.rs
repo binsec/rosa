@@ -250,7 +250,7 @@ fn run(
                 (key, value)
             })
             .collect(),
-        None => config.main_fuzzer()?.env.clone(),
+        None => config.main_fuzzer()?.backend.env().clone(),
     };
 
     let timed_decisions: Vec<TimedDecision> = selected_trace_uids

@@ -69,10 +69,6 @@ fn generate_fuzzer_config(
     };
 
     FuzzerConfig {
-        env: env
-            .into_iter()
-            .map(|(key, value)| (key.to_string(), value.to_string()))
-            .collect(),
         backend: Box::new(AFLPlusPlus {
             name: name.to_string(),
             is_main,
@@ -81,6 +77,10 @@ fn generate_fuzzer_config(
             output_dir: output_dir.to_path_buf(),
             target: target.iter().map(|arg| arg.to_string()).collect(),
             extra_args: extra_args.iter().map(|arg| arg.to_string()).collect(),
+            env: env
+                .into_iter()
+                .map(|(key, value)| (key.to_string(), value.to_string()))
+                .collect(),
         }),
     }
 }

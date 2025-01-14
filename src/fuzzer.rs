@@ -27,6 +27,8 @@ pub trait FuzzerBackend: DynClone {
     fn name(&self) -> &str;
     /// Get the full command used to invoke the fuzzer.
     fn cmd(&self) -> Vec<String>;
+    /// Get the set of environment variables that need to be passed to the fuzzer.
+    fn env(&self) -> HashMap<String, String>;
     /// Get the path to the directory where the fuzzer places new test inputs.
     fn test_input_dir(&self) -> PathBuf;
     /// Get the path to the directory where the fuzzer places runtime traces, corresponding to test
@@ -42,8 +44,6 @@ clone_trait_object!(FuzzerBackend);
 /// A fuzzer configuration.
 #[derive(Serialize, Deserialize, Clone)]
 pub struct FuzzerConfig {
-    /// Any environment variables that need to be passed to the fuzzer.
-    pub env: HashMap<String, String>,
     /// The fuzzer backend to use.
     pub backend: Box<dyn FuzzerBackend>,
 }
@@ -81,7 +81,6 @@ impl FuzzerInstance {
     ///
     /// let _fuzzer_instance = FuzzerInstance::create(
     ///     FuzzerConfig {
-    ///         env: HashMap::from([("AFL_DEBUG".to_string(), "1".to_string())]),
     ///         backend: Box::new(AFLPlusPlus {
     ///             name: "main".to_string(),
     ///             is_main: true,
@@ -90,6 +89,7 @@ impl FuzzerInstance {
     ///             output_dir: PathBuf::from("findings"),
     ///             target: vec!["./target".to_string()],
     ///             extra_args: vec!["-Q".to_string()],
+    ///             env: HashMap::from([("AFL_DEBUG".to_string(), "1".to_string())]),
     ///         }),
     ///     },
     ///     PathBuf::from("/path/to/log_file.log"),
@@ -111,7 +111,7 @@ impl FuzzerInstance {
         let mut command = Command::new(&fuzzer_cmd[0]);
         command
             .args(&fuzzer_cmd[1..])
-            .envs(config::replace_env_var_placeholders(&config.env))
+            .envs(config::replace_env_var_placeholders(&config.backend.env()))
             .stdout(Stdio::from(log_stdout))
             .stderr(Stdio::from(log_stderr));
 
@@ -192,7 +192,8 @@ impl FuzzerInstance {
     /// Get the environment passed to the fuzzer in string form.
     pub fn env_as_string(&self) -> String {
         self.config
-            .env
+            .backend
+            .env()
             .iter()
             .map(|(key, value)| format!("{}={}", key, value))
             .collect::<Vec<String>>()

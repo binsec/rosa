@@ -3,7 +3,7 @@
 //! Note that this is a patched version specifically crafted to work with ROSA. It can be found in
 //! the same repository, under `fuzzers/aflpp`.
 
-use std::{fs, path::PathBuf};
+use std::{collections::HashMap, fs, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -27,8 +27,10 @@ pub struct AFLPlusPlus {
     pub output_dir: PathBuf,
     /// The full command to invoke the target program (with arguments if needed).
     pub target: Vec<String>,
-    /// Any extra arguments to pass to the fuzzer
+    /// Any extra arguments to pass to the fuzzer.
     pub extra_args: Vec<String>,
+    /// Any environment variables to set for the fuzzer.
+    pub env: HashMap<String, String>,
 }
 
 impl AFLPlusPlus {
@@ -109,6 +111,10 @@ impl FuzzerBackend for AFLPlusPlus {
         .concat()
     }
 
+    fn env(&self) -> HashMap<String, String> {
+        self.env.clone()
+    }
+
     fn test_input_dir(&self) -> PathBuf {
         self.output_dir.join(&self.name).join("queue")
     }
@@ -187,6 +193,13 @@ mod tests {
             .iter()
             .map(|arg| arg.to_string())
             .collect();
+        let env: HashMap<String, String> = [
+            ("AFL_INST_LIBS", "1"),
+            ("AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES", "1"),
+        ]
+        .iter()
+        .map(|(key, value)| (key.to_string(), value.to_string()))
+        .collect();
         let config = AFLPlusPlus {
             name: name.clone(),
             is_main: true,
@@ -195,6 +208,7 @@ mod tests {
             output_dir: output_dir.clone(),
             target: target.clone(),
             extra_args: extra_args.clone(),
+            env: env.clone(),
         };
         assert_eq!(
             config.cmd(),
@@ -228,6 +242,7 @@ mod tests {
             output_dir: output_dir.clone(),
             target: target.clone(),
             extra_args: Vec::new(),
+            env: HashMap::new(),
         };
         assert_eq!(
             config.cmd(),
