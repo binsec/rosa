@@ -80,7 +80,6 @@ struct Cli {
     #[arg(
         long_help,
         long,
-        action = clap::ArgAction::SetFalse,
         help = "Wait until all fuzzer instances have stabilized before starting"
     )]
     wait_for_fuzzers: bool,
