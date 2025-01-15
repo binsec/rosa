@@ -1,6 +1,6 @@
 ## Dockerfile for the ROSA toolchain.
 
-FROM ubuntu:24.04
+FROM ubuntu:22.04
 
 LABEL maintainer="dimitri.kokkonis@cea.fr"
 LABEL description="Docker image for the ROSA backdoor detector toolchain"
