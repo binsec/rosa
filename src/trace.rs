@@ -291,7 +291,7 @@ pub fn get_test_input_files(test_input_dir: &Path) -> Result<Vec<PathBuf>, RosaE
                     path.is_file()
                         && path
                             .extension()
-                            .is_none_or(|extension| extension == "trace")
+                            .is_none_or(|extension| extension != "trace")
                 })
                 .collect())
         },
