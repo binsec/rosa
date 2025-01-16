@@ -147,7 +147,7 @@ fn run(
                         path.is_file()
                             && path
                                 .file_name()
-                                .is_none_or(|file_name| file_name == "README.txt")
+                                .is_none_or(|file_name| file_name != "README.txt")
                     })
                     .collect())
             },
