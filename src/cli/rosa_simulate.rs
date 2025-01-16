@@ -60,12 +60,11 @@ struct Cli {
     /// The configuration file to use.
     #[arg(
         long_help,
-        short,
-        long,
         default_value = "config.toml",
+        value_name = "CONFIG FILE",
         help = "Configuration file"
     )]
-    config_file: Option<PathBuf>,
+    config_file: PathBuf,
     /// Perform a true copy of the test inputs and trace files instead of using a symbolic link.
     #[arg(long_help, short = 'C', long, help = "Use true copy")]
     copy_inputs: bool,
@@ -333,12 +332,7 @@ fn main() -> ExitCode {
     common::reset_sigpipe();
     let cli = Cli::parse();
 
-    match run(
-        &cli.rosa_dir,
-        &cli.config_file.unwrap_or(PathBuf::from("config.toml")),
-        cli.copy_inputs,
-        cli.force,
-    ) {
+    match run(&cli.rosa_dir, &cli.config_file, cli.copy_inputs, cli.force) {
         Ok(_) => ExitCode::SUCCESS,
         Err(err) => {
             println_error!(err);
