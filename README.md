@@ -14,11 +14,11 @@ The recommended way to use ROSA is in a Docker container, to avoid having to bui
 
 You can simply pull the existing ROSA Docker image by running:
 ```console
-$ docker pull <TODO ADDRESS>
+$ docker pull plumtrie/rosa:latest
 ```
 Then, you can run a container using that image by running:
 ```console
-$ docker run -ti --rm -p 4000:4000 <TODO IMAGE NAME>
+$ docker run -ti --rm -p 4000:4000 plumtrie/rosa:latest
 ```
 Note that this command will start an interactive session within the container, and that exiting
 the container will trigger its removal. It will also forward any traffic to port 4000 on the host
