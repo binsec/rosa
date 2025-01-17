@@ -340,6 +340,12 @@ impl RosaTui {
         self.terminal
             .as_mut()
             .ok_or(error!("TUI: could not stop TUI, because it's not running."))?;
+        // Clear terminal before stopping, to avoid writing on top of existing output.
+        self.terminal
+            .as_mut()
+            .unwrap()
+            .clear()
+            .map_err(|err| error!("TUI: could not clear terminal: {}.", err))?;
         self.terminal = None;
 
         Ok(())
