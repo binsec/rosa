@@ -7,3 +7,5 @@ build.sh
 run.sh
 Dockerfile
 TODO*
+doc/book/
+target/
