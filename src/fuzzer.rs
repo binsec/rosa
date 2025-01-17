@@ -105,7 +105,7 @@ impl FuzzerInstance {
         })?;
         let log_stderr = log_stdout
             .try_clone()
-            .expect("could not clone fuzzer seed log file.");
+            .expect("could not clone fuzzer log file.");
 
         let fuzzer_cmd = config.backend.cmd();
         let mut command = Command::new(&fuzzer_cmd[0]);
@@ -131,7 +131,7 @@ impl FuzzerInstance {
         }?;
 
         let process = self.command.spawn().or(fail!(
-            "could not run fuzzer seed command. See {}.",
+            "could not run fuzzer command. See {}.",
             &self.log_file.display()
         ))?;
         self.process = Some(process);
