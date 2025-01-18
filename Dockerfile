@@ -49,6 +49,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 WORKDIR /root/rosa
 RUN cargo build --release
 RUN cargo install --path .
+RUN cargo clean
 
 
 # Install debugging tools.
