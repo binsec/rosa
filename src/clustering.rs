@@ -103,7 +103,7 @@ pub struct Cluster {
 ///         &clusters,
 ///         Criterion::EdgesOnly,
 ///         Box::new(Hamming),
-///     ).unwrap().uid,
+///     ).expect("failed to get most similar cluster").uid,
 ///     clusters[0].uid,
 /// );
 /// ```

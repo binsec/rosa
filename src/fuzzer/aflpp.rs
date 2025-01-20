@@ -150,7 +150,13 @@ impl FuzzerBackend for AFLPlusPlus {
             (Ok(setup_metadata), Ok(stats_metadata)) => {
                 // From `afl-whatsup`: if `fuzzer_setup` is newer than `fuzzer_stats`, then the
                 // fuzzer is still starting up.
-                if setup_metadata.modified().unwrap() > stats_metadata.modified().unwrap() {
+                if setup_metadata
+                    .modified()
+                    .expect("failed to get metadata for fuzzer_setup.")
+                    > stats_metadata
+                        .modified()
+                        .expect("failed to get metadata for fuzzer_stats.")
+                {
                     FuzzerStatus::Starting
                 } else {
                     // Since we have access to `fuzzer_stats`, we can simply check the PID

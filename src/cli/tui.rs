@@ -326,7 +326,7 @@ impl RosaTui {
         );
         self.terminal
             .as_mut()
-            .unwrap()
+            .expect("failed to get terminal for TUI.")
             .clear()
             .map_err(|err| error!("TUI: could not clear terminal: {}.", err))?;
 
@@ -343,7 +343,7 @@ impl RosaTui {
         // Clear terminal before stopping, to avoid writing on top of existing output.
         self.terminal
             .as_mut()
-            .unwrap()
+            .expect("failed to get terminal for TUI.")
             .clear()
             .map_err(|err| error!("TUI: could not clear terminal: {}.", err))?;
         self.terminal = None;
