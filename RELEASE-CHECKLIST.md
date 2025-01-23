@@ -5,10 +5,11 @@
    `"-dev"` part.
 4. Run the following:
     1. `cargo check`
-    2. `cargo clippy`
-    3. `cargo build --release`
-    4. `cargo test`
-    5. `cargo doc`
+    2. `cargo fmt`
+    3. `cargo clippy`
+    4. `cargo build --release`
+    5. `cargo test`
+    6. `cargo doc`
     
     They should all succeed.
 5. Run `mdbook serve doc` and peruse the documentation to make sure it looks correct.
