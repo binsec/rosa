@@ -13,18 +13,19 @@
     
     They should all succeed.
 5. Run `mdbook serve doc` and peruse the documentation to make sure it looks correct.
-6. Build the Docker image with the `build.sh` script and make sure it succeeds (check that an image
+6. Update `CHANGELOG.md`.
+7. Build the Docker image with the `build.sh` script and make sure it succeeds (check that an image
    with the right version has been created with `docker images`).
-7. Run the Docker image with the `run.sh` script. In the container, run `rosa
+8. Run the Docker image with the `run.sh` script. In the container, run `rosa
    /root/rosa/examples/sudo/config/sudo-backdoored.toml`; this should succeed, and you should see
    ROSA starting up and showing the status screen. You can also investigate the findings to see if
    everything works as expected.
-8. Commit the changes and tag the commit with the version. For example, for version `X.Y.Z`, tag
+9. Commit the changes and tag the commit with the version. For example, for version `X.Y.Z`, tag
    the commit with `git tag -a X.Y.Z`.
-9. Push the commit and the changes.
-10. Tag and push the Docker image: `docker tag rosa:X.Y.Z plumtrie/rosa:X.Y.Z`, `docker push
+10. Push the commit and the changes.
+11. Tag and push the Docker image: `docker tag rosa:X.Y.Z plumtrie/rosa:X.Y.Z`, `docker push
     plumtrie/rosa:X.Y.Z`.
-11. Tag and push the new image as "latest": `docker tag plumtrie/rosa:X.Y.Z plumtrie/rosa:latest`,
+12. Tag and push the new image as "latest": `docker tag plumtrie/rosa:X.Y.Z plumtrie/rosa:latest`,
     `docker push plumtrie/rosa:latest`.
-11. Prepare for the next version by bumping the PATCH number in the version and appending `"-dev"`.
+13. Prepare for the next version by bumping the PATCH number in the version and appending `"-dev"`.
     This means that `"1.2.3"` should become `"1.2.4-dev"`.
