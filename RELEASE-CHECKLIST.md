@@ -24,5 +24,7 @@
 9. Push the commit and the changes.
 10. Tag and push the Docker image: `docker tag rosa:X.Y.Z plumtrie/rosa:X.Y.Z`, `docker push
     plumtrie/rosa:X.Y.Z`.
+11. Tag and push the new image as "latest": `docker tag plumtrie/rosa:X.Y.Z plumtrie/rosa:latest`,
+    `docker push plumtrie/rosa:latest`.
 11. Prepare for the next version by bumping the PATCH number in the version and appending `"-dev"`.
     This means that `"1.2.3"` should become `"1.2.4-dev"`.
