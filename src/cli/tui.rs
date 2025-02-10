@@ -367,7 +367,7 @@ impl RosaTui {
 
     fn ui(stats: &RosaTuiStats, frame: &mut Frame) {
         // Check that the TUI fits first, and emit a warning if it doesn't.
-        if frame.size().width < Self::MIN_WIDTH || frame.size().height < Self::MIN_HEIGHT {
+        if frame.area().width < Self::MIN_WIDTH || frame.area().height < Self::MIN_HEIGHT {
             frame.render_widget(
                 Paragraph::new(format!(
                     "The terminal is too small to render the TUI; please resize to at least \
@@ -377,7 +377,7 @@ impl RosaTui {
                 ))
                 .bold()
                 .wrap(Wrap { trim: true }),
-                frame.size(),
+                frame.area(),
             );
 
             return;
@@ -385,8 +385,8 @@ impl RosaTui {
 
         // Create the area occupied by the TUI.
         let main_area = Rect::new(
-            (frame.size().width / 2) - (Self::MIN_WIDTH / 2),
-            (frame.size().height / 2) - (Self::MIN_HEIGHT / 2),
+            (frame.area().width / 2) - (Self::MIN_WIDTH / 2),
+            (frame.area().height / 2) - (Self::MIN_HEIGHT / 2),
             Self::MIN_WIDTH,
             Self::MIN_HEIGHT,
         );
@@ -571,7 +571,7 @@ impl RosaTui {
             Style::reset()
         };
         // -3 for the borders and left padding.
-        let max_text_width = (frame.size().width - 14) as usize;
+        let max_text_width = (frame.area().width - 14) as usize;
         if config_file.len() > max_text_width {
             config_file.truncate(max_text_width - 3);
             config_file += "...";
