@@ -1,7 +1,7 @@
 # Contributing to ROSA
 Thank you for taking the time to contribute to the ROSA toolchain!
 
-Below before setting out to contribute new features or bug fixes, please make sure to:
+Before setting out to contribute new features or bug fixes, please make sure to:
 1. Read the instructions detailed below;
 2. Create an issue in the [issue tracker](https://github.com/binsec/rosa/issues).
 
