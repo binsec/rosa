@@ -43,9 +43,9 @@ jobs:
         run: |
           patch --directory=./fuzzers/aflpp/aflpp/qemu_mode/qemuafl -p1 \
             < ./fuzzers/aflpp/patches/qemuafl-rosa.patch \
-          && patch --directory=./fuzzers/aflpp/aflpp/ -p1 \
+          && patch --directory=./fuzzers/aflpp/aflpp -p1 \
             < ./fuzzers/aflpp/patches/aflpp-rosa.patch \
-          && patch --directory=./fuzzers/aflpp/aflpp/ -p1 \
+          && patch --directory=./fuzzers/aflpp/aflpp -p1 \
             < ./fuzzers/aflpp/patches/aflpp-qemuafl-build.patch \
-          && make -j$(nproc) \
+          && make --directory=./fuzzers/aflpp/aflpp -j$(nproc) \
           && cd ./fuzzers/aflpp/aflpp/qemu_mode && ./build_qemu_support.sh
