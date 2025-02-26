@@ -15,9 +15,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: 'recursive'
-      - uses: actions/setup-python@v5
-        with:
-            python-version: '3.13'
       # Run pre-commit checks.
       - uses: pre-commit/action@v3.0.1
       - name: Install rust toolchain
