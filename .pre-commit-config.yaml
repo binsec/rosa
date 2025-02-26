@@ -5,3 +5,13 @@ repos:
       - id: cargo-check
       - id: fmt
       - id: clippy
+  - repo: https://github.com/hukkin/mdformat
+    rev: 0.7.22
+    hooks:
+    - id: mdformat
+      additional_dependencies:
+        - mdformat-gfm
+        - mdformat-frontmatter
+        - mdformat-footnote
+        - mdformat-gfm-alerts
+      exclude: '^(fuzzers/aflpp/aflpp|examples/sudo/target)/.*'

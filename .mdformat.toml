@@ -1,0 +1,4 @@
+end_of_line = "lf"
+number = true
+validate = true
+wrap = 100

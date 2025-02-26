@@ -1,21 +1,27 @@
 # Using ROSA in a Docker container
+
 The recommended way to use ROSA is in a Docker container, to avoid having to build dependencies
 (such as AFL++).
 
 You can simply pull the existing ROSA Docker image by running:
+
 ```console
 $ docker pull plumtrie/rosa:latest
 ```
+
 Then, you can run a container using that image by running:
+
 ```console
 $ docker run -ti --rm -p 4000:4000 plumtrie/rosa:latest
 ```
-Note that this command will start an interactive session within the container, and that exiting
-the container will trigger its removal. It will also forward any traffic to port 4000 on the host
-to port 4000 on the guest, and serve the documentation on that port; this means you can consult the
+
+Note that this command will start an interactive session within the container, and that exiting the
+container will trigger its removal. It will also forward any traffic to port 4000 on the host to
+port 4000 on the guest, and serve the documentation on that port; this means you can consult the
 documentation on <http://localhost:4000> on the host while the Docker container is running.
 
 ## Building the Docker image
+
 If you wish to build the Docker image on your machine, you can use the helper `build.sh` script,
 which will automatically tag the image with the current version. See the script itself for more
 information.

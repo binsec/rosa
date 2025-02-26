@@ -1,12 +1,14 @@
 # rosa
+
 The `rosa` binary is used to run backdoor detection campaigns.
 
 It can be configured via a [TOML](https://toml.io/en/) configuration file (see
-[_Configuration guide_](../config_guide.md)). After running the `rosa` binary, a
-_finding directory_ is produced (as specified by the configuration file). That
-_finding directory_ is structured as follows:
-- `backdoors/`: this directory contains the _backdoor findings_ (or suspicious inputs) discovered
-  by ROSA. Since ROSA deduplicates its backdoor findings, they are grouped in subdirectories,
+[_Configuration guide_](../config_guide.md)). After running the `rosa` binary, a _finding directory_
+is produced (as specified by the configuration file). That _finding directory_ is structured as
+follows:
+
+- `backdoors/`: this directory contains the _backdoor findings_ (or suspicious inputs) discovered by
+  ROSA. Since ROSA deduplicates its backdoor findings, they are grouped in subdirectories,
   identified by the oracle fingerprint (i.e., the name of the corresponding input family and the
   difference between the family and the input itself, encoded as a hash). These subdirectories in
   turn contain the suspicious inputs themselves. The suspicious inputs are to be read as sequences
@@ -17,16 +19,14 @@ _finding directory_ is structured as follows:
   inputs of the cluster (see the `traces/` directory).
 - `config.toml`: this file is a copy of the ROSA configuration file used to produce these findings.
 - `decisions/`: this directory contains details on the decisions taken by the ROSA oracle for each
-  input (including both phase 1 and 2). Specifically, it contains a [TOML](https://toml.io/en/)
-  file _per input file_ analyzed by ROSA. These files contain the following information:
+  input (including both phase 1 and 2). Specifically, it contains a [TOML](https://toml.io/en/) file
+  _per input file_ analyzed by ROSA. These files contain the following information:
   - `seconds`: the time (in seconds since the beginning of the detection campaign) at which this
     oracle decision was taken.
   - `decision.trace_uid`: the UID of the input/trace pair involved in the decision.
-  - `decision.trace_name`: the original name of the input/trace pair (as collected from the
-    fuzzer).
+  - `decision.trace_name`: the original name of the input/trace pair (as collected from the fuzzer).
   - `decision.cluster_uid`: the UID of the corresponding cluster/input family.
-  - `decision.is_backdoor`: the actual decision of the oracle ("is a backdoor"/"is not a
-    backdoor").
+  - `decision.is_backdoor`: the actual decision of the oracle ("is a backdoor"/"is not a backdoor").
   - `decision.reason`: the reason for the oracle's decision. It can be either "seed", "edges",
     "syscalls" or "edges-and-syscalls", with "seed" signifying that the input was a seed (i.e.,
     collected during phase 1).
@@ -43,6 +43,7 @@ _finding directory_ is structured as follows:
 
 Generally, the user is expected to create a configuration file (e.g., via
 [`afl-generate-config`](./afl_generate_config.md)), and then invoke the `rosa` binary like so:
+
 ```console
 $ rosa /path/to/config.toml
 ```

@@ -1,21 +1,24 @@
 # Analyzing the results
+
 If ROSA claims it has detected a backdoor, it will place it in a special subdirectory of its output
 directory (in our case, `rosa-out/backdoors`).
 
-You will notice that the `backdoors` subdirectory contains other directories, with potentially
-weird names:
+You will notice that the `backdoors` subdirectory contains other directories, with potentially weird
+names:
+
 ```console
 {container} $ ls rosa-out/backdoors/
 0430a5dc3e14b0e1_cluster_000000  README.txt
 ```
 
 By default, ROSA performs _deduplication_ based on the _detection signature_ of each backdoor. In
-short, it groups backdoors together based on the detection reason. This removes a _lot_ of
-otherwise duplicate examples (different ways of triggering the same behavior). We can look at any
-one of the _actual suspicious inputs_ inside each subdirectory to draw conclusions about the entire
-category of inputs described by the subdirectory.
+short, it groups backdoors together based on the detection reason. This removes a _lot_ of otherwise
+duplicate examples (different ways of triggering the same behavior). We can look at any one of the
+_actual suspicious inputs_ inside each subdirectory to draw conclusions about the entire category of
+inputs described by the subdirectory.
 
 We can use `od` to look at the contents of a suspicious input:
+
 ```console
 {container} $ od -t cx1 rosa-out/backdoors/0430a5dc3e14b0e1_cluster_000000/e205ab0700d8b183
 0000000   l   e   t   _   m   e   _   i   n  \0   i   l   j   g   v   w
@@ -33,35 +36,38 @@ We can use `od` to look at the contents of a suspicious input:
 
 And there it is: `"let_me_in"`! ROSA has successfully produced an input triggering the backdoor.
 
-
 ## Exploring further
 
-This is just a small example; in a real scenario, you wouldn't know what the backdoor looks like
-(or if there even is one). In that case, you must examine _all_ of the subdirectories of
-`backdoors/`, as some of them may be _false positives_ (i.e., reported as suspicious but not
-actually involving a backdoor).
+This is just a small example; in a real scenario, you wouldn't know what the backdoor looks like (or
+if there even is one). In that case, you must examine _all_ of the subdirectories of `backdoors/`,
+as some of them may be _false positives_ (i.e., reported as suspicious but not actually involving a
+backdoor).
 
 We propose the following method to help automate the investigation:
+
 - For each subdirectory of `backdoors/`:
-    1. Pick a _witness input_ out of the subdirectory, to be used to characterize the entire
-       subdirectory (let's assume the input is `rosa-out/backdoors/X/Y`).
-    2. Run `rosa-explain rosa-out Y` and inspect the different system calls. These
-       are the _discriminants_, meaning the system calls that are _different_ (either with regards
-       to the suspect trace or its corresponding input family).
-    3. Run the target program under `strace` by only filtering the system call numbers you saw
-       previously.
-    4. Look through the output of `strace` for suspicious system calls (or system call arguments).
+  1. Pick a _witness input_ out of the subdirectory, to be used to characterize the entire
+     subdirectory (let's assume the input is `rosa-out/backdoors/X/Y`).
+  2. Run `rosa-explain rosa-out Y` and inspect the different system calls. These are the
+     _discriminants_, meaning the system calls that are _different_ (either with regards to the
+     suspect trace or its corresponding input family).
+  3. Run the target program under `strace` by only filtering the system call numbers you saw
+     previously.
+  4. Look through the output of `strace` for suspicious system calls (or system call arguments).
 
 Let's go through one _witness input_ example with `sudo`:
 
 ### Step 1 - Picking a witness input
-We're picking `rosa-out/backdoors/0430a5dc3e14b0e1_cluster_000000/e205ab0700d8b183` as it's the
-only one that exists. If there were more _backdoor categories_ (i.e., more subdirectories under
+
+We're picking `rosa-out/backdoors/0430a5dc3e14b0e1_cluster_000000/e205ab0700d8b183` as it's the only
+one that exists. If there were more _backdoor categories_ (i.e., more subdirectories under
 `rosa-out/backdoors/`), we would have to pick one input from each.
 
 ### Step 2 - Finding the discriminants
+
 As discussed before, we will use `rosa-explain` to do this, looking at the _system call_
 discriminants specifically:
+
 ```console
 {container} $ rosa-explain rosa-out e205ab0700d8b183
 [rosa]  Explaining trace 3afd12ca01c71b06:
@@ -74,11 +80,14 @@ discriminants specifically:
 [rosa]  Found in the cluster but not the trace:
 
 ```
+
 The second one is empty, because there are no system calls present in the _cluster_ (input family)
 that are **not** present in the _trace_.
 
 ### Step 3 - Running the target under strace
+
 We'll only keep the system calls that are present in our discriminant list:
+
 ```console
 {container} $ strace -f -e 15,32,33,56,59,61,106,111,271,273,436 -o trace.txt -- \
                  backdoored-sudo --stdin --reset-timestamp -- id < \
@@ -87,7 +96,9 @@ Password: uid=0(root) gid=0(root) groups=0(root)
 ```
 
 ### Step 4 - Looking through strace's output
+
 Let's see what the discriminants really look like:
+
 ```console
 {container} $ cat trace.txt
 18866 execve("/usr/bin/backdoored-sudo", ["backdoored-sudo", "--stdin", "--reset-timestamp", "--", "id"], 0x7ffc69b21c10 /* 11 vars */) = 0
@@ -130,6 +141,7 @@ Let's see what the discriminants really look like:
 So we notice that a couple of `clone` system calls are executed, followed by an
 `execve("/usr/bin/id" ...)` system call. There can only be one of three reasons why that point was
 reached in `sudo`:
+
 1. The fuzzer _guessed_ the correct password.
 2. There is a backdoor allowing to bypass authentication, given a special password.
 3. There is a backdoor spawing a shell and running the specified command triggered by some
