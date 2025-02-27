@@ -19,7 +19,7 @@ use crate::error::RosaError;
 /// A runtime trace is produced by a _test input_ fed to a _target program_. Its full description
 /// thus contains both the test input that produced it, as well as the runtime components (edges &
 /// syscalls) of the trace.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Trace {
     /// The name of the trace.
     ///
@@ -154,6 +154,55 @@ impl Trace {
             edges,
             syscalls,
         })
+    }
+
+    /// Create a trace from existing data.
+    ///
+    /// The edges and syscalls are not fed in an *existential vector* format as the trace expects,
+    /// but rather in the form of slices of indices of edge or syscall hits. The rest of the vector
+    /// is populated with zeroes.
+    ///
+    /// # Examples
+    /// ```
+    /// use rosa::trace::Trace;
+    ///
+    /// let trace = Trace::from(
+    ///     "my_trace",
+    ///     &[0x01, 0x02, 0x03, 0x04],
+    ///     &[1, 4, 17],
+    ///     20,
+    ///     &[2, 3, 11],
+    ///     14,
+    /// );
+    ///
+    /// assert_eq!(
+    ///     trace,
+    ///     Trace {
+    ///         name: "my_trace".to_string(),
+    ///         test_input: vec![0x01, 0x02, 0x03, 0x04],
+    ///         edges: vec![0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+    ///         syscalls: vec![0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+    ///     }
+    /// );
+    /// ```
+    pub fn from(
+        name: &str,
+        test_input: &[u8],
+        edges: &[usize],
+        edges_len: usize,
+        syscalls: &[usize],
+        syscalls_len: usize,
+    ) -> Self {
+        Trace {
+            name: name.to_string(),
+            test_input: test_input.to_vec(),
+            edges: (0..edges_len)
+                .map(|index| edges.contains(&index) as u8)
+                .collect(),
+            syscalls: (0..syscalls_len)
+                .map(|index| syscalls.contains(&index) as u8)
+                .collect(),
+        }
     }
 
     /// Get a printable version of the test input.
