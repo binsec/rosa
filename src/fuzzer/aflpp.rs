@@ -3,13 +3,24 @@
 //! Note that this is a patched version specifically crafted to work with ROSA. It can be found in
 //! the same repository, under `fuzzers/aflpp`.
 
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{
+    collections::HashMap,
+    fmt,
+    fs::{self, File},
+    io::{Seek, Write},
+    path::{Path, PathBuf},
+    process::Command,
+};
 
+use itertools::Itertools;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
+use tempfile::{self, NamedTempFile};
 
 use crate::{
     error::RosaError,
     fuzzer::{FuzzerBackend, FuzzerStatus},
+    trace::{self, Trace},
 };
 
 /// The AFL++ fuzzer.
@@ -17,6 +28,8 @@ use crate::{
 pub struct AFLPlusPlus {
     /// The name of the fuzzer.
     pub name: String,
+    /// The mode of the fuzzer.
+    pub mode: AFLPlusPlusMode,
     /// Whether or not this is a main instance.
     pub is_main: bool,
     /// The path to the `afl-fuzz` binary.
@@ -31,6 +44,33 @@ pub struct AFLPlusPlus {
     pub extra_args: Vec<String>,
     /// Any environment variables to set for the fuzzer.
     pub env: HashMap<String, String>,
+}
+
+/// The supported modes for AFL++.
+#[derive(Serialize, Deserialize, Copy, Clone, Debug, PartialEq)]
+pub enum AFLPlusPlusMode {
+    /// Standard source instrumentation.
+    ///
+    /// The target program is expected to be compiled with an instrumentation-injecting compiler
+    /// prior to fuzzing.
+    #[serde(rename = "standard")]
+    Standard,
+    /// Binary-only fuzzing with QEMU.
+    #[serde(rename = "qemu")]
+    QEMU,
+}
+
+impl fmt::Display for AFLPlusPlusMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Standard => "standard",
+                Self::QEMU => "qemu",
+            }
+        )
+    }
 }
 
 impl AFLPlusPlus {
@@ -85,6 +125,10 @@ impl AFLPlusPlus {
 
 #[typetag::serde(name = "afl++")]
 impl FuzzerBackend for AFLPlusPlus {
+    fn backend_id(&self) -> String {
+        format!("afl++-{}", self.mode)
+    }
+
     fn name(&self) -> &str {
         &self.name
     }
@@ -104,6 +148,11 @@ impl FuzzerBackend for AFLPlusPlus {
                 },
                 self.name.clone(),
             ],
+            if self.mode == AFLPlusPlusMode::QEMU {
+                vec!["-Q".to_string()]
+            } else {
+                Vec::new()
+            },
             self.extra_args.clone(),
             vec!["--".to_string()],
             self.target.clone(),
@@ -178,7 +227,302 @@ impl FuzzerBackend for AFLPlusPlus {
             (_, _) => FuzzerStatus::Stopped,
         }
     }
+
+    fn setup(&self, output_dir: &Path) -> Result<(), RosaError> {
+        if self.name() == "main" {
+            let output_dir = output_dir.join("aflpp");
+            let output_file = output_dir.join("strace-stub").with_extension("so");
+            fs::create_dir(&output_dir)
+                .map_err(|err| error!("could not create '{}': {}.", &output_dir.display(), err))?;
+
+            let mut strace_stub_source_file = NamedTempFile::new()
+                .map_err(|err| error!("could not create temporary file: {}", err))?;
+            write!(strace_stub_source_file, "{}", STRACE_STUB_CODE)
+                .map_err(|err| error!("could not write strace stub to temporary file: {}", err))?;
+            let strace_stub_source_path = strace_stub_source_file.into_temp_path();
+
+            Command::new("gcc")
+                .args(["-x", "c", "-shared", "-ldl"])
+                .arg(&strace_stub_source_path)
+                .arg("-o")
+                .arg(&output_file)
+                .status()
+                .map_err(|err| error!("could not compile the strace stub: {}.", err))?;
+        }
+
+        Ok(())
+    }
+
+    fn teardown(&self, output_dir: &Path) -> Result<(), RosaError> {
+        if self.name() == "main" {
+            let output_dir = output_dir.join("aflpp");
+            fs::remove_dir_all(&output_dir)
+                .map_err(|err| error!("could not remove '{}': {}.", &output_dir.display(), err))?;
+        }
+
+        Ok(())
+    }
+
+    fn collect_traces(
+        &self,
+        known_traces: &mut HashMap<String, Trace>,
+        skip_missing_traces: bool,
+        input_dir: &Path,
+        output_dir: &Path,
+    ) -> Result<Vec<Trace>, RosaError> {
+        // Unfortunately, we can't just call the default implementation, so we'll have to duplicate
+        // it here.
+        match self.mode {
+            AFLPlusPlusMode::Standard => {
+                let all_traces: Vec<Trace> = trace::get_test_input_files(input_dir)?
+                    .into_iter()
+                    .map(|test_input_path| {
+                        // In "standard" mode, we need to call `afl-showmap` and `strace` to get the
+                        // edges and syscalls respectively.
+                        let mut test_input_file = File::open(&test_input_path).map_err(|err| {
+                            error!(
+                                "could not open test input file '{}': {}.",
+                                test_input_path.display(),
+                                err
+                            )
+                        })?;
+
+                        // For `afl-showmap`, we need to do:
+                        // ```
+                        // $ afl-showmap -o /tmp/trace.txt -q -e -- <program + arguments> \
+                        //       && cat /tmp/trace.txt \
+                        //       | sed -nE 's/^0*([[:digit:]]+):1$/\1/p'
+                        // ```
+                        // Maybe it's worth it to modify afl-showmap to add an option to print to
+                        // stdout?
+                        let showmap_output_file = NamedTempFile::new()
+                            .map_err(|err| error!("could not create temporary file: {}.", err))?;
+                        let showmap_output_path = showmap_output_file.into_temp_path();
+
+                        Command::new(
+                            self.afl_fuzz
+                                .parent()
+                                .expect("failed to get parent directory of afl-fuzz.")
+                                .join("afl-showmap"),
+                        )
+                        .args(
+                            [
+                                vec![
+                                    "-o".to_string(),
+                                    showmap_output_path.to_string_lossy().to_string(),
+                                    "-q".to_string(),
+                                    "-e".to_string(),
+                                    "--".to_string(),
+                                ],
+                                // TODO: handle cases where file is passed via `argv` (e.g.,
+                                // `/path/to/program @@`).
+                                self.target.clone(),
+                            ]
+                            .concat(),
+                        )
+                        .stdin(
+                            test_input_file
+                                .try_clone()
+                                .expect("failed to clone test input file."),
+                        )
+                        .status()
+                        .map_err(|err| error!("afl-showmap failed: {}.", err))?;
+
+                        let showmap_output = fs::read_to_string(showmap_output_path)
+                            .map_err(|err| error!("could not read afl-showmap output: {}.", err))?;
+                        let showmap_regex = Regex::new(r"(?m)^0*([[:digit:]]+):1$")
+                            .expect("failed to compile showmap regex.");
+                        let edges: Vec<usize> = showmap_regex
+                            .captures_iter(&showmap_output)
+                            .map(|capture| {
+                                capture
+                                    .get(1)
+                                    .expect("failed to get showmap regex match.")
+                                    .as_str()
+                                    .parse::<usize>()
+                                    .expect("failed to convert showmap regex match to `usize`.")
+                            })
+                            .collect();
+
+                        // Make sure to rewind the input file before running `strace`.
+                        test_input_file.rewind().map_err(|err| {
+                            error!(
+                                "could not rewind test input file '{}': {}.",
+                                test_input_path.display(),
+                                err
+                            )
+                        })?;
+                        // For `strace`, we need to do:
+                        // ```
+                        // $ strace -e abbrev=all \
+                        //       -e quiet=attach,exit,path-resolution,personality,thread-execve \
+                        //       -ff -n -- \
+                        //       <program + arguments> \
+                        //       | sed -nE 's/^\[[[:space:]]*([[:digit:]]+)\].+$/\1/p' \
+                        //       | sort \
+                        //       | uniq
+                        // ```
+                        let strace_stub = output_dir
+                            .join("aflpp")
+                            .join("strace-stub")
+                            .with_extension("so")
+                            .canonicalize()
+                            .expect("failed to canonicalize path for the strace stub.");
+                        let strace_output = Command::new("strace")
+                            .args(
+                                [
+                                    vec![
+                                        "-E".to_string(),
+                                        format!("LD_PRELOAD={}", strace_stub.display()),
+                                        "-e".to_string(),
+                                        "abbrev=all".to_string(),
+                                        "-e".to_string(),
+                                        "quiet=attach,exit,path-resolution,\
+                                            personality,thread-execve"
+                                            .to_string(),
+                                        "-ff".to_string(),
+                                        "-n".to_string(),
+                                        "--".to_string(),
+                                    ],
+                                    self.target.clone(),
+                                ]
+                                .concat(),
+                            )
+                            .stdin(test_input_file)
+                            .output()
+                            .map_err(|err| error!("`strace` failed: {}.", err))?;
+                        let strace_output = String::from_utf8_lossy(&strace_output.stderr);
+                        let start_index = strace_output
+                            .find("__ROSAS_CANTINA__")
+                            .expect("missing marker from strace's output.");
+                        let strace_regex = Regex::new(concat!(
+                            r"(?m)^",
+                            r"(\[pid[[:space:]]*[[:digit:]]+\][[:space:]]+)?",
+                            r"\[[[:space:]]*([[:digit:]]+)\].+$"
+                        ))
+                        .expect("failed to compile strace regex.");
+                        let syscalls: Vec<usize> = strace_regex
+                            .captures_iter(&strace_output[start_index..])
+                            .map(|capture| {
+                                capture
+                                    .get(2)
+                                    .expect("failed to get strace regex match.")
+                                    .as_str()
+                                    .parse::<usize>()
+                                    .expect("failed to convert strace regex match to `usize`.")
+                            })
+                            .collect();
+
+                        Ok(Trace::from(
+                            &format!(
+                                "{}__{}",
+                                self.name(),
+                                test_input_path
+                                    .file_name()
+                                    .expect("failed to get filename for test input.")
+                                    .to_string_lossy()
+                            ),
+                            &fs::read(&test_input_path).map_err(|err| {
+                                error!(
+                                    "could not read test input file '{}': {}.",
+                                    test_input_path.display(),
+                                    err
+                                )
+                            })?,
+                            &edges,
+                            // TODO: use `AFL_DUMP_MAP_SIZE=1 ./target` to get actual map size.
+                            // NOTE: `Vector` can handle at most `isize::MAX` bytes of capacity.
+                            // See https://doc.rust-lang.org/std/vec/struct.Vec.html#method.with_capacity.
+                            100000,
+                            &syscalls,
+                            // TODO: either somehow compute this, or define this constant elsewhere.
+                            600,
+                        ))
+                    })
+                    .collect::<Result<Vec<Trace>, RosaError>>()?;
+
+                let new_traces: Vec<Trace> = all_traces
+                    .into_iter()
+                    .unique_by(|trace| trace.uid())
+                    .filter(|trace| !known_traces.contains_key(&trace.uid()))
+                    // NOTE: when loading in traces from various different fuzzer instances, the coverage might
+                    // be different because of the different configurations (e.g., one fuzzer enabling
+                    // `AFL_INST_LIBS` and another not enabling it).
+                    //
+                    // This will lead to the same trace inputs producing different traces when loaded through
+                    // other fuzzers. In order to avoid some of this, we can at the very least filter out
+                    // traces that have the exact same test inputs.
+                    //
+                    // Note that this will only happen when collecting traces from every fuzzer; if we only
+                    // collect from one, we shouldn't have inconsistencies in terms of trace representation.
+                    // See the `--collect-from-all-fuzzers` option.
+                    .filter(|trace| {
+                        !known_traces
+                            .values()
+                            .map(|trace| trace.test_input.clone())
+                            .collect::<Vec<Vec<u8>>>()
+                            .contains(&trace.test_input)
+                    })
+                    .collect();
+
+                new_traces.iter().for_each(|trace| {
+                    known_traces.insert(trace.uid(), trace.clone());
+                });
+
+                Ok(new_traces)
+            }
+            AFLPlusPlusMode::QEMU => trace::load_traces(
+                &self.test_input_dir(),
+                &self.runtime_trace_dir(),
+                self.name(),
+                known_traces,
+                skip_missing_traces,
+            ),
+        }
+    }
 }
+
+/// This is a hack to avoid picking up irrelevant system calls when fuzzing with AFL++ in source
+/// mode.
+///
+/// In a nutshell, we use `strace` to collect system calls. However, `strace` will collect far more
+/// system calls than those produced by the program proper, most notably system calls produced by
+/// the dynamic loader, or even the `execve` system call spawning the process in the first place.
+/// We would like to skip over all of these system calls and only record the ones that come after,
+/// which are indeed produced by the program code itself.
+///
+/// One way to do this is with an `LD_PRELOAD` stub, where `__libc_start_main` is stubbed and a
+/// `write` system call is inserted to help us mark the "before" and "after" in `strace`'s output.
+///
+/// Courtesy of <https://unix.stackexchange.com/a/668709>.
+const STRACE_STUB_CODE: &str = "\
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <unistd.h>
+#include <errno.h>
+#include <err.h>
+
+
+int __libc_start_main(
+    int (*main)(int, char**, char**),
+    int ac,
+    char **av,
+    int (*init)(int, char**, char**),
+    void (*fini)(void),
+    void (*rtld_fini)(void),
+    void *stack_end
+)
+{
+    typeof(__libc_start_main) *next = dlsym(
+        RTLD_NEXT, \"__libc_start_main\"
+    );
+
+    write(-1, \"__ROSAS_CANTINA__\", 17);
+    errno = 0;
+
+    return next(main, ac, av, init, fini, rtld_fini, stack_end);
+}
+";
 
 #[cfg(test)]
 mod tests {
@@ -195,10 +539,7 @@ mod tests {
             .iter()
             .map(|arg| arg.to_string())
             .collect();
-        let extra_args: Vec<String> = vec!["-Q", "-c", "0"]
-            .iter()
-            .map(|arg| arg.to_string())
-            .collect();
+        let extra_args: Vec<String> = vec!["-c", "0"].iter().map(|arg| arg.to_string()).collect();
         let env: HashMap<String, String> = [
             ("AFL_INST_LIBS", "1"),
             ("AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES", "1"),
@@ -208,6 +549,7 @@ mod tests {
         .collect();
         let config = AFLPlusPlus {
             name: name.clone(),
+            mode: AFLPlusPlusMode::QEMU,
             is_main: true,
             afl_fuzz: afl_fuzz.clone(),
             input_dir: input_dir.clone(),
@@ -226,7 +568,8 @@ mod tests {
                     "-o".to_string(),
                     output_dir.display().to_string(),
                     "-M".to_string(),
-                    name
+                    name,
+                    "-Q".to_string(),
                 ],
                 extra_args,
                 vec!["--".to_string()],
@@ -243,6 +586,7 @@ mod tests {
         let config = AFLPlusPlus {
             name: name.clone(),
             is_main: false,
+            mode: AFLPlusPlusMode::Standard,
             afl_fuzz: afl_fuzz.clone(),
             input_dir: input_dir.clone(),
             output_dir: output_dir.clone(),

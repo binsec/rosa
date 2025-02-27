@@ -6,7 +6,7 @@
 use std::{
     collections::HashMap,
     fs::File,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
 };
 
@@ -27,6 +27,8 @@ pub mod aflpp;
 /// collected by ROSA.
 #[typetag::serde(tag = "kind")]
 pub trait FuzzerBackend: DynClone {
+    /// Get the ID (full name) of the backend.
+    fn backend_id(&self) -> String;
     /// Get the name of the fuzzer instance.
     fn name(&self) -> &str;
     /// Get the full command used to invoke the fuzzer.
@@ -42,6 +44,20 @@ pub trait FuzzerBackend: DynClone {
     fn found_crashes(&self) -> Result<bool, RosaError>;
     /// Get the status of the fuzzer.
     fn status(&self) -> FuzzerStatus;
+    /// Set up things in the output directory before the fuzzing campaign starts.
+    ///
+    /// The output directory here is ROSA's not the fuzzer's; take caution to avoid conflicts
+    /// between fuzzer instances.
+    fn setup(&self, _output_dir: &Path) -> Result<(), RosaError> {
+        Ok(())
+    }
+    /// Tear down things in the output directory after the fuzzing campaign ends.
+    ///
+    /// The output directory here is ROSA's not the fuzzer's; take caution to avoid conflicts
+    /// between fuzzer instances.
+    fn teardown(&self, _output_dir: &Path) -> Result<(), RosaError> {
+        Ok(())
+    }
     /// Collect traces from the fuzzer.
     ///
     /// The set of known trashes (hash map of trace UIDs) is also passed, which allows to skip
@@ -54,9 +70,11 @@ pub trait FuzzerBackend: DynClone {
         &self,
         known_traces: &mut HashMap<String, Trace>,
         skip_missing_traces: bool,
+        input_dir: &Path,
+        _output_dir: &Path,
     ) -> Result<Vec<Trace>, RosaError> {
         trace::load_traces(
-            &self.test_input_dir(),
+            input_dir,
             &self.runtime_trace_dir(),
             self.name(),
             known_traces,
@@ -102,12 +120,13 @@ impl FuzzerInstance {
     /// # Examples
     /// ```
     /// use std::{path::PathBuf, collections::HashMap};
-    /// use rosa::fuzzer::{aflpp::AFLPlusPlus, FuzzerConfig, FuzzerInstance};
+    /// use rosa::fuzzer::{aflpp::{AFLPlusPlus, AFLPlusPlusMode}, FuzzerConfig, FuzzerInstance};
     ///
     /// let _fuzzer_instance = FuzzerInstance::create(
     ///     FuzzerConfig {
     ///         backend: Box::new(AFLPlusPlus {
     ///             name: "main".to_string(),
+    ///             mode: AFLPlusPlusMode::QEMU,
     ///             is_main: true,
     ///             afl_fuzz: PathBuf::from("afl-fuzz"),
     ///             input_dir: PathBuf::from("seeds"),

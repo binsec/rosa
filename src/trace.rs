@@ -169,9 +169,9 @@ impl Trace {
     /// let trace = Trace::from(
     ///     "my_trace",
     ///     &[0x01, 0x02, 0x03, 0x04],
-    ///     &[1, 4, 17],
+    ///     &[1, 4, 17, 4],
     ///     20,
-    ///     &[2, 3, 11],
+    ///     &[2, 2, 3, 11],
     ///     14,
     /// );
     ///
@@ -193,15 +193,21 @@ impl Trace {
         syscalls: &[usize],
         syscalls_len: usize,
     ) -> Self {
+        let mut edges_vector = vec![0; edges_len];
+        let mut syscalls_vector = vec![0; syscalls_len];
+
+        edges.iter().unique().for_each(|index| {
+            edges_vector[*index] = 1;
+        });
+        syscalls.iter().unique().for_each(|index| {
+            syscalls_vector[*index] = 1;
+        });
+
         Trace {
             name: name.to_string(),
             test_input: test_input.to_vec(),
-            edges: (0..edges_len)
-                .map(|index| edges.contains(&index) as u8)
-                .collect(),
-            syscalls: (0..syscalls_len)
-                .map(|index| syscalls.contains(&index) as u8)
-                .collect(),
+            edges: edges_vector,
+            syscalls: syscalls_vector,
         }
     }
 
@@ -481,7 +487,7 @@ pub fn load_traces(
         .unique_by(|trace| trace.uid())
         .filter(|trace| !known_traces.contains_key(&trace.uid()))
         // NOTE: when loading in traces from various different fuzzer instances, the coverage might
-        // be different because of the different configurations (e.g. one fuzzer enabling
+        // be different because of the different configurations (e.g., one fuzzer enabling
         // `AFL_INST_LIBS` and another not enabling it).
         //
         // This will lead to the same trace inputs producing different traces when loaded through

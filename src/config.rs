@@ -398,9 +398,9 @@ impl Config {
             (&self.traces_dir(), Self::TRACES_DIR_README.join("\n")),
         ] {
             fs::create_dir(dir)
-                .map_err(|err| error!("could not create '{}': {}", &dir.display(), err))?;
+                .map_err(|err| error!("could not create '{}': {}.", &dir.display(), err))?;
             fs::write(dir.join("README").with_extension("txt"), readme).map_err(|err| {
-                error!("could not create README for '{}': {}", &dir.display(), err)
+                error!("could not create README for '{}': {}.", &dir.display(), err)
             })?;
         }
 

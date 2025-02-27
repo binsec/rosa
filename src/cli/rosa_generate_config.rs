@@ -15,7 +15,10 @@ use rosa::{
     config::{Config, SeedConditions},
     error,
     error::RosaError,
-    fuzzer::{aflpp::AFLPlusPlus, FuzzerConfig},
+    fuzzer::{
+        aflpp::{AFLPlusPlus, AFLPlusPlusMode},
+        FuzzerConfig,
+    },
 };
 
 mod common;
@@ -33,6 +36,7 @@ fn generate_fuzzer_config(
     input_dir: &Path,
     output_dir: &Path,
     target: &[String],
+    binary_only_mode: bool,
     power_schedule: &str,
     is_main: bool,
     has_instrument_libs: bool,
@@ -44,7 +48,7 @@ fn generate_fuzzer_config(
         ("AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES", "1"),
         ("AFL_SKIP_CPUFREQ", "1"),
     ];
-    let extra_args = vec!["-Q", "-c", "0", "-p", power_schedule];
+    let extra_args = vec!["-c", "0", "-p", power_schedule];
 
     let env = if has_instrument_libs {
         [env, vec![("AFL_INST_LIBS", "1")]].concat()
@@ -81,6 +85,11 @@ fn generate_fuzzer_config(
                 .into_iter()
                 .map(|(key, value)| (key.to_string(), value.to_string()))
                 .collect(),
+            mode: if binary_only_mode {
+                AFLPlusPlusMode::QEMU
+            } else {
+                AFLPlusPlusMode::Standard
+            },
         }),
     }
 }
@@ -136,6 +145,7 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
         .collect();
     let default_fuzzer_output_dir = PathBuf::from("fuzzer-out");
     let default_seed_dir = PathBuf::from("seeds");
+    let default_binary_only_mode = true;
 
     let config_file_name = get_input(
         "Configuration file name",
@@ -185,6 +195,16 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
         default_seed_dir.clone(),
         &default_seed_dir.display().to_string(),
     )?;
+    let binary_only_mode = get_input(
+        "Binary only mode (y/n)",
+        |x| match x {
+            "y" => Some(true),
+            "n" => Some(false),
+            _ => None,
+        },
+        default_binary_only_mode,
+        if default_binary_only_mode { "y" } else { "n" },
+    )?;
 
     let full_target_command: Vec<String> = [
         vec![target_path.display().to_string()],
@@ -205,6 +225,7 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
                     &seed_dir,
                     &fuzzer_output_dir,
                     &full_target_command,
+                    binary_only_mode,
                     "explore",
                     // Is main?
                     true,
@@ -219,6 +240,7 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
                     &seed_dir,
                     &fuzzer_output_dir,
                     &full_target_command,
+                    binary_only_mode,
                     "fast",
                     // Is main?
                     false,
@@ -233,6 +255,7 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
                     &seed_dir,
                     &fuzzer_output_dir,
                     &full_target_command,
+                    binary_only_mode,
                     "exploit",
                     // Is main?
                     false,
@@ -247,6 +270,7 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
                     &seed_dir,
                     &fuzzer_output_dir,
                     &full_target_command,
+                    binary_only_mode,
                     "explore",
                     // Is main?
                     false,
@@ -261,6 +285,7 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
                     &seed_dir,
                     &fuzzer_output_dir,
                     &full_target_command,
+                    binary_only_mode,
                     "fast",
                     // Is main?
                     false,
@@ -275,6 +300,7 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
                     &seed_dir,
                     &fuzzer_output_dir,
                     &full_target_command,
+                    binary_only_mode,
                     "exploit",
                     // Is main?
                     false,

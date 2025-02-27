@@ -182,6 +182,9 @@ fn run(
         .fuzzers
         .iter()
         .map(|fuzzer_config| {
+            // Run the setup for each instance.
+            fuzzer_config.backend.setup(&config.output_dir)?;
+
             let log_file_path = config
                 .logs_dir()
                 .clone()
@@ -321,6 +324,8 @@ fn run(
                             // new ones, and we might miss some because of the timing of the
                             // writes; it's okay, we'll pick them up on the next iteration.
                             true,
+                            &fuzzer_config.backend.test_input_dir(),
+                            &config.output_dir,
                         ) {
                             // We have to do this little dance because `flat_map()` will
                             // essentially strip `Err()`s out. We want to keep them in explicitly.
@@ -339,6 +344,8 @@ fn run(
                     // ones, and we might miss some because of the timing of the writes; it's
                     // okay, we'll pick them up on the next iteration.
                     true,
+                    &main_fuzzer.backend.test_input_dir(),
+                    &config.output_dir,
                 )
             },
             fuzzer_instances
@@ -537,7 +544,11 @@ fn run(
     println_info!("Stopping fuzzer processes.");
     fuzzer_instances
         .iter_mut()
-        .try_for_each(|fuzzer_instance| fuzzer_instance.stop())?;
+        .try_for_each(|fuzzer_instance| {
+            fuzzer_instance.stop()?;
+            // Run the teardown for each instance.
+            fuzzer_instance.config.backend.teardown(&config.output_dir)
+        })?;
 
     config.set_current_phase(RosaPhase::Stopped)?;
 
