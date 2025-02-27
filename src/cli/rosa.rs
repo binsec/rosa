@@ -314,27 +314,26 @@ fn run(
                 config
                     .fuzzers
                     .iter()
-                    .try_fold(Vec::new(), |mut new_traces, fuzzer_config| {
-                        let mut traces = trace::load_traces(
-                            &fuzzer_config.backend.test_input_dir(),
-                            &fuzzer_config.backend.runtime_trace_dir(),
-                            fuzzer_config.backend.name(),
+                    .flat_map(|fuzzer_config| {
+                        match fuzzer_config.backend.collect_traces(
                             &mut known_traces,
                             // Skip missing traces, because the fuzzer is continually producing
                             // new ones, and we might miss some because of the timing of the
                             // writes; it's okay, we'll pick them up on the next iteration.
                             true,
-                        )?;
-
-                        new_traces.append(&mut traces);
-                        Ok(new_traces)
+                        ) {
+                            // We have to do this little dance because `flat_map()` will
+                            // essentially strip `Err()`s out. We want to keep them in explicitly.
+                            //
+                            // See https://stackoverflow.com/a/59852696.
+                            Ok(vec) => vec.into_iter().map(Ok).collect(),
+                            Err(err) => vec![Err(err)],
+                        }
                     })
+                    .collect()
             } else {
                 let main_fuzzer = config.main_fuzzer()?;
-                trace::load_traces(
-                    &main_fuzzer.backend.test_input_dir(),
-                    &main_fuzzer.backend.runtime_trace_dir(),
-                    "main",
+                main_fuzzer.backend.collect_traces(
                     &mut known_traces,
                     // Skip missing traces, because the fuzzer is continually producing new
                     // ones, and we might miss some because of the timing of the writes; it's

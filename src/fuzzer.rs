@@ -13,7 +13,11 @@ use std::{
 use dyn_clone::{clone_trait_object, DynClone};
 use serde::{Deserialize, Serialize};
 
-use crate::{config, error::RosaError};
+use crate::{
+    config,
+    error::RosaError,
+    trace::{self, Trace},
+};
 
 pub mod aflpp;
 
@@ -38,6 +42,27 @@ pub trait FuzzerBackend: DynClone {
     fn found_crashes(&self) -> Result<bool, RosaError>;
     /// Get the status of the fuzzer.
     fn status(&self) -> FuzzerStatus;
+    /// Collect traces from the fuzzer.
+    ///
+    /// The set of known trashes (hash map of trace UIDs) is also passed, which allows to skip
+    /// traces that have already been collected. The option to skip missing traces is also passed,
+    /// in the case where the trace dump is not yet complete.
+    ///
+    /// By default, this will use [trace::load_traces](crate::trace::load_traces), but
+    /// implementations can alter it if needed.
+    fn collect_traces(
+        &self,
+        known_traces: &mut HashMap<String, Trace>,
+        skip_missing_traces: bool,
+    ) -> Result<Vec<Trace>, RosaError> {
+        trace::load_traces(
+            &self.test_input_dir(),
+            &self.runtime_trace_dir(),
+            self.name(),
+            known_traces,
+            skip_missing_traces,
+        )
+    }
 }
 clone_trait_object!(FuzzerBackend);
 
