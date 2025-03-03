@@ -1,5 +1,7 @@
 # ROSA: Finding Backdoors with Fuzzing
 
+[![SWH](https://archive.softwareheritage.org/badge/origin/https://github.com/binsec/rosa/)](https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/binsec/rosa)
+
 ## About
 
 ROSA[^1] is a fuzzing-based toolchain for backdoor detection in binary programs. It uses a
