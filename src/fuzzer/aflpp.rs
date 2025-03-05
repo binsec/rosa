@@ -236,7 +236,7 @@ impl FuzzerBackend for AFLPlusPlus {
     }
 
     fn setup(&self, output_dir: &Path) -> Result<(), RosaError> {
-        if self.name() == "main" {
+        if self.name() == "main" && self.backend_id() == *"afl++-standard" {
             let output_dir = output_dir.join("aflpp");
             fs::create_dir(&output_dir)
                 .map_err(|err| error!("could not create '{}': {}.", &output_dir.display(), err))?;
