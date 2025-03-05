@@ -257,7 +257,7 @@ impl FuzzerBackend for AFLPlusPlus {
                 .map_err(|err| error!("could not compile the strace stub: {}.", err))?;
 
             // Write the maximum number of edges to a file.
-            let max_edges_file = File::open(output_dir.join(".max-edges"))
+            let max_edges_file = File::create(output_dir.join(".max-edges"))
                 .map_err(|err| error!("could not create .max-edges file: {}.", err))?;
 
             let target_cmd = self.target.clone();
@@ -443,10 +443,12 @@ impl FuzzerBackend for AFLPlusPlus {
 
                         // Get the map size produced during setup.
                         let max_edges =
-                            fs::read_to_string(output_dir.join("aflpp").join(".max_edges"))
-                                .expect("failed to read max edge count from file (setup issue?).")
-                                .parse::<usize>()
-                                .expect("failed to parse max edge count.");
+                            fs::read_to_string(output_dir.join("aflpp").join(".max-edges"))
+                                .expect("failed to read max edge count from file (setup issue?).");
+                        let max_edges = max_edges
+                            .trim_end()
+                            .parse::<usize>()
+                            .expect("failed to parse max edge count.");
 
                         Ok(Trace::from(
                             &format!(
