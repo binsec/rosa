@@ -23,6 +23,13 @@ use crate::{
     trace::{self, Trace},
 };
 
+/// The maximum system call ID supported in the source version.
+///
+/// This value is chosen somewhat arbitrarily, and it is based on x86_64 Linux system calls. It
+/// might have to be modified for other platforms.
+// TODO maybe this should be an optional parameter in the config?
+const MAX_SYSCALLS: usize = 600;
+
 /// The AFL++ fuzzer.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct AFLPlusPlus {
@@ -231,23 +238,41 @@ impl FuzzerBackend for AFLPlusPlus {
     fn setup(&self, output_dir: &Path) -> Result<(), RosaError> {
         if self.name() == "main" {
             let output_dir = output_dir.join("aflpp");
-            let output_file = output_dir.join("strace-stub").with_extension("so");
             fs::create_dir(&output_dir)
                 .map_err(|err| error!("could not create '{}': {}.", &output_dir.display(), err))?;
 
+            // Create the strace stub.
+            let stub_output_file = output_dir.join("strace-stub").with_extension("so");
             let mut strace_stub_source_file = NamedTempFile::new()
                 .map_err(|err| error!("could not create temporary file: {}", err))?;
             write!(strace_stub_source_file, "{}", STRACE_STUB_CODE)
                 .map_err(|err| error!("could not write strace stub to temporary file: {}", err))?;
             let strace_stub_source_path = strace_stub_source_file.into_temp_path();
-
             Command::new("gcc")
                 .args(["-x", "c", "-shared", "-ldl"])
                 .arg(&strace_stub_source_path)
                 .arg("-o")
-                .arg(&output_file)
+                .arg(&stub_output_file)
                 .status()
                 .map_err(|err| error!("could not compile the strace stub: {}.", err))?;
+
+            // Write the maximum number of edges to a file.
+            let max_edges_file = File::open(output_dir.join(".max-edges"))
+                .map_err(|err| error!("could not create .max-edges file: {}.", err))?;
+
+            let target_cmd = self.target.clone();
+            Command::new(&target_cmd[0])
+                .args(&target_cmd[1..])
+                .env("AFL_DUMP_MAP_SIZE", "1")
+                .stdout(max_edges_file)
+                .status()
+                .map_err(|err| {
+                    error!(
+                        "could not run target program to obtain max edges: {}: {}.",
+                        target_cmd.join(" "),
+                        err
+                    )
+                })?;
         }
 
         Ok(())
@@ -362,6 +387,9 @@ impl FuzzerBackend for AFLPlusPlus {
                         //       | sort \
                         //       | uniq
                         // ```
+
+                        // The strace stub was produced during setup. see the `STRACE_STUB_CODE`
+                        // constant in this file for more info.
                         let strace_stub = output_dir
                             .join("aflpp")
                             .join("strace-stub")
@@ -413,6 +441,13 @@ impl FuzzerBackend for AFLPlusPlus {
                             })
                             .collect();
 
+                        // Get the map size produced during setup.
+                        let max_edges =
+                            fs::read_to_string(output_dir.join("aflpp").join(".max_edges"))
+                                .expect("failed to read max edge count from file (setup issue?).")
+                                .parse::<usize>()
+                                .expect("failed to parse max edge count.");
+
                         Ok(Trace::from(
                             &format!(
                                 "{}__{}",
@@ -430,13 +465,9 @@ impl FuzzerBackend for AFLPlusPlus {
                                 )
                             })?,
                             &edges,
-                            // TODO: use `AFL_DUMP_MAP_SIZE=1 ./target` to get actual map size.
-                            // NOTE: `Vector` can handle at most `isize::MAX` bytes of capacity.
-                            // See https://doc.rust-lang.org/std/vec/struct.Vec.html#method.with_capacity.
-                            100000,
+                            max_edges,
                             &syscalls,
-                            // TODO: either somehow compute this, or define this constant elsewhere.
-                            600,
+                            MAX_SYSCALLS,
                         ))
                     })
                     .collect::<Result<Vec<Trace>, RosaError>>()?;
