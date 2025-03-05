@@ -35,7 +35,7 @@ fn generate_fuzzer_config(
     afl_fuzz: &Path,
     input_dir: &Path,
     output_dir: &Path,
-    target: &[String],
+    target: &[&str],
     binary_only_mode: bool,
     power_schedule: &str,
     is_main: bool,
@@ -82,7 +82,7 @@ fn generate_fuzzer_config(
             target: target.iter().map(|arg| arg.to_string()).collect(),
             extra_args: extra_args.iter().map(|arg| arg.to_string()).collect(),
             env: env
-                .into_iter()
+                .iter()
                 .map(|(key, value)| (key.to_string(), value.to_string()))
                 .collect(),
             mode: if binary_only_mode {
@@ -123,7 +123,7 @@ where
         let buffer = buffer.trim().to_string();
 
         if buffer.is_empty() {
-            break Ok(default.clone());
+            break Ok(default);
         } else if let Some(choice) = convert(&buffer) {
             break Ok(choice);
         }
@@ -139,7 +139,7 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
     let default_rosa_output_dir = PathBuf::from("rosa-out");
     let default_phase_1_duration = 60;
     let default_target_path: PathBuf = ["/path", "to", "target"].iter().collect();
-    let default_target_arguments = "".to_string();
+    let default_target_arguments = "";
     let default_fuzzer_path: PathBuf = ["/root", "rosa", "fuzzers", "aflpp", "aflpp", "afl-fuzz"]
         .iter()
         .collect();
@@ -174,7 +174,7 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
     let target_arguments = get_input(
         "Arguments to target program",
         |x| Some(x.to_string()),
-        default_target_arguments.clone(),
+        default_target_arguments.to_string(),
         "<none>",
     )?;
     let fuzzer_path = get_input(
@@ -206,12 +206,10 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
         if default_binary_only_mode { "y" } else { "n" },
     )?;
 
-    let full_target_command: Vec<String> = [
-        vec![target_path.display().to_string()],
-        target_arguments
-            .split(" ")
-            .map(|arg| arg.to_string())
-            .collect(),
+    let target_path = target_path.display().to_string();
+    let full_target_command: Vec<&str> = [
+        vec![target_path.as_str()],
+        target_arguments.split(" ").collect(),
     ]
     .concat();
 
