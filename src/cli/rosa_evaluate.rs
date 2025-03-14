@@ -172,6 +172,7 @@ fn check_decision(
         )
     })?;
     let output = Command::new(&cmd[0])
+        // TODO handle `@@` case.
         .stdin(Stdio::from(test_input_file))
         .args(&cmd[1..])
         .envs(config::replace_env_var_placeholders(env))
