@@ -67,7 +67,7 @@ fn generate_fuzzer_config(
 
     let env = if is_main {
         // Only the main instance needs to dump traces by default.
-        [env, vec![("AFL_DUMP_RUNTIME_TRACES", "1")]].concat()
+        [env, vec![("ROSA_AFL_DUMP_RUNTIME_TRACES", "1")]].concat()
     } else {
         env
     };

@@ -221,7 +221,7 @@
 +      trace_dump_fn = alloc_printf(
 +        "%s/trace_dumps/%s.trace",
 +        afl->out_dir,
-+        hex,
++        hex
 +      );
        ck_free((char *)hex);
 
@@ -233,12 +233,11 @@
 +    trace_dump_fn = alloc_printf(
 +      "%s/trace_dumps/%s.trace",
 +      afl->out_dir,
-+      afl->queued_items,
++      afl->queued_items
 +    );
 
  #endif                                                    /* ^!SIMPLE_FILES */
      fd = permissive_create(afl, queue_fn);
-
 @@ -697,6 +721,34 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
 
      add_to_queue(afl, queue_fn, len, 0);
@@ -360,14 +359,14 @@
  
    }
  
-+  if (getenv("AFL_DUMP_RUNTIME_TRACES")) {
++  if (getenv("ROSA_AFL_DUMP_RUNTIME_TRACES")) {
 +
-+    afl->shm.runtime_trace_mode = 1
++    afl->shm.runtime_trace_mode = 1;
 +    OKF(
-+      "Runtime trace mode activated"
++      "Runtime trace mode activated "
 +        "(storing runtime traces in %s/trace_dumps/)",
 +      afl->out_dir
-+    )
++    );
 +
 +  }
 +
@@ -701,19 +700,3 @@
  #endif
  
    shm->map_size = map_size;
---- a/utils/argv_fuzzing/argvfuzz.c
-+++ b/utils/argv_fuzzing/argvfuzz.c
-@@ -43,6 +43,13 @@ int __libc_start_main(int (*main)(int, char **, char **), int argc, char **argv,
- 
-   sub_argv = afl_init_argv(&sub_argc);
- 
-+  /*
-+   * Make sure that argv is always initialized correctly, i.e. that argv[0]
-+   * is always non-null and that argc is always >= 1.
-+   */
-+  if (!sub_argv[0]) sub_argv[0] = "nonnull";
-+  if (!sub_argc) sub_argc = 1;
-+
-   return orig(main, sub_argc, sub_argv, init, fini, rtld_fini, stack_end);
- 
- }
