@@ -26,9 +26,9 @@ extra_args = [
     "explore",
     "-a",
     "ascii",
-    "-r",
 ]
 [fuzzers.backend.env]
+AFL_DUMP_RUNTIME_TRACES = "1"
 AFL_NO_ARITH = "1"
 AFL_SYNC_TIME = "1"
 AFL_SKIP_CPUFREQ = "1"

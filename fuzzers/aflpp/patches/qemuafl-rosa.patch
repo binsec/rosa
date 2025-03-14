@@ -20,7 +20,7 @@
  /* Set in the child process in forkserver mode: */
  
  static int forkserver_installed = 0;
-@@ -356,6 +369,31 @@ void afl_setup(void) {
+@@ -367,6 +380,31 @@ void afl_setup(void) {
  
    }
  
@@ -52,17 +52,16 @@
    if (getenv("AFL_INST_LIBS")) {
  
      afl_start_code = 0;
-@@ -791,6 +829,9 @@ void afl_persistent_iter(CPUArchState *env) {
+@@ -806,6 +844,8 @@ void afl_persistent_iter(CPUArchState *env) {
  
          /* Exit the persistent loop on pipe error */
          afl_area_ptr = dummy;
 +        __afl_runtime_trace.edges = dummy;
 +        __afl_runtime_trace.syscalls = dummy;
-+
          exit(0);
  
        }
-@@ -817,6 +858,8 @@ void afl_persistent_iter(CPUArchState *env) {
+@@ -832,6 +872,8 @@ void afl_persistent_iter(CPUArchState *env) {
    } else {
  
      afl_area_ptr = dummy;

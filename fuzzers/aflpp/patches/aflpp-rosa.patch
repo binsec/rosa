@@ -8,7 +8,7 @@
  
  #ifdef __linux__
  /**
-@@ -102,6 +103,8 @@ typedef struct afl_forkserver {
+@@ -105,6 +106,8 @@ typedef struct afl_forkserver {
  
    u8 *trace_bits;                       /* SHM with instrumentation bitmap  */
  
@@ -113,7 +113,7 @@
  #endif
  
    u8 *map;                                          /* shared memory region */
-@@ -54,6 +65,10 @@ typedef struct sharedmem {
+@@ -55,6 +66,10 @@ typedef struct sharedmem {
    int             shmemfuzz_mode;
    struct cmp_map *cmp_map;
  
@@ -126,7 +126,7 @@
  u8  *afl_shm_init(sharedmem_t *, size_t, unsigned char non_instrumented_mode);
 --- a/src/afl-forkserver.c
 +++ b/src/afl-forkserver.c
-@@ -193,6 +193,12 @@ static list_t fsrv_list = {.element_prealloc_count = 0};
+@@ -202,6 +202,12 @@ static list_t fsrv_list = {.element_prealloc_count = 0};
  
  static void fsrv_exec_child(afl_forkserver_t *fsrv, char **argv) {
  
@@ -139,7 +139,7 @@
    if (fsrv->qemu_mode || fsrv->cs_mode) {
  
      setenv("AFL_DISABLE_LLVM_INSTRUMENTATION", "1", 0);
-@@ -855,6 +861,12 @@ void afl_fsrv_start(afl_forkserver_t *fsrv, char **argv,
+@@ -890,6 +896,12 @@ void afl_fsrv_start(afl_forkserver_t *fsrv, char **argv,
  
        unsetenv(CMPLOG_SHM_ENV_VAR);  // we do not want that in non-cmplog fsrv
  
@@ -152,37 +152,34 @@
      }
  
      /* Umpf. On OpenBSD, the default fd limit for root users is set to
-@@ -1877,12 +1889,25 @@ afl_fsrv_run_target(afl_forkserver_t *fsrv, u32 timeout,
-   if (likely(!fsrv->nyx_mode)) {
+@@ -1926,12 +1938,22 @@ fsrv_run_result_t __attribute__((hot)) afl_fsrv_run_target(
+     if (likely(!fsrv->nyx_mode)) {
  
+       memset(fsrv->trace_bits, 0, fsrv->map_size);
++      if (fsrv->runtime_trace != NULL) {
++        /* Reset the runtime trace components. */
++        memset(fsrv->runtime_trace->edges, 0, fsrv->map_size);
++        memset(fsrv->runtime_trace->syscalls, 0, RUNTIME_TRACE_MAX_SYSCALLS);
++      }
+       MEM_BARRIER();
+ 
+     }
+ 
+ #else
      memset(fsrv->trace_bits, 0, fsrv->map_size);
-+
 +    if (fsrv->runtime_trace != NULL) {
 +      /* Reset the runtime trace components. */
 +      memset(fsrv->runtime_trace->edges, 0, fsrv->map_size);
 +      memset(fsrv->runtime_trace->syscalls, 0, RUNTIME_TRACE_MAX_SYSCALLS);
 +    }
-+
      MEM_BARRIER();
- 
-   }
- 
- #else
-   memset(fsrv->trace_bits, 0, fsrv->map_size);
-+  if (fsrv->runtime_trace != NULL) {
-+    /* Reset the runtime trace components. */
-+    memset(fsrv->runtime_trace->edges, 0, fsrv->map_size);
-+    memset(fsrv->runtime_trace->syscalls, 0, RUNTIME_TRACE_MAX_SYSCALLS);
-+  }
-+
-   MEM_BARRIER();
  #endif
  
 --- a/src/afl-fuzz-bitmap.c
 +++ b/src/afl-fuzz-bitmap.c
-@@ -475,7 +475,10 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
+@@ -501,7 +501,10 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
    }
- 
+
    u8  fn[PATH_MAX];
 +  u8 *operation_name = "";
    u8 *queue_fn = "";
@@ -191,52 +188,61 @@
    u8  new_bits = 0, keeping = 0, res, classified = 0, is_timeout = 0,
       need_hash = 1;
    s32 fd;
-@@ -526,14 +529,26 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
-   save_to_queue:
- 
- #ifndef SIMPLE_FILES
-+    /* Use the same operation name for both the test input file and the trace file. */
-+    operation_name = describe_op(
-+      afl,
-+      new_bits + is_timeout,
-+      NAME_MAX - strlen("id:000000,")
-+    );
- 
-     queue_fn = alloc_printf(
-         "%s/queue/id:%06u,%s%s%s", afl->out_dir, afl->queued_items,
--        describe_op(afl, new_bits + is_timeout,
--                    NAME_MAX - strlen("id:000000,")),
-+        operation_name,
+@@ -662,12 +665,23 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
+
+     if (!afl->afl_env.afl_sha1_filenames) {
+
++      /* Use the same operation name for both the test input file and the trace file. */
++      operation_name = describe_op(
++        afl,
++        new_bits + is_timeout,
++        NAME_MAX - strlen("id:000000,")
++      );
+       queue_fn = alloc_printf(
+           "%s/queue/id:%06u,%s%s%s", afl->out_dir, afl->queued_items,
+-          describe_op(afl, new_bits + is_timeout,
+-                      NAME_MAX - strlen("id:000000,")),
++          operation_name,
+           afl->file_extension ? "." : "",
+           afl->file_extension ? (const char *)afl->file_extension : "");
++      trace_dump_fn = alloc_printf(
++        "%s/trace_dumps/id:%06u,%s.trace",
++        afl->out_dir,
++        afl->queued_items,
++        operation_name
++      );
+
+     } else {
+
+@@ -675,6 +689,11 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
+       queue_fn = alloc_printf(
+           "%s/queue/%s%s%s", afl->out_dir, hex, afl->file_extension ? "." : "",
+           afl->file_extension ? (const char *)afl->file_extension : "");
++      trace_dump_fn = alloc_printf(
++        "%s/trace_dumps/%s.trace",
++        afl->out_dir,
++        hex,
++      );
+       ck_free((char *)hex);
+
+     }
+@@ -685,6 +704,11 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
+         "%s/queue/id_%06u", afl->out_dir, afl->queued_items,
          afl->file_extension ? "." : "",
          afl->file_extension ? (const char *)afl->file_extension : "");
- 
 +    trace_dump_fn = alloc_printf(
-+      "%s/trace_dumps/id:%06u,%s.trace",
++      "%s/trace_dumps/%s.trace",
 +      afl->out_dir,
 +      afl->queued_items,
-+      operation_name
 +    );
-+
- #else
- 
-     queue_fn = alloc_printf(
-@@ -541,6 +556,12 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
-         afl->file_extension ? "." : "",
-         afl->file_extension ? (const char *)afl->file_extension : "");
- 
-+    trace_dump_fn = alloc_printf(
-+      "%s/queue/id_%06u.trace",
-+      afl->out_dir,
-+      afl->queued_items
-+    );
-+
+
  #endif                                                    /* ^!SIMPLE_FILES */
-     fd = open(queue_fn, O_WRONLY | O_CREAT | O_EXCL, DEFAULT_PERMISSION);
-     if (unlikely(fd < 0)) { PFATAL("Unable to create '%s'", queue_fn); }
-@@ -548,6 +569,34 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
-     close(fd);
+     fd = permissive_create(afl, queue_fn);
+
+@@ -697,6 +721,34 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
+
      add_to_queue(afl, queue_fn, len, 0);
- 
+
 +    if (afl->shm.runtime_trace_mode) {
 +
 +      /* Write trace dump to file. */
@@ -267,10 +273,10 @@
 +
      if (unlikely(afl->fuzz_mode) &&
          likely(afl->switch_fuzz_mode && !afl->non_instrumented_mode)) {
- 
+
 --- a/src/afl-fuzz-init.c
 +++ b/src/afl-fuzz-init.c
-@@ -889,6 +889,8 @@ void perform_dry_run(afl_state_t *afl) {
+@@ -916,6 +916,8 @@ void perform_dry_run(afl_state_t *afl) {
  
      u8  res;
      s32 fd;
@@ -279,7 +285,7 @@
  
      if (unlikely(!q->len)) {
  
-@@ -914,6 +916,40 @@ void perform_dry_run(afl_state_t *afl) {
+@@ -941,6 +943,40 @@ void perform_dry_run(afl_state_t *afl) {
  
      res = calibrate_case(afl, q, use_mem, 0, 1);
  
@@ -317,11 +323,11 @@
 +
 +    }
 +
-     if (afl->stop_soon) { return; }
- 
-     if (res == afl->crash_mode || res == FSRV_RUN_NOBITS) {
-@@ -1891,6 +1927,14 @@ static void handle_existing_out_dir(afl_state_t *afl) {
-   if (delete_files(fn, CASE_PREFIX)) { goto dir_cleanup_failed; }
+     /* For AFLFast schedules we update the queue entry */
+     if (unlikely(afl->schedule >= FAST && afl->schedule <= RARE) &&
+         likely(q->exec_cksum)) {
+@@ -1987,6 +2023,14 @@ static void handle_existing_out_dir(afl_state_t *afl) {
+   if (delete_files(fn, case_prefix)) { goto dir_cleanup_failed; }
    ck_free(fn);
  
 +
@@ -335,7 +341,7 @@
    /* All right, let's do <afl->out_dir>/crashes/id:* and
     * <afl->out_dir>/hangs/id:*. */
  
-@@ -2183,6 +2227,12 @@ void setup_dirs_fds(afl_state_t *afl) {
+@@ -2279,6 +2323,12 @@ void setup_dirs_fds(afl_state_t *afl) {
    if (mkdir(tmp, 0700)) { PFATAL("Unable to create '%s'", tmp); }
    ck_free(tmp);
  
@@ -350,49 +356,25 @@
    if (afl->sync_id) {
 --- a/src/afl-fuzz.c
 +++ b/src/afl-fuzz.c
-@@ -544,9 +544,9 @@ int main(int argc, char **argv_orig, char **envp) {
+@@ -1493,6 +1493,17 @@ int main(int argc, char **argv_orig, char **envp) {
  
-   afl->shmem_testcase_mode = 1;  // we always try to perform shmem fuzzing
- 
--  // still available: HjJkKqruvwz
-+  // still available: HjJkKquvwz
-   while ((opt = getopt(argc, argv,
--                       "+a:Ab:B:c:CdDe:E:f:F:g:G:hi:I:l:L:m:M:nNo:Op:P:QRs:S:t:"
-+                       "+a:Ab:B:c:CdDe:E:f:F:g:G:hi:I:l:L:m:M:nNo:Op:P:QrRs:S:t:"
-                        "T:UV:WXx:YzZ")) > 0) {
- 
-     switch (opt) {
-@@ -658,6 +658,13 @@ int main(int argc, char **argv_orig, char **envp) {
- 
-       }
- 
-+      case 'r': {
-+
-+        afl->shm.runtime_trace_mode = 1;
-+        break;
-+
-+      }
-+
-       case 's': {
- 
-         if (optarg == NULL) { FATAL("No valid seed provided. Got NULL."); }
-@@ -1629,6 +1636,15 @@ int main(int argc, char **argv_orig, char **envp) {
    }
  
-   if (afl->shm.cmplog_mode) { OKF("CmpLog level: %u", afl->cmplog_lvl); }
-+  if (afl->shm.runtime_trace_mode) {
++  if (getenv("AFL_DUMP_RUNTIME_TRACES")) {
 +
++    afl->shm.runtime_trace_mode = 1
 +    OKF(
 +      "Runtime trace mode activated"
 +        "(storing runtime traces in %s/trace_dumps/)",
 +      afl->out_dir
-+    );
++    )
 +
 +  }
++
+   if (afl->sync_id && strcmp(afl->sync_id, "addseeds") == 0) {
  
-   /* Dynamically allocate memory for AFLFast schedules */
-   if (afl->schedule >= FAST && afl->schedule <= RARE) {
-@@ -2262,6 +2278,13 @@ int main(int argc, char **argv_orig, char **envp) {
+     FATAL("-M/-S name 'addseeds' is a reserved name, choose something else");
+@@ -2529,6 +2540,13 @@ int main(int argc, char **argv_orig, char **envp) {
    afl->fsrv.trace_bits =
        afl_shm_init(&afl->shm, afl->fsrv.map_size, afl->non_instrumented_mode);
  
@@ -406,7 +388,7 @@
    if (!afl->non_instrumented_mode && !afl->fsrv.qemu_mode &&
        !afl->unicorn_mode && !afl->fsrv.frida_mode && !afl->fsrv.cs_mode &&
        !afl->afl_env.afl_skip_bin_check) {
-@@ -2313,6 +2336,14 @@ int main(int argc, char **argv_orig, char **envp) {
+@@ -2580,6 +2598,14 @@ int main(int argc, char **argv_orig, char **envp) {
        afl->fsrv.map_size = new_map_size;
        afl->fsrv.trace_bits =
            afl_shm_init(&afl->shm, new_map_size, afl->non_instrumented_mode);
@@ -735,77 +717,3 @@
    return orig(main, sub_argc, sub_argv, init, fini, rtld_fini, stack_end);
  
  }
---- a/utils/socket_fuzzing/socketfuzz.c
-+++ b/utils/socket_fuzzing/socketfuzz.c
-@@ -73,6 +73,13 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
-   (void)sockfd;
-   (void)addr;
-   (void)addrlen;
-+
-+  if (addr != NULL) {
-+
-+    addr->sa_family = AF_INET;
-+
-+  }
-+
-   fprintf(stderr, "Info: Emulating accept on %d\n", sockfd);
-   return 0;
- 
-@@ -109,3 +117,57 @@ int setsockopt(int sockfd, int level, int optid, const void *optdata,
- 
- }
- 
-+int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
-+  (void)sockfd;
-+  (void)addr;
-+  (void)addrlen;
-+
-+  if (addr != NULL) {
-+
-+    fprintf(stderr, "info: Emulating getsockname\n");
-+    // Taken from preeny.
-+    struct sockaddr_in target;
-+    socklen_t copylen = sizeof(target);
-+
-+    if (*addrlen < sizeof(target)) {
-+
-+      copylen = *addrlen;
-+
-+    }
-+
-+    target.sin_family = AF_INET;
-+    target.sin_addr.s_addr = inet_addr("127.0.0.1");
-+    target.sin_port = htons(8000);
-+
-+    memcpy(addr, &target, copylen);
-+    *addrlen = copylen;
-+
-+  }
-+
-+  return 0;
-+}
-+
-+ssize_t recv(int sockfd, void *buf, size_t len, int flags) {
-+  (void)sockfd;
-+  (void)flags;
-+
-+  fprintf(stderr, "info: Emulating recv\n");
-+  return read(0, buf, len);
-+}
-+
-+ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags) {
-+  (void)sockfd;
-+  (void) flags;
-+
-+  fprintf(stderr, "info: Emulating recvmsg\n");
-+  return read(0, msg->msg_iov->iov_base, msg->msg_iov->iov_len);
-+}
-+
-+int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
-+  (void)sockfd;
-+  (void)addr;
-+  (void)addrlen;
-+
-+  fprintf(stderr, "info: Emulating getpeername\n");
-+  return 0;
-+}

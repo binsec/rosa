@@ -65,11 +65,11 @@ fn generate_fuzzer_config(
         (env, extra_args)
     };
 
-    let extra_args = if is_main {
+    let env = if is_main {
         // Only the main instance needs to dump traces by default.
-        [extra_args, vec!["-r"]].concat()
+        [env, vec![("AFL_DUMP_RUNTIME_TRACES", "1")]].concat()
     } else {
-        extra_args
+        env
     };
 
     FuzzerConfig {
