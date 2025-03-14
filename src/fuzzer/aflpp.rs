@@ -7,7 +7,7 @@ use std::{
     collections::HashMap,
     fmt,
     fs::{self, File},
-    io::{Seek, Write},
+    io::Seek,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -241,21 +241,6 @@ impl FuzzerBackend for AFLPlusPlus {
             fs::create_dir(&output_dir)
                 .map_err(|err| error!("could not create '{}': {}.", &output_dir.display(), err))?;
 
-            // Create the strace stub.
-            let stub_output_file = output_dir.join("strace-stub").with_extension("so");
-            let mut strace_stub_source_file = NamedTempFile::new()
-                .map_err(|err| error!("could not create temporary file: {}", err))?;
-            write!(strace_stub_source_file, "{}", STRACE_STUB_CODE)
-                .map_err(|err| error!("could not write strace stub to temporary file: {}", err))?;
-            let strace_stub_source_path = strace_stub_source_file.into_temp_path();
-            Command::new("gcc")
-                .args(["-x", "c", "-shared", "-ldl"])
-                .arg(&strace_stub_source_path)
-                .arg("-o")
-                .arg(&stub_output_file)
-                .status()
-                .map_err(|err| error!("could not compile the strace stub: {}.", err))?;
-
             // Write the maximum number of edges to a file.
             let max_edges_file = File::create(output_dir.join(".max-edges"))
                 .map_err(|err| error!("could not create .max-edges file: {}.", err))?;
@@ -302,6 +287,10 @@ impl FuzzerBackend for AFLPlusPlus {
                 let all_traces: Vec<Trace> = trace::get_test_input_files(input_dir)?
                     .into_iter()
                     .map(|test_input_path| {
+                        // TODO: do not do all this for *all* files, it's extremely wasteful. First
+                        // check to see if the name of the file is not already in the known_traces
+                        // map?
+
                         // In "standard" mode, we need to call `afl-showmap` and `strace` to get the
                         // edges and syscalls respectively.
                         let mut test_input_file = File::open(&test_input_path).map_err(|err| {
@@ -388,20 +377,10 @@ impl FuzzerBackend for AFLPlusPlus {
                         //       | uniq
                         // ```
 
-                        // The strace stub was produced during setup. see the `STRACE_STUB_CODE`
-                        // constant in this file for more info.
-                        let strace_stub = output_dir
-                            .join("aflpp")
-                            .join("strace-stub")
-                            .with_extension("so")
-                            .canonicalize()
-                            .expect("failed to canonicalize path for the strace stub.");
                         let strace_output = Command::new("strace")
                             .args(
                                 [
                                     vec![
-                                        "-E".to_string(),
-                                        format!("LD_PRELOAD={}", strace_stub.display()),
                                         "-e".to_string(),
                                         "abbrev=all".to_string(),
                                         "-e".to_string(),
@@ -420,9 +399,10 @@ impl FuzzerBackend for AFLPlusPlus {
                             .output()
                             .map_err(|err| error!("`strace` failed: {}.", err))?;
                         let strace_output = String::from_utf8_lossy(&strace_output.stderr);
-                        let start_index = strace_output
-                            .find("__ROSAS_CANTINA__")
-                            .expect("missing marker from strace's output.");
+                        let start_index = strace_output.find("__ROSAS_CANTINA__").ok_or(error!(
+                            "could not find ROSA's trace marker, maybe a missing \
+                                `__ROSA_TRACE_START()`?"
+                        ))?;
                         let strace_regex = Regex::new(concat!(
                             r"(?m)^",
                             r"(\[pid[[:space:]]*[[:digit:]]+\][[:space:]]+)?",
@@ -514,48 +494,6 @@ impl FuzzerBackend for AFLPlusPlus {
         }
     }
 }
-
-/// This is a hack to avoid picking up irrelevant system calls when fuzzing with AFL++ in source
-/// mode.
-///
-/// In a nutshell, we use `strace` to collect system calls. However, `strace` will collect far more
-/// system calls than those produced by the program proper, most notably system calls produced by
-/// the dynamic loader, or even the `execve` system call spawning the process in the first place.
-/// We would like to skip over all of these system calls and only record the ones that come after,
-/// which are indeed produced by the program code itself.
-///
-/// One way to do this is with an `LD_PRELOAD` stub, where `__libc_start_main` is stubbed and a
-/// `write` system call is inserted to help us mark the "before" and "after" in `strace`'s output.
-///
-/// Courtesy of <https://unix.stackexchange.com/a/668709>.
-const STRACE_STUB_CODE: &str = "\
-#define _GNU_SOURCE
-#include <dlfcn.h>
-#include <unistd.h>
-#include <errno.h>
-#include <err.h>
-
-
-int __libc_start_main(
-    int (*main)(int, char**, char**),
-    int ac,
-    char **av,
-    int (*init)(int, char**, char**),
-    void (*fini)(void),
-    void (*rtld_fini)(void),
-    void *stack_end
-)
-{
-    typeof(__libc_start_main) *next = dlsym(
-        RTLD_NEXT, \"__libc_start_main\"
-    );
-
-    write(-1, \"__ROSAS_CANTINA__\", 17);
-    errno = 0;
-
-    return next(main, ac, av, init, fini, rtld_fini, stack_end);
-}
-";
 
 #[cfg(test)]
 mod tests {
