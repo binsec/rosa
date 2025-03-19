@@ -3,7 +3,7 @@
 //! This module describes runtime traces and provides different utilities, such as IO.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::{self, File},
     hash::{DefaultHasher, Hash, Hasher},
     io::Read,
@@ -402,6 +402,74 @@ impl Trace {
     }
 }
 
+/// A database of traces.
+///
+/// This structure makes it easier to collect new unique traces, as it stores information about
+/// which associated test inputs have already been evaluated. This in turn can improve speed when
+/// considering if we should keep a given test input-trace pair.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TraceDatabase {
+    /// A map of trace UIDs to traces.
+    traces: HashMap<String, Trace>,
+    /// A set of known input files (and by extension, known traces).
+    known_inputs: HashSet<PathBuf>,
+}
+
+impl TraceDatabase {
+    /// Create a new database of traces.
+    pub fn new() -> Self {
+        Self {
+            traces: HashMap::new(),
+            known_inputs: HashSet::new(),
+        }
+    }
+
+    /// Get all traces currently in the database.
+    pub fn traces(&self) -> Vec<Trace> {
+        self.traces.clone().into_values().collect()
+    }
+
+    /// Check if a given input file is known to the database.
+    ///
+    /// By "known" we mean that it has already been evaluated: either it was accepted and exists in
+    /// the database, or it was rejected and should not be evaluated again.
+    pub fn is_known_input(&self, input: &Path) -> bool {
+        input
+            .canonicalize()
+            .ok()
+            .map(|input| self.known_inputs.contains(&input))
+            .unwrap_or(false)
+    }
+
+    /// Register a new input file.
+    ///
+    /// This should be done once an input file has been evaluated, whether is has been accepted
+    /// (and added to the database) or not.
+    pub fn register_input(&mut self, input: &Path) {
+        if let Ok(input) = input.canonicalize() {
+            if !self.is_known_input(&input) {
+                self.known_inputs.insert(input);
+            }
+        }
+    }
+
+    /// Check whether or not a trace exists in the database.
+    pub fn has_trace(&self, uid: &str) -> bool {
+        self.traces.contains_key(uid)
+    }
+
+    /// Insert a new trace to the database.
+    pub fn insert_trace(&mut self, trace: Trace) {
+        self.traces.insert(trace.uid(), trace);
+    }
+}
+
+impl Default for TraceDatabase {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Get all the test input files from a directory.
 ///
 /// Input files are expected to be any files that do not have the extension `.trace`.
@@ -485,7 +553,7 @@ fn get_trace_info(
 /// Load multiple traces from file.
 ///
 /// This function is used to load a lot of traces in bulk, while filtering some of them out
-/// depending on different criteria. It's the function to use when "hot"-loading, i.e. loading
+/// depending on different criteria. It's the function to use when "hot-loading", i.e. loading
 /// while the fuzzer is actively producing new traces.
 ///
 /// For each test input file `X` discovered in `test_input_dir`, exactly one trace dump file
@@ -494,26 +562,26 @@ fn get_trace_info(
 ///
 /// # Examples
 /// ```
-/// use std::{path::Path, collections::HashMap};
-/// use rosa::trace;
+/// use std::path::Path;
+/// use rosa::trace::{self, TraceDatabase};
 ///
-/// let mut known_traces = HashMap::new();
+/// let mut trace_db = TraceDatabase::new();
 /// let _traces = trace::load_traces(
 ///     &Path::new("/path/to/test_input_dir/"),
 ///     &Path::new("/path/to/trace_dump_dir/"),
 ///     "main",
-///     &mut known_traces,
+///     &mut trace_db,
 ///     // Will skip any incomplete/missing trace dumps.
 ///     false,
 /// );
 ///
-/// // The previous call populated the `known_traces` hash map, which means that this call will
-/// // only pick up traces that the previous one did not.
+/// // The previous call populated the `trace_db` database, which means that this call will only
+/// // pick up traces that the previous one did not.
 /// let _new_traces = trace::load_traces(
 ///     &Path::new("/path/to/test_input_dir/"),
 ///     &Path::new("/path/to/trace_dump_dir/"),
 ///     "main",
-///     &mut known_traces,
+///     &mut trace_db,
 ///     // Will expect every trace dump to be present & complete.
 ///     true,
 /// );
@@ -522,15 +590,19 @@ pub fn load_traces(
     test_input_dir: &Path,
     trace_dump_dir: &Path,
     name_prefix: &str,
-    known_traces: &mut HashMap<String, Trace>,
+    trace_db: &mut TraceDatabase,
     skip_missing_traces: bool,
 ) -> Result<Vec<Trace>, RosaError> {
-    let mut test_inputs = get_test_input_files(test_input_dir)?;
+    let mut test_inputs: Vec<PathBuf> = get_test_input_files(test_input_dir)?
+        .into_iter()
+        // Only keep new inputs.
+        .filter(|input| !trace_db.is_known_input(input))
+        .collect();
     // Make sure the test input names are sorted so that we have consistency when loading.
     test_inputs.sort();
     let trace_info = get_trace_info(test_inputs, trace_dump_dir, skip_missing_traces);
 
-    let all_traces: Vec<Trace> = trace_info
+    let traces_and_inputs: Vec<(Trace, PathBuf)> = trace_info
         .into_iter()
         // Attempt to load the trace.
         .map(|(trace_name, test_input_file, trace_dump_file)| {
@@ -546,7 +618,7 @@ pub fn load_traces(
 
                 match (trace, skip_missing_traces) {
                     // If load was successful, then the trace is ok.
-                    (Ok(trace), _) => Ok(Some(trace)),
+                    (Ok(trace), _) => Ok(Some((trace, test_input_file))),
                     // Load was unsuccessful, but we're skipping traces so it's fine.
                     (Err(_), true) => Ok(None),
                     // Load was unsuccessful, and we're not skipping traces: not fine.
@@ -557,36 +629,22 @@ pub fn load_traces(
             }
         })
         // Filter out the skipped traces.
-        .filter_map(|trace| trace.transpose())
-        .collect::<Result<Vec<Trace>, RosaError>>()?;
+        .filter_map(|element| element.transpose())
+        .collect::<Result<Vec<(Trace, PathBuf)>, RosaError>>()?;
 
-    let new_traces: Vec<Trace> = all_traces
-        .into_iter()
-        .unique_by(|trace| trace.uid())
-        .filter(|trace| !known_traces.contains_key(&trace.uid()))
-        // NOTE: when loading in traces from various different fuzzer instances, the coverage might
-        // be different because of the different configurations (e.g., one fuzzer enabling
-        // `AFL_INST_LIBS` and another not enabling it).
-        //
-        // This will lead to the same trace inputs producing different traces when loaded through
-        // other fuzzers. In order to avoid some of this, we can at the very least filter out
-        // traces that have the exact same test inputs.
-        //
-        // Note that this will only happen when collecting traces from every fuzzer; if we only
-        // collect from one, we shouldn't have inconsistencies in terms of trace representation.
-        // See the `--collect-from-all-fuzzers` option.
-        .filter(|trace| {
-            !known_traces
-                .values()
-                .map(|trace| trace.test_input.clone())
-                .collect::<Vec<Vec<u8>>>()
-                .contains(&trace.test_input)
-        })
-        .collect();
+    let new_traces =
+        traces_and_inputs
+            .into_iter()
+            .fold(Vec::new(), |new_traces, (trace, input)| {
+                trace_db.register_input(&input);
+                if !trace_db.has_trace(&trace.uid()) {
+                    trace_db.insert_trace(trace.clone());
 
-    new_traces.iter().for_each(|trace| {
-        known_traces.insert(trace.uid(), trace.clone());
-    });
+                    [vec![trace], new_traces].concat()
+                } else {
+                    new_traces
+                }
+            });
 
     Ok(new_traces)
 }

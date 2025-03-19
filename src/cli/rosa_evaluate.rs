@@ -22,7 +22,7 @@ use rosa::{
     config::{self, Config},
     error::RosaError,
     oracle::TimedDecision,
-    trace,
+    trace::{self, TraceDatabase},
 };
 
 mod common;
@@ -222,12 +222,12 @@ fn run(
     let config = Config::load(&output_dir.join("config").with_extension("toml"))?;
 
     println_info!("Loading traces...");
-    let mut known_traces = HashMap::new();
+    let mut trace_db = TraceDatabase::new();
     let all_traces = trace::load_traces(
         &output_dir.join("traces"),
         &output_dir.join("traces"),
         "rosa",
-        &mut known_traces,
+        &mut trace_db,
         true,
     )?;
 

@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     config,
     error::RosaError,
-    trace::{self, Trace},
+    trace::{self, Trace, TraceDatabase},
 };
 
 pub mod aflpp;
@@ -60,15 +60,15 @@ pub trait FuzzerBackend: DynClone {
     }
     /// Collect traces from the fuzzer.
     ///
-    /// The set of known trashes (hash map of trace UIDs) is also passed, which allows to skip
-    /// traces that have already been collected. The option to skip missing traces is also passed,
-    /// in the case where the trace dump is not yet complete.
+    /// A database of known inputs and traces is passed to make the collection more efficient, by
+    /// ignoring inputs and traces that have already been evaluated. The option to skip missing
+    /// traces is also passed, in the case where the trace dump is not yet complete.
     ///
     /// By default, this will use [trace::load_traces](crate::trace::load_traces), but
     /// implementations can alter it if needed.
     fn collect_traces(
         &self,
-        known_traces: &mut HashMap<String, Trace>,
+        trace_db: &mut TraceDatabase,
         skip_missing_traces: bool,
         input_dir: &Path,
         _output_dir: &Path,
@@ -77,7 +77,7 @@ pub trait FuzzerBackend: DynClone {
             input_dir,
             &self.runtime_trace_dir(),
             self.name(),
-            known_traces,
+            trace_db,
             skip_missing_traces,
         )
     }

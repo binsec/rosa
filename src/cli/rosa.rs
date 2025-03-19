@@ -3,7 +3,6 @@
 //! This is the main ROSA binary; it can be used directly for backdoor detection.
 
 use std::{
-    collections::HashMap,
     fs,
     io::ErrorKind,
     path::{Path, PathBuf},
@@ -27,7 +26,7 @@ use rosa::{
     error::RosaError,
     fuzzer::{FuzzerInstance, FuzzerStatus},
     oracle::{Decision, DecisionReason, Discriminants, TimedDecision},
-    trace::{self, Trace},
+    trace::{self, Trace, TraceDatabase},
 };
 
 use crate::tui::RosaTui;
@@ -175,7 +174,7 @@ fn run(
     .expect("could not set Ctrl-C handler.");
 
     // Set up a hashmap to keep track of known traces via their UIDs.
-    let mut known_traces = HashMap::new();
+    let mut trace_db = TraceDatabase::new();
 
     // Set up the fuzzer processes.
     let mut fuzzer_instances: Vec<FuzzerInstance> = config
@@ -319,7 +318,7 @@ fn run(
                     .iter()
                     .flat_map(|fuzzer_config| {
                         match fuzzer_config.backend.collect_traces(
-                            &mut known_traces,
+                            &mut trace_db,
                             // Skip missing traces, because the fuzzer is continually producing
                             // new ones, and we might miss some because of the timing of the
                             // writes; it's okay, we'll pick them up on the next iteration.
@@ -339,7 +338,7 @@ fn run(
             } else {
                 let main_fuzzer = config.main_fuzzer()?;
                 main_fuzzer.backend.collect_traces(
-                    &mut known_traces,
+                    &mut trace_db,
                     // Skip missing traces, because the fuzzer is continually producing new
                     // ones, and we might miss some because of the timing of the writes; it's
                     // okay, we'll pick them up on the next iteration.
@@ -357,7 +356,7 @@ fn run(
         )?;
 
         // Update coverage.
-        let current_traces: Vec<Trace> = known_traces.clone().into_values().collect();
+        let current_traces: Vec<Trace> = trace_db.traces().clone();
         let (edge_coverage, syscall_coverage) = trace::get_coverage(&current_traces);
         config.set_current_coverage(edge_coverage, syscall_coverage)?;
 
@@ -366,7 +365,7 @@ fn run(
             with_cleanup!(
                 config.log_stats(
                     start_time.elapsed().as_secs(),
-                    known_traces.len() as u64,
+                    current_traces.len() as u64,
                     nb_unique_backdoors,
                     nb_total_backdoors,
                     edge_coverage,
@@ -381,7 +380,7 @@ fn run(
                     "Time: {} s | Traces: {} | Backdoors: {} unique ({} total) | \
                         Edge coverage: {:.2}% | Syscall coverage: {:.2}%",
                     start_time.elapsed().as_secs(),
-                    known_traces.len() as u64,
+                    current_traces.len() as u64,
                     nb_unique_backdoors,
                     nb_total_backdoors,
                     edge_coverage * 100.0,

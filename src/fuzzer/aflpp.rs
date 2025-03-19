@@ -12,7 +12,6 @@ use std::{
     process::Command,
 };
 
-use itertools::Itertools;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tempfile::{self, NamedTempFile};
@@ -20,7 +19,7 @@ use tempfile::{self, NamedTempFile};
 use crate::{
     error::RosaError,
     fuzzer::{FuzzerBackend, FuzzerStatus},
-    trace::{self, Trace},
+    trace::{self, Trace, TraceDatabase},
 };
 
 /// The maximum system call ID supported in the source version.
@@ -275,7 +274,7 @@ impl FuzzerBackend for AFLPlusPlus {
 
     fn collect_traces(
         &self,
-        known_traces: &mut HashMap<String, Trace>,
+        trace_db: &mut TraceDatabase,
         skip_missing_traces: bool,
         input_dir: &Path,
         output_dir: &Path,
@@ -284,13 +283,17 @@ impl FuzzerBackend for AFLPlusPlus {
         // it here.
         match self.mode {
             AFLPlusPlusMode::Standard => {
-                let all_traces: Vec<Trace> = trace::get_test_input_files(input_dir)?
+                let mut test_inputs: Vec<PathBuf> = trace::get_test_input_files(input_dir)?
+                    .into_iter()
+                    // Only keep new inputs.
+                    .filter(|input| !trace_db.is_known_input(input))
+                    .collect();
+                // Make sure the test input names are sorted so that we have consistency when loading.
+                test_inputs.sort();
+
+                let traces_and_inputs: Vec<(Trace, PathBuf)> = test_inputs
                     .into_iter()
                     .map(|test_input_path| {
-                        // TODO: do not do all this for *all* files, it's extremely wasteful. First
-                        // check to see if the name of the file is not already in the known_traces
-                        // map?
-
                         // In "standard" mode, we need to call `afl-showmap` and `strace` to get the
                         // edges and syscalls respectively.
                         let mut test_input_file = File::open(&test_input_path).map_err(|err| {
@@ -430,57 +433,46 @@ impl FuzzerBackend for AFLPlusPlus {
                             .parse::<usize>()
                             .expect("failed to parse max edge count.");
 
-                        Ok(Trace::from(
-                            &format!(
-                                "{}__{}",
-                                self.name(),
-                                test_input_path
-                                    .file_name()
-                                    .expect("failed to get filename for test input.")
-                                    .to_string_lossy()
+                        Ok((
+                            Trace::from(
+                                &format!(
+                                    "{}__{}",
+                                    self.name(),
+                                    test_input_path
+                                        .file_name()
+                                        .expect("failed to get filename for test input.")
+                                        .to_string_lossy()
+                                ),
+                                &fs::read(&test_input_path).map_err(|err| {
+                                    error!(
+                                        "could not read test input file '{}': {}.",
+                                        test_input_path.display(),
+                                        err
+                                    )
+                                })?,
+                                &edges,
+                                max_edges,
+                                &syscalls,
+                                MAX_SYSCALLS,
                             ),
-                            &fs::read(&test_input_path).map_err(|err| {
-                                error!(
-                                    "could not read test input file '{}': {}.",
-                                    test_input_path.display(),
-                                    err
-                                )
-                            })?,
-                            &edges,
-                            max_edges,
-                            &syscalls,
-                            MAX_SYSCALLS,
+                            test_input_path,
                         ))
                     })
-                    .collect::<Result<Vec<Trace>, RosaError>>()?;
+                    .collect::<Result<Vec<(Trace, PathBuf)>, RosaError>>()?;
 
-                let new_traces: Vec<Trace> = all_traces
-                    .into_iter()
-                    .unique_by(|trace| trace.uid())
-                    .filter(|trace| !known_traces.contains_key(&trace.uid()))
-                    // NOTE: when loading in traces from various different fuzzer instances, the coverage might
-                    // be different because of the different configurations (e.g., one fuzzer enabling
-                    // `AFL_INST_LIBS` and another not enabling it).
-                    //
-                    // This will lead to the same trace inputs producing different traces when loaded through
-                    // other fuzzers. In order to avoid some of this, we can at the very least filter out
-                    // traces that have the exact same test inputs.
-                    //
-                    // Note that this will only happen when collecting traces from every fuzzer; if we only
-                    // collect from one, we shouldn't have inconsistencies in terms of trace representation.
-                    // See the `--collect-from-all-fuzzers` option.
-                    .filter(|trace| {
-                        !known_traces
-                            .values()
-                            .map(|trace| trace.test_input.clone())
-                            .collect::<Vec<Vec<u8>>>()
-                            .contains(&trace.test_input)
-                    })
-                    .collect();
+                let new_traces =
+                    traces_and_inputs
+                        .into_iter()
+                        .fold(Vec::new(), |new_traces, (trace, input)| {
+                            trace_db.register_input(&input);
+                            if !trace_db.has_trace(&trace.uid()) {
+                                trace_db.insert_trace(trace.clone());
 
-                new_traces.iter().for_each(|trace| {
-                    known_traces.insert(trace.uid(), trace.clone());
-                });
+                                [vec![trace], new_traces].concat()
+                            } else {
+                                new_traces
+                            }
+                        });
 
                 Ok(new_traces)
             }
@@ -488,7 +480,7 @@ impl FuzzerBackend for AFLPlusPlus {
                 &self.test_input_dir(),
                 &self.runtime_trace_dir(),
                 self.name(),
-                known_traces,
+                trace_db,
                 skip_missing_traces,
             ),
         }

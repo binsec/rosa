@@ -6,7 +6,6 @@
 //! us to "simulate" a detection campaign via this mechanism, while reusing inputs.
 
 use std::{
-    collections::HashMap,
     fs,
     io::ErrorKind,
     os::unix,
@@ -24,7 +23,7 @@ use rosa::{
     error::RosaError,
     fail,
     oracle::{Decision, DecisionReason, Discriminants, TimedDecision},
-    trace::{self, Trace},
+    trace::{self, Trace, TraceDatabase},
 };
 
 mod common;
@@ -192,12 +191,12 @@ fn run(
     }
 
     println_info!("Loading traces...");
-    let mut known_traces = HashMap::new();
+    let mut trace_db = TraceDatabase::new();
     let all_traces = trace::load_traces(
         &config.traces_dir(),
         &config.traces_dir(),
         "rosa",
-        &mut known_traces,
+        &mut trace_db,
         true,
     )?;
 

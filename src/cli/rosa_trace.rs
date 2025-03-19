@@ -1,7 +1,6 @@
 //! Capture a runtime trace with a given input to a given program.
 
 use std::{
-    collections::HashMap,
     fs,
     path::{Path, PathBuf},
     process::ExitCode,
@@ -10,7 +9,7 @@ use std::{
 use clap::Parser;
 use colored::Colorize;
 
-use rosa::{config::Config, error, error::RosaError, fail};
+use rosa::{config::Config, error, error::RosaError, fail, trace::TraceDatabase};
 
 mod common;
 #[macro_use]
@@ -77,10 +76,10 @@ fn run(config_file: &Path, input_file: &Path, output_file: Option<&Path>) -> Res
         )
     })?;
 
-    let mut known_traces = HashMap::new();
+    let mut trace_db = TraceDatabase::new();
     main_fuzzer.backend.setup(trace_dir.path())?;
     let traces = main_fuzzer.backend.collect_traces(
-        &mut known_traces,
+        &mut trace_db,
         false,
         trace_dir.path(),
         trace_dir.path(),
