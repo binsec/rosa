@@ -10,7 +10,7 @@ use std::{
 use clap::Parser;
 use colored::Colorize;
 
-use rosa::{config::Config, error, error::RosaError, fail, trace};
+use rosa::{config::Config, error, error::RosaError, fail};
 
 mod common;
 #[macro_use]
@@ -34,17 +34,13 @@ struct Cli {
     input_file: PathBuf,
 
     /// The output trace file.
-    #[arg(
-        long_help,
-        short,
-        long,
-        default_value = "output.trace",
-        help = "Output trace file"
-    )]
-    output: PathBuf,
+    ///
+    /// If a name is not provided, the trace's UID will be used.
+    #[arg(long_help, short, long, help = "Output trace file")]
+    output: Option<PathBuf>,
 }
 
-fn run(config_file: &Path, input_file: &Path) -> Result<(), RosaError> {
+fn run(config_file: &Path, input_file: &Path, output_file: Option<&Path>) -> Result<(), RosaError> {
     let config = Config::load(config_file)?;
 
     // Check that the main fuzzer is AFL++ in standard mode, otherwise this won't work.
@@ -93,8 +89,10 @@ fn run(config_file: &Path, input_file: &Path) -> Result<(), RosaError> {
     assert_eq!(traces.len(), 1);
     let trace = &traces[0];
 
-    trace::save_trace_dump(trace, Path::new("."))?;
-    println_info!("Done! Trace saved at './{}.trace'.", trace.uid());
+    let default_file = PathBuf::from(".").join(trace.uid()).with_extension("trace");
+    let output_file = output_file.unwrap_or(&default_file);
+    trace.save_trace_dump(output_file)?;
+    println_info!("Done! Trace saved in '{}'.", output_file.display());
 
     Ok(())
 }
@@ -103,7 +101,7 @@ fn main() -> ExitCode {
     common::reset_sigpipe();
     let cli = Cli::parse();
 
-    match run(&cli.config_file, &cli.input_file) {
+    match run(&cli.config_file, &cli.input_file, cli.output.as_deref()) {
         Ok(_) => ExitCode::SUCCESS,
         Err(err) => {
             println_error!(err);

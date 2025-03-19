@@ -317,7 +317,9 @@ fn run(
                 .map_err(|err| error!("could not create '{}': {}", &backdoor_dir.display(), err))?;
 
                 // Save backdoor.
-                trace::save_trace_test_input(&timed_trace.trace, &backdoor_dir)?;
+                timed_trace
+                    .trace
+                    .save_test_input(&backdoor_dir.join(timed_trace.trace.uid()))?;
             }
 
             Ok(())

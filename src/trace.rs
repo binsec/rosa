@@ -322,6 +322,84 @@ impl Trace {
 
         format!("{:016x}", s.finish())
     }
+
+    /// Save the test input of a trace to a file.
+    ///
+    /// # Examples
+    /// ```
+    /// use std::path::Path;
+    /// use rosa::trace::Trace;
+    ///
+    /// let my_trace = Trace {
+    ///     name: "my_trace".to_string(),
+    ///     test_input: vec![0x01, 0x02, 0x03, 0x04],
+    ///     edges: vec![],
+    ///     syscalls: vec![],
+    /// };
+    ///
+    /// let _ = my_trace.save_test_input(&Path::new("/path/to/my_trace"));
+    /// ```
+    pub fn save_test_input(&self, output_file: &Path) -> Result<(), RosaError> {
+        fs::write(output_file, &self.test_input).map_err(|err| {
+            error!(
+                "could not write trace test input to {}: {}.",
+                output_file.display(),
+                err
+            )
+        })?;
+        Ok(())
+    }
+
+    /// Save the runtime representation (trace dump) of a trace to a file.
+    ///
+    /// Just like in [Trace::load], we will maintain the expected format of a binary trace dump:
+    ///   ```text
+    ///   <nb_edges: u64><nb_syscalls: u64><edges: [u8]><syscalls: [u8]>
+    ///   ```
+    ///
+    /// # Examples
+    /// ```
+    /// use std::path::Path;
+    /// use rosa::trace::Trace;
+    ///
+    /// let my_trace = Trace {
+    ///     name: "my_trace".to_string(),
+    ///     test_input: vec![],
+    ///     edges: vec![1, 0, 1, 0],
+    ///     syscalls: vec![0, 1, 0, 1],
+    /// };
+    ///
+    /// let _ = my_trace.save_trace_dump(&Path::new("/path/to/my_trace.trace"));
+    /// ```
+    pub fn save_trace_dump(&self, output_file: &Path) -> Result<(), RosaError> {
+        let mut output = vec![];
+        let edges_length: u64 = self
+            .edges
+            .len()
+            .try_into()
+            .expect("failed to convert edges length to u64.");
+        let syscalls_length: u64 = self
+            .syscalls
+            .len()
+            .try_into()
+            .expect("failed to convert syscalls length to u64.");
+
+        output.extend(edges_length.to_le_bytes().to_vec());
+        output.extend(syscalls_length.to_le_bytes().to_vec());
+        output.extend(&self.edges);
+        output.extend(&self.syscalls);
+
+        // Write the result to a file.
+        fs::write(output_file, &output).map_err(|err| {
+            error!(
+                "could not write trace dump to {}: {}.",
+                output_file.display(),
+                err
+            )
+        })?;
+
+        Ok(())
+    }
 }
 
 /// Get all the test input files from a directory.
@@ -537,88 +615,11 @@ pub fn load_traces(
 /// ```
 pub fn save_traces(traces: &[Trace], output_dir: &Path) -> Result<(), RosaError> {
     traces.iter().try_for_each(|trace| {
-        save_trace_test_input(trace, output_dir).and_then(|()| save_trace_dump(trace, output_dir))
+        let base_path = output_dir.join(trace.uid());
+        trace
+            .save_test_input(&base_path)
+            .and_then(|()| trace.save_trace_dump(&base_path.with_extension("trace")))
     })
-}
-
-/// Save the test input of a trace to a file.
-///
-/// # Examples
-/// ```
-/// use std::path::Path;
-/// use rosa::trace::{self, Trace};
-///
-/// let my_trace = Trace {
-///     name: "my_trace".to_string(),
-///     test_input: vec![0x01, 0x02, 0x03, 0x04],
-///     edges: vec![],
-///     syscalls: vec![],
-/// };
-///
-/// let _ = trace::save_trace_test_input(&my_trace, &Path::new("/path/to/my_trace"));
-/// ```
-pub fn save_trace_test_input(trace: &Trace, output_dir: &Path) -> Result<(), RosaError> {
-    let trace_test_input_file = output_dir.join(trace.uid());
-    fs::write(&trace_test_input_file, &trace.test_input).map_err(|err| {
-        error!(
-            "could not write trace test input to {}: {}.",
-            trace_test_input_file.display(),
-            err
-        )
-    })?;
-    Ok(())
-}
-
-/// Save the runtime representation (trace dump) of a trace to a file.
-///
-/// Just like in [Trace::load], we will maintain the expected format of a binary trace dump:
-///   ```text
-///   <nb_edges: u64><nb_syscalls: u64><edges: [u8]><syscalls: [u8]>
-///   ```
-///
-/// # Examples
-/// ```
-/// use std::path::Path;
-/// use rosa::trace::{self, Trace};
-///
-/// let my_trace = Trace {
-///     name: "my_trace".to_string(),
-///     test_input: vec![],
-///     edges: vec![1, 0, 1, 0],
-///     syscalls: vec![0, 1, 0, 1],
-/// };
-///
-/// let _ = trace::save_trace_dump(&my_trace, &Path::new("/path/to/my_trace.trace"));
-/// ```
-pub fn save_trace_dump(trace: &Trace, output_dir: &Path) -> Result<(), RosaError> {
-    let mut output = vec![];
-    let edges_length: u64 = trace
-        .edges
-        .len()
-        .try_into()
-        .expect("failed to convert edges length to u64.");
-    let syscalls_length: u64 = trace
-        .syscalls
-        .len()
-        .try_into()
-        .expect("failed to convert syscalls length to u64.");
-
-    output.extend(edges_length.to_le_bytes().to_vec());
-    output.extend(syscalls_length.to_le_bytes().to_vec());
-    output.extend(&trace.edges);
-    output.extend(&trace.syscalls);
-
-    // Write the result to a file.
-    let trace_dump_file = output_dir.join(trace.uid()).with_extension("trace");
-    fs::write(&trace_dump_file, &output).map_err(|err| {
-        error!(
-            "could not write trace dump to {}: {}.",
-            trace_dump_file.display(),
-            err
-        )
-    })?;
-
-    Ok(())
 }
 
 /// Get the coverage of a set of traces in terms of edges and syscalls.

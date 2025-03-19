@@ -517,7 +517,7 @@ fn run(
 
                         // Save backdoor.
                         with_cleanup!(
-                            trace::save_trace_test_input(trace, &backdoor_dir),
+                            trace.save_test_input(&backdoor_dir.join(trace.uid())),
                             fuzzer_instances
                         )?;
                     }
