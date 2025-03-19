@@ -25,6 +25,61 @@ pub struct Cluster {
     pub max_syscall_distance: u64,
 }
 
+impl Cluster {
+    /// Load a cluster from a cluster file.
+    ///
+    /// Note that the min/max edge/syscall distances are all set to zero and may not be accurate.
+    /// If they are needed, they should be recomputed from scratch after loading.
+    pub fn load(file: &Path, traces_dir: &Path) -> Result<Self, RosaError> {
+        let uid = file
+            .with_extension("")
+            .file_name()
+            .expect("failed to get name of cluster file.")
+            .to_str()
+            .expect("failed to convert cluster file name to string.")
+            .to_string();
+        let traces = fs::read_to_string(file)
+            .map_err(|err| error!("could not read cluster file '{}': {}.", file.display(), err))?
+            .split('\n')
+            .filter(|line| !line.is_empty())
+            .map(|trace_uid| {
+                Trace::load(
+                    trace_uid,
+                    &traces_dir.join(trace_uid),
+                    &traces_dir.join(trace_uid).with_extension("trace"),
+                )
+            })
+            .collect::<Result<Vec<Trace>, RosaError>>()?;
+
+        // We should always have at least one trace per cluster.
+        assert!(!traces.is_empty());
+
+        Ok(Self {
+            uid,
+            traces,
+            min_edge_distance: 0,
+            max_edge_distance: 0,
+            min_syscall_distance: 0,
+            max_syscall_distance: 0,
+        })
+    }
+
+    /// Save the cluster to a file.
+    ///
+    /// The cluster is saved in a very simple textual form, with the UIDs of its traces, each on a
+    /// separate line.
+    pub fn save(&self, file: &Path) -> Result<(), RosaError> {
+        let trace_uids: Vec<String> = self.traces.iter().map(|trace| trace.uid()).collect();
+        fs::write(file, format!("{}\n", trace_uids.join("\n"))).map_err(|err| {
+            error!(
+                "could not save cluster to file {}: {}.",
+                file.display(),
+                err
+            )
+        })
+    }
+}
+
 /// Get the most similar cluster to a trace, given a collection of clusters.
 ///
 /// The most similar cluster is chosen given a criterion and a distance metric; the distance metric
@@ -91,8 +146,7 @@ pub struct Cluster {
 /// // Dummy trace for which to get the most similar cluster. It's identical to `trace_2` in
 /// // cluster `cluster_1`.
 /// let candidate_trace = Trace {
-///     name: "candidate".to_string(),
-///     test_input: vec![],
+///     name: "candidate".to_string(), test_input: vec![],
 ///     edges: vec![0, 1, 0, 0],
 ///     syscalls: vec![],
 /// };
@@ -390,14 +444,7 @@ pub fn cluster_traces(
 /// ```
 pub fn save_clusters(clusters: &[Cluster], output_dir: &Path) -> Result<(), RosaError> {
     clusters.iter().try_for_each(|cluster| {
-        let trace_uids: Vec<String> = cluster.traces.iter().map(|trace| trace.uid()).collect();
         let cluster_file = output_dir.join(&cluster.uid).with_extension("txt");
-        fs::write(&cluster_file, format!("{}\n", trace_uids.join("\n"))).map_err(|err| {
-            error!(
-                "could not save cluster to file {}: {}.",
-                cluster_file.display(),
-                err
-            )
-        })
+        cluster.save(&cluster_file)
     })
 }

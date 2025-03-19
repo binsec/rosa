@@ -46,7 +46,7 @@ pub trait Oracle: DynClone {
 clone_trait_object!(Oracle);
 
 /// The reason for an oracle decision.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum DecisionReason {
     /// The decision was made because the trace was a seed trace (i.e. it originated from the seed
     /// phase).
@@ -64,7 +64,7 @@ pub enum DecisionReason {
 }
 
 /// The edges and syscalls that lead to an oracle decision.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Discriminants {
     /// The edges that exist in the trace but not the cluster.
     pub trace_edges: Vec<usize>,
@@ -111,7 +111,7 @@ impl Discriminants {
 }
 
 /// The decision made by an oracle.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Decision {
     /// The UID of the trace for which the decision was made.
     pub trace_uid: String,
@@ -130,7 +130,7 @@ pub struct Decision {
 }
 
 /// The timed decision made by an oracle.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TimedDecision {
     /// The decision itself.
     pub decision: Decision,
