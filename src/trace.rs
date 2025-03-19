@@ -632,19 +632,29 @@ pub fn load_traces(
         .filter_map(|element| element.transpose())
         .collect::<Result<Vec<(Trace, PathBuf)>, RosaError>>()?;
 
-    let new_traces =
-        traces_and_inputs
-            .into_iter()
-            .fold(Vec::new(), |new_traces, (trace, input)| {
-                trace_db.register_input(&input);
-                if !trace_db.has_trace(&trace.uid()) {
-                    trace_db.insert_trace(trace.clone());
+    // Register all new inputs.
+    //
+    // No matter whether we keep or discard the associated traces, by the end we will have looked
+    // through all of them, so we shouldn't have to go over them again.
+    traces_and_inputs
+        .iter()
+        .for_each(|(_, input)| trace_db.register_input(input));
 
-                    [vec![trace], new_traces].concat()
-                } else {
-                    new_traces
-                }
-            });
+    // Filter new traces.
+    let new_traces: Vec<Trace> = traces_and_inputs
+        .into_iter()
+        .map(|(trace, _)| (trace.clone(), trace.uid()))
+        // Traces with duplicate UIDs should be discarded anyway, no need to look in the database.
+        .unique_by(|(_trace, uid)| uid.clone())
+        // Of the unique traces, we should only keep those that are not already in the database.
+        .filter(|(_trace, uid)| !trace_db.has_trace(uid))
+        .map(|(trace, _)| trace)
+        .collect();
+
+    // Insert new traces in the database.
+    new_traces
+        .iter()
+        .for_each(|trace| trace_db.insert_trace(trace.clone()));
 
     Ok(new_traces)
 }
