@@ -16,7 +16,7 @@ use rosa::{
     error,
     error::RosaError,
     fuzzer::{
-        aflpp::{AFLPlusPlus, AFLPlusPlusMode},
+        aflpp::{AFLPlusPlus, AFLPlusPlusInput, AFLPlusPlusMode},
         FuzzerConfig,
     },
 };
@@ -72,6 +72,8 @@ fn generate_fuzzer_config(
         env
     };
 
+    let target_cmd: Vec<String> = target.iter().map(|arg| arg.to_string()).collect();
+
     FuzzerConfig {
         backend: Box::new(AFLPlusPlus {
             name: name.to_string(),
@@ -79,7 +81,12 @@ fn generate_fuzzer_config(
             afl_fuzz: afl_fuzz.to_path_buf(),
             input_dir: input_dir.to_path_buf(),
             output_dir: output_dir.to_path_buf(),
-            target: target.iter().map(|arg| arg.to_string()).collect(),
+            target: target_cmd.clone(),
+            input: if target_cmd.contains(&"@@".to_string()) {
+                AFLPlusPlusInput::File
+            } else {
+                AFLPlusPlusInput::Stdin
+            },
             extra_args: extra_args.iter().map(|arg| arg.to_string()).collect(),
             env: env
                 .iter()

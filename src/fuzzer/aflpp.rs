@@ -46,6 +46,10 @@ pub struct AFLPlusPlus {
     pub output_dir: PathBuf,
     /// The full command to invoke the target program (with arguments if needed).
     pub target: Vec<String>,
+    /// The way the input is provided to the target.
+    ///
+    /// This is used to collect traces in standard mode.
+    pub input: AFLPlusPlusInput,
     /// Any extra arguments to pass to the fuzzer.
     pub extra_args: Vec<String>,
     /// Any environment variables to set for the fuzzer.
@@ -77,6 +81,20 @@ impl fmt::Display for AFLPlusPlusMode {
             }
         )
     }
+}
+
+/// The way the input is fed to the target program.
+#[derive(Serialize, Deserialize, Copy, Clone, Debug)]
+pub enum AFLPlusPlusInput {
+    /// Input is provided through standard input.
+    #[serde(rename = "stdin")]
+    Stdin,
+    /// Input is provided through a file.
+    #[serde(rename = "file")]
+    File,
+    /// Input is provided through a libfuzzer-style harness.
+    #[serde(rename = "libfuzzer")]
+    LibFuzzer,
 }
 
 impl AFLPlusPlus {
@@ -316,32 +334,59 @@ impl FuzzerBackend for AFLPlusPlus {
                             .map_err(|err| error!("could not create temporary file: {}.", err))?;
                         let showmap_output_path = showmap_output_file.into_temp_path();
 
-                        Command::new(
-                            self.afl_fuzz
-                                .parent()
-                                .expect("failed to get parent directory of afl-fuzz.")
-                                .join("afl-showmap"),
-                        )
-                        .args(
-                            [
-                                vec![
-                                    "-o".to_string(),
-                                    showmap_output_path.to_string_lossy().to_string(),
-                                    "-q".to_string(),
-                                    "-e".to_string(),
-                                    "--".to_string(),
-                                ],
-                                // TODO: handle cases where file is passed via `argv` (e.g.,
-                                // `/path/to/program @@`).
-                                self.target.clone(),
-                            ]
-                            .concat(),
-                        )
-                        .stdin(
-                            test_input_file
-                                .try_clone()
-                                .expect("failed to clone test input file."),
-                        )
+                        let afl_showmap = self
+                            .afl_fuzz
+                            .parent()
+                            .expect("failed to get parent directory of afl-fuzz.")
+                            .join("afl-showmap");
+                        let afl_showmap_args = vec![
+                            "-o".to_string(),
+                            showmap_output_path.to_string_lossy().to_string(),
+                            "-q".to_string(),
+                            "-e".to_string(),
+                            "--".to_string(),
+                        ];
+
+                        let mut afl_showmap_cmd = Command::new(afl_showmap);
+                        match self.input {
+                            // If the input is read from `stdin`, then simply pass the file to the
+                            // `stdin` of the process.
+                            AFLPlusPlusInput::Stdin => afl_showmap_cmd
+                                .args([afl_showmap_args, self.target.clone()].concat())
+                                .stdin(
+                                    test_input_file
+                                        .try_clone()
+                                        .expect("failed to clone test input file."),
+                                ),
+                            // If the input is read from a file, there is no need to pass anything
+                            // to the `stdin` of the process. However, we should replace all
+                            // occurrences of `@@` in the target command by the path to the file.
+                            AFLPlusPlusInput::File => afl_showmap_cmd.args(
+                                [
+                                    afl_showmap_args,
+                                    self.target
+                                        .clone()
+                                        .into_iter()
+                                        .map(|arg| {
+                                            if arg == "@@" {
+                                                test_input_path.display().to_string()
+                                            } else {
+                                                arg
+                                            }
+                                        })
+                                        .collect(),
+                                ]
+                                .concat(),
+                            ),
+                            AFLPlusPlusInput::LibFuzzer => afl_showmap_cmd.args(
+                                [
+                                    afl_showmap_args,
+                                    self.target.clone(),
+                                    vec![test_input_path.display().to_string()],
+                                ]
+                                .concat(),
+                            ),
+                        }
                         .status()
                         .map_err(|err| error!("afl-showmap failed: {}.", err))?;
 
@@ -380,27 +425,56 @@ impl FuzzerBackend for AFLPlusPlus {
                         //       | uniq
                         // ```
 
-                        let strace_output = Command::new("strace")
-                            .args(
-                                [
-                                    vec![
-                                        "-e".to_string(),
-                                        "abbrev=all".to_string(),
-                                        "-e".to_string(),
-                                        "quiet=attach,exit,path-resolution,\
+                        let strace_args = vec![
+                            "-e".to_string(),
+                            "abbrev=all".to_string(),
+                            "-e".to_string(),
+                            "quiet=attach,exit,path-resolution,\
                                             personality,thread-execve"
-                                            .to_string(),
-                                        "-ff".to_string(),
-                                        "-n".to_string(),
-                                        "--".to_string(),
-                                    ],
-                                    self.target.clone(),
+                                .to_string(),
+                            "-ff".to_string(),
+                            "-n".to_string(),
+                            "--".to_string(),
+                        ];
+
+                        let mut strace_cmd = Command::new("strace");
+                        let strace_output = match self.input {
+                            // If the input is read from `stdin`, then simply pass the file to the
+                            // `stdin` of the process.
+                            AFLPlusPlusInput::Stdin => strace_cmd
+                                .args([strace_args, self.target.clone()].concat())
+                                .stdin(test_input_file),
+                            // If the input is read from a file, there is no need to pass anything
+                            // to the `stdin` of the process. However, we should replace all
+                            // occurrences of `@@` in the target command by the path to the file.
+                            AFLPlusPlusInput::File => strace_cmd.args(
+                                [
+                                    strace_args,
+                                    self.target
+                                        .clone()
+                                        .into_iter()
+                                        .map(|arg| {
+                                            if arg == "@@" {
+                                                test_input_path.display().to_string()
+                                            } else {
+                                                arg
+                                            }
+                                        })
+                                        .collect(),
                                 ]
                                 .concat(),
-                            )
-                            .stdin(test_input_file)
-                            .output()
-                            .map_err(|err| error!("`strace` failed: {}.", err))?;
+                            ),
+                            AFLPlusPlusInput::LibFuzzer => strace_cmd.args(
+                                [
+                                    strace_args,
+                                    self.target.clone(),
+                                    vec![test_input_path.display().to_string()],
+                                ]
+                                .concat(),
+                            ),
+                        }
+                        .output()
+                        .map_err(|err| error!("`strace` failed: {}.", err))?;
                         let strace_output = String::from_utf8_lossy(&strace_output.stderr);
                         let start_index = strace_output.find("__ROSAS_CANTINA__").ok_or(error!(
                             "could not find ROSA's trace marker, maybe a missing \

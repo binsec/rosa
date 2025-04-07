@@ -6,7 +6,7 @@ LABEL maintainer="dimitri.kokkonis@cea.fr"
 LABEL description="Docker image for the ROSA backdoor detector toolchain"
 
 
-RUN apt-get clean && apt-get update
+RUN apt-get clean && apt-get update && apt-get upgrade -y
 
 
 WORKDIR /root

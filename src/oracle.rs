@@ -61,6 +61,9 @@ pub enum DecisionReason {
     /// The decision was made because of both the edges and the syscalls of the trace.
     #[serde(rename = "edges-and-syscalls")]
     EdgesAndSyscalls,
+    /// The decision was made because of diff filtering (through `rosa-filter-diff`).
+    #[serde(rename = "diff-filtering")]
+    DiffFiltering,
 }
 
 /// The edges and syscalls that lead to an oracle decision.
@@ -181,6 +184,7 @@ impl fmt::Display for DecisionReason {
                 Self::Edges => "edges",
                 Self::Syscalls => "syscalls",
                 Self::EdgesAndSyscalls => "edges-and-syscalls",
+                Self::DiffFiltering => "diff-filtering",
             }
         )
     }
