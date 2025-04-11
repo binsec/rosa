@@ -2,10 +2,12 @@
 
 use std::{
     collections::HashMap,
+    fmt,
     fs::{self, File},
     io::{ErrorKind, Write},
     path::{Path, PathBuf},
     process::{Command, ExitCode},
+    str,
 };
 
 use clap::Parser;
@@ -53,6 +55,9 @@ struct Cli {
     /// The output directory where to store the findings.
     #[arg(long_help, value_name = "OUTPUT DIR", help = "Output directory")]
     output_dir: PathBuf,
+    /// The differential oracle mode to use.
+    #[arg(long_help, short, long, help = "Differential oracle mode", default_value_t = DiffMode::InputOnly)]
+    mode: DiffMode,
     /// Force the creation of the output directory, potentially overwriting existing results.
     #[arg(
         long_help,
@@ -64,6 +69,64 @@ struct Cli {
     /// Provide more verbose output about each reevaluation.
     #[arg(long_help, short, long, help = "Be more verbose")]
     verbose: bool,
+}
+
+/// The different modes of the differential oracle.
+#[derive(Copy, Clone, Debug)]
+enum DiffMode {
+    /// Only take the input into account.
+    ///
+    /// If the system calls that made an input get flagged as suspicious persist in the base
+    /// version, then the input will be considered safe. Otherwise, it will be considered unsafe
+    /// (since its system calls have changed between the base and current versions of the program).
+    InputOnly,
+    /// Take both the input and the cluster into account.
+    ///
+    /// A new metamorphic oracle inference will be performed on the base program, using both the
+    /// input and the associated cluster. If the full set of divergent system calls (both with
+    /// regards to the input and to the cluster) are found to be equal, then the input will be
+    /// considered safe. Otherwise, it will be considered unsafe.
+    WithCluster,
+}
+
+impl fmt::Display for DiffMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::InputOnly => "input-only",
+                Self::WithCluster => "with-cluster",
+            }
+        )
+    }
+}
+
+impl str::FromStr for DiffMode {
+    type Err = RosaError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "input-only" => Ok(Self::InputOnly),
+            "with-cluster" => Ok(Self::WithCluster),
+            unknown => fail!("invalid differential oracle mode '{}'.", unknown),
+        }
+    }
+}
+
+/// The decision of the differential oracle.
+#[derive(Clone, Debug)]
+struct DiffDecision {
+    /// Whether or not the input corresponds to a backdoor.
+    pub is_backdoor: bool,
+    /// The discriminant system calls of the cluster, for the current program version.
+    pub current_cluster_discriminants: Vec<usize>,
+    /// The discriminant system calls of the cluster, for the base program version.
+    pub base_cluster_discriminants: Vec<usize>,
+    /// The discriminant system calls of the trace, for the current program version.
+    pub current_trace_discriminants: Vec<usize>,
+    /// The discriminant system calls of the trace, for the base program version.
+    pub base_trace_discriminants: Vec<usize>,
 }
 
 /// Reevaluate a decision.
@@ -78,6 +141,7 @@ fn reevaluate_decision(
     timed_decision: &TimedDecision,
     config: &Config,
     base_config_file: &Path,
+    mode: DiffMode,
     verbose: bool,
 ) -> Result<TimedDecision, RosaError> {
     let temp_dir = tempfile::tempdir()
@@ -110,102 +174,149 @@ fn reevaluate_decision(
         .ok_or(error!("rosa-trace failed."))?;
     let base_trace = Trace::load(&trace.uid(), &input_file_path, &trace_file_path)?;
 
-    // Load the cluster to use with the base program.
-    let mut cluster = Cluster::load(
-        &config
-            .output_dir
-            .join("clusters")
-            .join(&timed_decision.decision.cluster_uid)
-            .with_extension("txt"),
-        &config.output_dir.join("traces"),
-    )?;
-    // We need to remap the cluster's traces through the base program.
-    cluster.traces = cluster
-        .traces
-        .into_iter()
-        .map(|trace| {
-            let input_file_path = temp_dir_path.join("input");
-            let mut input_file = File::create(&input_file_path)
-                .map_err(|err| error!("could not create temporary input file: {}.", err))?;
-            input_file
-                .write_all(&trace.test_input)
-                .map_err(|err| error!("could not write data to temporary input file: {}.", err))?;
+    let diff_decision = match mode {
+        DiffMode::InputOnly => {
+            // We are only taking the input into account. This means that we will simply check to
+            // see if all of the syscall discriminants *on the trace* are also there in the base
+            // trace. If so, then the new decision should be marked as safe. Otherwise, the new
+            // trace behaves differently, and so the decision should be marked as suspicious.
 
-            let trace_file_path = temp_dir_path.join("input.trace");
-            Command::new("rosa-trace")
-                .args([
-                    base_config_file.display().to_string(),
-                    input_file_path.display().to_string(),
-                    "--output".to_string(),
-                    trace_file_path.display().to_string(),
-                ])
-                .status()
-                .map_err(|err| error!("could not run rosa-trace: {}.", err))?
-                .success()
-                .then_some(())
-                .ok_or(error!("rosa-trace failed."))?;
+            let base_syscalls: Vec<usize> = base_trace
+                .syscalls
+                .iter()
+                .enumerate()
+                .filter_map(|(syscall_id, had_syscall)| (*had_syscall == 1).then_some(syscall_id))
+                .collect();
 
-            Trace::load(&trace.uid(), &input_file_path, &trace_file_path)
-        })
-        .collect::<Result<Vec<Trace>, RosaError>>()?;
+            let syscalls_not_in_base: Vec<usize> = timed_decision
+                .decision
+                .discriminants
+                .trace_syscalls
+                .clone()
+                .into_iter()
+                .filter(|syscall| !base_syscalls.contains(syscall))
+                .collect();
 
-    // TODO treat the case where this is not true (essentially, we have to compute these anew).
-    cluster.min_edge_distance = config.cluster_formation_edge_tolerance;
-    cluster.max_edge_distance = config.cluster_formation_edge_tolerance;
-    cluster.min_syscall_distance = config.cluster_formation_syscall_tolerance;
-    cluster.max_syscall_distance = config.cluster_formation_syscall_tolerance;
+            DiffDecision {
+                is_backdoor: !timed_decision
+                    .decision
+                    .discriminants
+                    .trace_syscalls
+                    .iter()
+                    .all(|syscall| base_syscalls.contains(syscall)),
+                current_cluster_discriminants: Vec::new(),
+                base_cluster_discriminants: Vec::new(),
+                current_trace_discriminants: syscalls_not_in_base,
+                base_trace_discriminants: Vec::new(),
+            }
+        }
+        DiffMode::WithCluster => {
+            // We are taking both the input and the cluster into account. This means that we will
+            // obtain traces for both the input and the cluster, and run a new full inference for
+            // the base program. We will then compare the discriminants with the ones of the
+            // original decision.
 
-    // Run the oracle on the new trace and the cluster.
-    let base_decision = config.oracle.decide(
-        &base_trace,
-        &cluster,
-        config.oracle_criterion,
-        config.oracle_distance_metric.clone(),
-    );
+            // Load the cluster to use with the base program.
+            let mut cluster = Cluster::load(
+                &config
+                    .output_dir
+                    .join("clusters")
+                    .join(&timed_decision.decision.cluster_uid)
+                    .with_extension("txt"),
+                &config.output_dir.join("traces"),
+            )?;
+            // We need to remap the cluster's traces through the base program.
+            cluster.traces = cluster
+                .traces
+                .into_iter()
+                .map(|trace| {
+                    let input_file_path = temp_dir_path.join("input");
+                    let mut input_file = File::create(&input_file_path)
+                        .map_err(|err| error!("could not create temporary input file: {}.", err))?;
+                    input_file.write_all(&trace.test_input).map_err(|err| {
+                        error!("could not write data to temporary input file: {}.", err)
+                    })?;
 
-    if (timed_decision.decision.discriminants.cluster_syscalls
-        != base_decision.discriminants.cluster_syscalls)
-        || (timed_decision.decision.discriminants.trace_syscalls
-            != base_decision.discriminants.trace_syscalls)
-    {
+                    let trace_file_path = temp_dir_path.join("input.trace");
+                    Command::new("rosa-trace")
+                        .args([
+                            base_config_file.display().to_string(),
+                            input_file_path.display().to_string(),
+                            "--output".to_string(),
+                            trace_file_path.display().to_string(),
+                        ])
+                        .status()
+                        .map_err(|err| error!("could not run rosa-trace: {}.", err))?
+                        .success()
+                        .then_some(())
+                        .ok_or(error!("rosa-trace failed."))?;
+
+                    Trace::load(&trace.uid(), &input_file_path, &trace_file_path)
+                })
+                .collect::<Result<Vec<Trace>, RosaError>>()?;
+
+            // TODO treat the case where this is not true (essentially, we have to compute these anew).
+            cluster.min_edge_distance = config.cluster_formation_edge_tolerance;
+            cluster.max_edge_distance = config.cluster_formation_edge_tolerance;
+            cluster.min_syscall_distance = config.cluster_formation_syscall_tolerance;
+            cluster.max_syscall_distance = config.cluster_formation_syscall_tolerance;
+
+            // Run the oracle on the new trace and the cluster.
+            let base_decision = config.oracle.decide(
+                &base_trace,
+                &cluster,
+                config.oracle_criterion,
+                config.oracle_distance_metric.clone(),
+            );
+
+            DiffDecision {
+                is_backdoor: (timed_decision.decision.discriminants.cluster_syscalls
+                    != base_decision.discriminants.cluster_syscalls)
+                    || (timed_decision.decision.discriminants.trace_syscalls
+                        != base_decision.discriminants.trace_syscalls),
+                current_cluster_discriminants: timed_decision
+                    .decision
+                    .discriminants
+                    .cluster_syscalls
+                    .clone(),
+                base_cluster_discriminants: base_decision.discriminants.cluster_syscalls,
+                current_trace_discriminants: timed_decision
+                    .decision
+                    .discriminants
+                    .trace_syscalls
+                    .clone(),
+                base_trace_discriminants: base_decision.discriminants.trace_syscalls,
+            }
+        }
+    };
+
+    if diff_decision.is_backdoor {
         if verbose {
             println_verbose!("  Discriminants are different:");
-            if timed_decision.decision.discriminants.cluster_syscalls
-                != base_decision.discriminants.cluster_syscalls
+
+            if diff_decision.current_cluster_discriminants
+                != diff_decision.base_cluster_discriminants
             {
                 println_verbose!(
-                    "    Cluster syscall discriminants in new version: {}",
-                    timed_decision
-                        .decision
-                        .discriminants
-                        .cluster_syscalls
+                    "    Cluster syscall discriminants in current version: {}",
+                    diff_decision
+                        .current_cluster_discriminants
                         .iter()
                         .join(", ")
                 );
                 println_verbose!(
                     "    Cluster syscall discriminants in base version: {}",
-                    base_decision
-                        .discriminants
-                        .cluster_syscalls
-                        .iter()
-                        .join(", ")
+                    diff_decision.base_cluster_discriminants.iter().join(", ")
                 );
             }
-            if timed_decision.decision.discriminants.trace_syscalls
-                != base_decision.discriminants.trace_syscalls
-            {
+            if diff_decision.current_trace_discriminants != diff_decision.base_trace_discriminants {
                 println_verbose!(
-                    "    Trace syscall discriminants in new version: {}",
-                    timed_decision
-                        .decision
-                        .discriminants
-                        .trace_syscalls
-                        .iter()
-                        .join(", ")
+                    "    Trace syscall discriminants in current version: {}",
+                    diff_decision.current_trace_discriminants.iter().join(", ")
                 );
                 println_verbose!(
                     "    Trace syscall discriminants in base version: {}",
-                    base_decision.discriminants.trace_syscalls.iter().join(", ")
+                    diff_decision.base_trace_discriminants.iter().join(", ")
                 );
             }
         }
@@ -242,6 +353,7 @@ fn run(
     existing_rosa_dir: &Path,
     base_config_file: &Path,
     output_dir: &Path,
+    mode: DiffMode,
     force: bool,
     verbose: bool,
 ) -> Result<(), RosaError> {
@@ -415,6 +527,7 @@ fn run(
                         &timed_decision,
                         &config,
                         base_config_file,
+                        mode,
                         verbose,
                     )?;
                     if verbose {
@@ -477,6 +590,7 @@ fn main() -> ExitCode {
         &cli.rosa_dir,
         &cli.base_config_file,
         &cli.output_dir,
+        cli.mode,
         cli.force,
         cli.verbose,
     ) {
