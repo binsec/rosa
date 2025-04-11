@@ -9,7 +9,7 @@ use std::{
     fs::{self, File},
     io::Seek,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
 };
 
 use regex::Regex;
@@ -267,6 +267,7 @@ impl FuzzerBackend for AFLPlusPlus {
                 .args(&target_cmd[1..])
                 .env("AFL_DUMP_MAP_SIZE", "1")
                 .stdout(max_edges_file)
+                .stderr(Stdio::null())
                 .status()
                 .map_err(|err| {
                     error!(
@@ -387,6 +388,8 @@ impl FuzzerBackend for AFLPlusPlus {
                                 .concat(),
                             ),
                         }
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
                         .status()
                         .map_err(|err| error!("afl-showmap failed: {}.", err))?;
 

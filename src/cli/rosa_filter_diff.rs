@@ -6,7 +6,7 @@ use std::{
     fs::{self, File},
     io::{ErrorKind, Write},
     path::{Path, PathBuf},
-    process::{Command, ExitCode},
+    process::{Command, ExitCode, Stdio},
     str,
 };
 
@@ -167,6 +167,8 @@ fn reevaluate_decision(
             "--output".to_string(),
             trace_file_path.display().to_string(),
         ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status()
         .map_err(|err| error!("could not run rosa-trace successfully: {}.", err))?
         .success()
