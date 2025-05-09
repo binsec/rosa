@@ -1,22 +1,3 @@
---- a/include/forkserver.h
-+++ b/include/forkserver.h
-@@ -32,6 +32,7 @@
- #include <stdbool.h>
- 
- #include "types.h"
-+#include "runtime-trace.h"
- 
- #ifdef __linux__
- /**
-@@ -105,6 +106,8 @@ typedef struct afl_forkserver {
- 
-   u8 *trace_bits;                       /* SHM with instrumentation bitmap  */
- 
-+  struct runtime_trace* runtime_trace;  /* SHM for runtime trace            */
-+
-   s32 fsrv_pid,                         /* PID of the fork server           */
-       child_pid,                        /* PID of the fuzzed program        */
-       child_status,                     /* waitpid result for the child     */
 --- /dev/null
 +++ b/include/runtime-trace.h
 @@ -0,0 +1,62 @@
@@ -82,6 +63,25 @@
 +};
 +
 +#endif /* _AFL_RUNTIME_TRACE_H */
+--- a/include/forkserver.h
++++ b/include/forkserver.h
+@@ -32,6 +32,7 @@
+ #include <stdbool.h>
+ 
+ #include "types.h"
++#include "runtime-trace.h"
+ 
+ #ifdef __linux__
+ /**
+@@ -105,6 +106,8 @@ typedef struct afl_forkserver {
+ 
+   u8 *trace_bits;                       /* SHM with instrumentation bitmap  */
+ 
++  struct runtime_trace* runtime_trace;  /* SHM for runtime trace            */
++
+   s32 fsrv_pid,                         /* PID of the fork server           */
+       child_pid,                        /* PID of the fuzzed program        */
+       child_status,                     /* waitpid result for the child     */
 --- a/include/sharedmem.h
 +++ b/include/sharedmem.h
 @@ -29,6 +29,7 @@
@@ -177,21 +177,21 @@
  
 --- a/src/afl-fuzz-bitmap.c
 +++ b/src/afl-fuzz-bitmap.c
-@@ -501,7 +501,10 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
+@@ -492,7 +492,10 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
    }
-
+ 
    u8  fn[PATH_MAX];
 +  u8 *operation_name = "";
    u8 *queue_fn = "";
 +  u8 *trace_dump_fn = "";
 +  size_t runtime_trace_max_syscalls = RUNTIME_TRACE_MAX_SYSCALLS;
-   u8  new_bits = 0, keeping = 0, res, classified = 0, is_timeout = 0,
-      need_hash = 1;
+   u8  new_bits = 0, keeping = 0, res, is_timeout = 0, need_hash = 1;
    s32 fd;
-@@ -662,12 +665,23 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
-
+   u64 cksum = 0;
+@@ -666,12 +669,23 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
+ 
      if (!afl->afl_env.afl_sha1_filenames) {
-
+ 
 +      /* Use the same operation name for both the test input file and the trace file. */
 +      operation_name = describe_op(
 +        afl,
@@ -211,10 +211,10 @@
 +        afl->queued_items,
 +        operation_name
 +      );
-
+ 
      } else {
-
-@@ -675,6 +689,11 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
+ 
+@@ -679,6 +693,11 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
        queue_fn = alloc_printf(
            "%s/queue/%s%s%s", afl->out_dir, hex, afl->file_extension ? "." : "",
            afl->file_extension ? (const char *)afl->file_extension : "");
@@ -224,10 +224,10 @@
 +        hex
 +      );
        ck_free((char *)hex);
-
+ 
      }
-@@ -685,6 +704,11 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
-         "%s/queue/id_%06u", afl->out_dir, afl->queued_items,
+@@ -689,6 +708,11 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
+         "%s/queue/id_%06u%s%s", afl->out_dir, afl->queued_items,
          afl->file_extension ? "." : "",
          afl->file_extension ? (const char *)afl->file_extension : "");
 +    trace_dump_fn = alloc_printf(
@@ -235,13 +235,13 @@
 +      afl->out_dir,
 +      afl->queued_items
 +    );
-
+ 
  #endif                                                    /* ^!SIMPLE_FILES */
      fd = permissive_create(afl, queue_fn);
-@@ -697,6 +721,34 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
-
+@@ -701,6 +725,34 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
+ 
      add_to_queue(afl, queue_fn, len, 0);
-
+ 
 +    if (afl->shm.runtime_trace_mode) {
 +
 +      /* Write trace dump to file. */
@@ -272,10 +272,10 @@
 +
      if (unlikely(afl->fuzz_mode) &&
          likely(afl->switch_fuzz_mode && !afl->non_instrumented_mode)) {
-
+ 
 --- a/src/afl-fuzz-init.c
 +++ b/src/afl-fuzz-init.c
-@@ -916,6 +916,8 @@ void perform_dry_run(afl_state_t *afl) {
+@@ -918,6 +918,8 @@ void perform_dry_run(afl_state_t *afl) {
  
      u8  res;
      s32 fd;
@@ -284,7 +284,7 @@
  
      if (unlikely(!q->len)) {
  
-@@ -941,6 +943,40 @@ void perform_dry_run(afl_state_t *afl) {
+@@ -943,6 +945,40 @@ void perform_dry_run(afl_state_t *afl) {
  
      res = calibrate_case(afl, q, use_mem, 0, 1);
  
@@ -325,7 +325,7 @@
      /* For AFLFast schedules we update the queue entry */
      if (unlikely(afl->schedule >= FAST && afl->schedule <= RARE) &&
          likely(q->exec_cksum)) {
-@@ -1987,6 +2023,14 @@ static void handle_existing_out_dir(afl_state_t *afl) {
+@@ -2034,6 +2070,14 @@ static void handle_existing_out_dir(afl_state_t *afl) {
    if (delete_files(fn, case_prefix)) { goto dir_cleanup_failed; }
    ck_free(fn);
  
@@ -340,7 +340,7 @@
    /* All right, let's do <afl->out_dir>/crashes/id:* and
     * <afl->out_dir>/hangs/id:*. */
  
-@@ -2279,6 +2323,12 @@ void setup_dirs_fds(afl_state_t *afl) {
+@@ -2321,6 +2365,12 @@ void setup_dirs_fds(afl_state_t *afl) {
    if (mkdir(tmp, 0700)) { PFATAL("Unable to create '%s'", tmp); }
    ck_free(tmp);
  
@@ -373,7 +373,7 @@
    if (afl->sync_id && strcmp(afl->sync_id, "addseeds") == 0) {
  
      FATAL("-M/-S name 'addseeds' is a reserved name, choose something else");
-@@ -2529,6 +2540,13 @@ int main(int argc, char **argv_orig, char **envp) {
+@@ -2532,6 +2543,13 @@ int main(int argc, char **argv_orig, char **envp) {
    afl->fsrv.trace_bits =
        afl_shm_init(&afl->shm, afl->fsrv.map_size, afl->non_instrumented_mode);
  
@@ -387,7 +387,7 @@
    if (!afl->non_instrumented_mode && !afl->fsrv.qemu_mode &&
        !afl->unicorn_mode && !afl->fsrv.frida_mode && !afl->fsrv.cs_mode &&
        !afl->afl_env.afl_skip_bin_check) {
-@@ -2580,6 +2598,14 @@ int main(int argc, char **argv_orig, char **envp) {
+@@ -2583,6 +2601,14 @@ int main(int argc, char **argv_orig, char **envp) {
        afl->fsrv.map_size = new_map_size;
        afl->fsrv.trace_bits =
            afl_shm_init(&afl->shm, new_map_size, afl->non_instrumented_mode);
