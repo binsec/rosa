@@ -440,7 +440,6 @@ impl FuzzerBackend for AFLPlusPlus {
                                     .to_string(),
                                 "-ff".to_string(),
                                 "-n".to_string(),
-                                "--".to_string(),
                             ],
                             // We want to take `AFL_PRELOAD` into account (if it's declared). The
                             // trouble is, `AFL_PRELOAD` does not mean anything to `strace`.
@@ -456,6 +455,7 @@ impl FuzzerBackend for AFLPlusPlus {
                                     }
                                 })
                                 .collect::<Vec<String>>(),
+                            vec!["--".to_string()],
                         ]
                         .concat();
 
