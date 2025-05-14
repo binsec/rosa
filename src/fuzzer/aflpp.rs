@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use tempfile::{self, NamedTempFile};
 
 use crate::{
+    config,
     error::RosaError,
     fuzzer::{FuzzerBackend, FuzzerStatus},
     trace::{self, Trace, TraceDatabase},
@@ -388,6 +389,7 @@ impl FuzzerBackend for AFLPlusPlus {
                                 .concat(),
                             ),
                         }
+                        .envs(config::replace_env_var_placeholders(&self.env()))
                         .stdout(Stdio::null())
                         .stderr(Stdio::null())
                         .status()
@@ -428,17 +430,34 @@ impl FuzzerBackend for AFLPlusPlus {
                         //       | uniq
                         // ```
 
-                        let strace_args = vec![
-                            "-e".to_string(),
-                            "abbrev=all".to_string(),
-                            "-e".to_string(),
-                            "quiet=attach,exit,path-resolution,\
-                                            personality,thread-execve"
-                                .to_string(),
-                            "-ff".to_string(),
-                            "-n".to_string(),
-                            "--".to_string(),
-                        ];
+                        let strace_args = [
+                            vec![
+                                "-e".to_string(),
+                                "abbrev=all".to_string(),
+                                "-e".to_string(),
+                                "quiet=attach,exit,path-resolution,\
+                                                personality,thread-execve"
+                                    .to_string(),
+                                "-ff".to_string(),
+                                "-n".to_string(),
+                                "--".to_string(),
+                            ],
+                            // We want to take `AFL_PRELOAD` into account (if it's declared). The
+                            // trouble is, `AFL_PRELOAD` does not mean anything to `strace`.
+                            // So, we replace it by `LD_PRELOAD`, which will actually change
+                            // things for `strace`.
+                            config::replace_env_var_placeholders(&self.env())
+                                .into_iter()
+                                .map(|(key, value)| {
+                                    if key == "AFL_PRELOAD" {
+                                        format!("--env=LD_PRELOAD={}", value)
+                                    } else {
+                                        format!("--env={}={}", key, value)
+                                    }
+                                })
+                                .collect::<Vec<String>>(),
+                        ]
+                        .concat();
 
                         let mut strace_cmd = Command::new("strace");
                         let strace_output = match self.input {
