@@ -590,6 +590,7 @@ mod tests {
         let config = AFLPlusPlus {
             name: name.clone(),
             mode: AFLPlusPlusMode::QEMU,
+            input: AFLPlusPlusInput::Stdin,
             is_main: true,
             afl_fuzz: afl_fuzz.clone(),
             input_dir: input_dir.clone(),
@@ -627,6 +628,7 @@ mod tests {
             name: name.clone(),
             is_main: false,
             mode: AFLPlusPlusMode::Standard,
+            input: AFLPlusPlusInput::LibFuzzer,
             afl_fuzz: afl_fuzz.clone(),
             input_dir: input_dir.clone(),
             output_dir: output_dir.clone(),

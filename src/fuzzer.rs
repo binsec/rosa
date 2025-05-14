@@ -120,13 +120,16 @@ impl FuzzerInstance {
     /// # Examples
     /// ```
     /// use std::{path::PathBuf, collections::HashMap};
-    /// use rosa::fuzzer::{aflpp::{AFLPlusPlus, AFLPlusPlusMode}, FuzzerConfig, FuzzerInstance};
+    /// use rosa::fuzzer::{
+    ///     aflpp::{AFLPlusPlus, AFLPlusPlusMode, AFLPlusPlusInput}, FuzzerConfig, FuzzerInstance
+    /// };
     ///
     /// let _fuzzer_instance = FuzzerInstance::create(
     ///     FuzzerConfig {
     ///         backend: Box::new(AFLPlusPlus {
     ///             name: "main".to_string(),
     ///             mode: AFLPlusPlusMode::QEMU,
+    ///             input: AFLPlusPlusInput::Stdin,
     ///             is_main: true,
     ///             afl_fuzz: PathBuf::from("afl-fuzz"),
     ///             input_dir: PathBuf::from("seeds"),
