@@ -56,7 +56,13 @@ struct Cli {
     #[arg(long_help, value_name = "OUTPUT DIR", help = "Output directory")]
     output_dir: PathBuf,
     /// The differential oracle mode to use.
-    #[arg(long_help, short, long, help = "Differential oracle mode", default_value_t = DiffMode::InputOnly)]
+    #[arg(
+        long_help,
+        short,
+        long,
+        help = "Differential oracle mode",
+        default_value_t = DiffMode::InputAndCluster
+    )]
     mode: DiffMode,
     /// Force the creation of the output directory, potentially overwriting existing results.
     #[arg(
@@ -80,13 +86,19 @@ enum DiffMode {
     /// version, then the input will be considered safe. Otherwise, it will be considered unsafe
     /// (since its system calls have changed between the base and current versions of the program).
     InputOnly,
-    /// Take both the input and the cluster into account.
+    /// Take both the input and the cluster into account, without running a new inference on the
+    /// old program.
+    ///
+    /// This will perform the input-level check that the `InputOnly` variant provides, but also
+    /// check that the "cluster-only" system calls do *not* appear in the base version.
+    InputAndCluster,
+    /// Run a full inference on both versions and compare.
     ///
     /// A new metamorphic oracle inference will be performed on the base program, using both the
     /// input and the associated cluster. If the full set of divergent system calls (both with
     /// regards to the input and to the cluster) are found to be equal, then the input will be
     /// considered safe. Otherwise, it will be considered unsafe.
-    WithCluster,
+    FullInference,
 }
 
 impl fmt::Display for DiffMode {
@@ -96,7 +108,8 @@ impl fmt::Display for DiffMode {
             "{}",
             match self {
                 Self::InputOnly => "input-only",
-                Self::WithCluster => "with-cluster",
+                Self::InputAndCluster => "input-and-cluster",
+                Self::FullInference => "full-inference",
             }
         )
     }
@@ -108,7 +121,8 @@ impl str::FromStr for DiffMode {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "input-only" => Ok(Self::InputOnly),
-            "with-cluster" => Ok(Self::WithCluster),
+            "input-and-cluster" => Ok(Self::InputAndCluster),
+            "full-inference" => Ok(Self::FullInference),
             unknown => fail!("invalid differential oracle mode '{}'.", unknown),
         }
     }
@@ -212,7 +226,69 @@ fn reevaluate_decision(
                 base_trace_discriminants: Vec::new(),
             }
         }
-        DiffMode::WithCluster => {
+        DiffMode::InputAndCluster => {
+            // We are taking both the input and the cluster discriminants into account. However, we
+            // do so without performing a new inference on the base version of the program. We will
+            // simply trace the input through the base version, and look for two things:
+            // - Do the *trace discriminants* exist in the base trace
+            // - Are the *cluster discriminants* missing in the base trace
+            //
+            // If the answer to both of these is "yes", then the input is suspicious.
+
+            let base_trace_syscalls: Vec<usize> = base_trace
+                .syscalls
+                .iter()
+                .enumerate()
+                .filter_map(|(syscall_id, had_syscall)| (*had_syscall == 1).then_some(syscall_id))
+                .collect();
+
+            // Record the *trace discriminants* which are *present* in the current trace *only*.
+            let trace_syscalls_not_in_base: Vec<usize> = timed_decision
+                .decision
+                .discriminants
+                .trace_syscalls
+                .clone()
+                .into_iter()
+                .filter(|syscall| !base_trace_syscalls.contains(syscall))
+                .collect();
+
+            // Record the *cluster discriminants* which are *absent* in the current trace *only*.
+            let cluster_syscalls_in_base: Vec<usize> = timed_decision
+                .decision
+                .discriminants
+                .cluster_syscalls
+                .clone()
+                .into_iter()
+                .filter(|syscall| base_trace_syscalls.contains(syscall))
+                .collect();
+
+            // If the current trace has all the trace discriminants, it means that the discriminants
+            // only appear in the current trace and not in the base trace.
+            let has_all_trace_discriminants = timed_decision
+                .decision
+                .discriminants
+                .trace_syscalls
+                .iter()
+                .all(|syscall| !base_trace_syscalls.contains(syscall));
+            // If the base case lacks all cluster discriminants, it means that the discriminants
+            // are only absent in the current trace, but present in the base trace.
+            let lacks_all_cluster_discriminants = timed_decision
+                .decision
+                .discriminants
+                .cluster_syscalls
+                .iter()
+                .all(|syscall| base_trace_syscalls.contains(syscall));
+
+            DiffDecision {
+                // If both aforementioned conditions are true, then this trace is suspicious.
+                is_backdoor: has_all_trace_discriminants && lacks_all_cluster_discriminants,
+                current_cluster_discriminants: cluster_syscalls_in_base,
+                base_cluster_discriminants: Vec::new(),
+                current_trace_discriminants: trace_syscalls_not_in_base,
+                base_trace_discriminants: Vec::new(),
+            }
+        }
+        DiffMode::FullInference => {
             // We are taking both the input and the cluster into account. This means that we will
             // obtain traces for both the input and the cluster, and run a new full inference for
             // the base program. We will then compare the discriminants with the ones of the
