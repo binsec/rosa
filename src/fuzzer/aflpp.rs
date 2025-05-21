@@ -393,7 +393,22 @@ impl FuzzerBackend for AFLPlusPlus {
                         .stdout(Stdio::null())
                         .stderr(Stdio::null())
                         .status()
-                        .map_err(|err| error!("afl-showmap failed: {}.", err))?;
+                        .map_or_else(
+                            |err| fail!("`afl-showmap` failed: {}.", err),
+                            |status| {
+                                if status.success() {
+                                    Ok(())
+                                } else {
+                                    fail!(
+                                        "`afl-showmap` failed: {}.",
+                                        status
+                                            .code()
+                                            .map(|code| format!("exit code {}", code))
+                                            .unwrap_or("terminated by signal".to_string())
+                                    )
+                                }
+                            },
+                        )?;
 
                         let showmap_output = fs::read_to_string(showmap_output_path)
                             .map_err(|err| error!("could not read afl-showmap output: {}.", err))?;
@@ -497,6 +512,20 @@ impl FuzzerBackend for AFLPlusPlus {
                         }
                         .output()
                         .map_err(|err| error!("`strace` failed: {}.", err))?;
+
+                        if strace_output.status.success() {
+                            Ok(())
+                        } else {
+                            fail!(
+                                "`strace` failed: {}.",
+                                strace_output
+                                    .status
+                                    .code()
+                                    .map(|code| format!("exit code {}", code))
+                                    .unwrap_or("terminated by signal".to_string())
+                            )
+                        }?;
+
                         let strace_output = String::from_utf8_lossy(&strace_output.stderr);
                         let start_index = strace_output.find("__ROSAS_CANTINA__").ok_or(error!(
                             "could not find ROSA's trace marker, maybe a missing \
