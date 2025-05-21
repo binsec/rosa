@@ -323,6 +323,8 @@ fn reevaluate_decision(
                             "--output".to_string(),
                             trace_file_path.display().to_string(),
                         ])
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
                         .status()
                         .map_err(|err| error!("could not run rosa-trace: {}.", err))?
                         .success()
