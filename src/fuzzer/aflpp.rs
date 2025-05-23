@@ -510,21 +510,15 @@ impl FuzzerBackend for AFLPlusPlus {
                                 .concat(),
                             ),
                         }
+                        // Note that we do not check if the `strace` command returned a non-0 exit
+                        // code. This is because that `strace` will transparently return the
+                        // target program's exit code, which means that we can't rely on it to
+                        // judge whether or not `strace` succeeded. In fact, we do not need to
+                        // check for this at all, because we're already checking for the presence
+                        // of the ROSA marker; if the marker is there, it's highly unlikely that
+                        // `strace` failed.
                         .output()
                         .map_err(|err| error!("`strace` failed: {}.", err))?;
-
-                        if strace_output.status.success() {
-                            Ok(())
-                        } else {
-                            fail!(
-                                "`strace` failed: {}.",
-                                strace_output
-                                    .status
-                                    .code()
-                                    .map(|code| format!("exit code {}", code))
-                                    .unwrap_or("terminated by signal".to_string())
-                            )
-                        }?;
 
                         let strace_output = String::from_utf8_lossy(&strace_output.stderr);
                         let start_index = strace_output.find("__ROSAS_CANTINA__").ok_or(error!(
