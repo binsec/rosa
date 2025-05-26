@@ -456,8 +456,8 @@ impl FuzzerBackend for AFLPlusPlus {
                                 "quiet=attach,exit,path-resolution,\
                                                 personality,thread-execve"
                                     .to_string(),
-                                "-f".to_string(),
-                                "-n".to_string(),
+                                "--follow-forks".to_string(),
+                                "--syscall-number".to_string(),
                                 format!("--output={}", strace_output_path.display()),
                             ],
                             // We want to take `AFL_PRELOAD` into account (if it's declared). The
