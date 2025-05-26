@@ -444,6 +444,9 @@ impl FuzzerBackend for AFLPlusPlus {
                         //       | sort \
                         //       | uniq
                         // ```
+                        let strace_output_file = NamedTempFile::new()
+                            .map_err(|err| error!("could not create temporary file: {}.", err))?;
+                        let strace_output_path = strace_output_file.into_temp_path();
 
                         let strace_args = [
                             vec![
@@ -453,8 +456,10 @@ impl FuzzerBackend for AFLPlusPlus {
                                 "quiet=attach,exit,path-resolution,\
                                                 personality,thread-execve"
                                     .to_string(),
-                                "-ff".to_string(),
+                                "-f".to_string(),
                                 "-n".to_string(),
+                                "-o".to_string(),
+                                strace_output_path.to_string_lossy().to_string(),
                             ],
                             // We want to take `AFL_PRELOAD` into account (if it's declared). The
                             // trouble is, `AFL_PRELOAD` does not mean anything to `strace`.
@@ -475,7 +480,7 @@ impl FuzzerBackend for AFLPlusPlus {
                         .concat();
 
                         let mut strace_cmd = Command::new("strace");
-                        let strace_output = match self.input {
+                        match self.input {
                             // If the input is read from `stdin`, then simply pass the file to the
                             // `stdin` of the process.
                             AFLPlusPlusInput::Stdin => strace_cmd
@@ -510,6 +515,8 @@ impl FuzzerBackend for AFLPlusPlus {
                                 .concat(),
                             ),
                         }
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
                         // Note that we do not check if the `strace` command returned a non-0 exit
                         // code. This is because that `strace` will transparently return the
                         // target program's exit code, which means that we can't rely on it to
@@ -517,10 +524,12 @@ impl FuzzerBackend for AFLPlusPlus {
                         // check for this at all, because we're already checking for the presence
                         // of the ROSA marker; if the marker is there, it's highly unlikely that
                         // `strace` failed.
-                        .output()
+                        .status()
                         .map_err(|err| error!("`strace` failed: {}.", err))?;
 
-                        let strace_output = String::from_utf8_lossy(&strace_output.stderr);
+                        //let strace_output = String::from_utf8_lossy(&strace_output.stderr);
+                        let strace_output = fs::read_to_string(strace_output_path)
+                            .map_err(|err| error!("could not read strace output: {}.", err))?;
                         let start_index = strace_output.find("__ROSAS_CANTINA__").ok_or(error!(
                             "could not find ROSA's trace marker, maybe a missing \
                                 `__ROSA_TRACE_START()`?"
