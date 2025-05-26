@@ -458,8 +458,7 @@ impl FuzzerBackend for AFLPlusPlus {
                                     .to_string(),
                                 "-f".to_string(),
                                 "-n".to_string(),
-                                "-o".to_string(),
-                                strace_output_path.to_string_lossy().to_string(),
+                                format!("--output={}", strace_output_path.display()),
                             ],
                             // We want to take `AFL_PRELOAD` into account (if it's declared). The
                             // trouble is, `AFL_PRELOAD` does not mean anything to `strace`.
@@ -536,7 +535,7 @@ impl FuzzerBackend for AFLPlusPlus {
                         ))?;
                         let strace_regex = Regex::new(concat!(
                             r"(?m)^",
-                            r"(\[pid[[:space:]]*[[:digit:]]+\][[:space:]]+)?",
+                            r"[[:digit:]]+[[:space:]]*",
                             r"\[[[:space:]]*([[:digit:]]+)\].+$"
                         ))
                         .expect("failed to compile strace regex.");
@@ -544,7 +543,7 @@ impl FuzzerBackend for AFLPlusPlus {
                             .captures_iter(&strace_output[start_index..])
                             .map(|capture| {
                                 capture
-                                    .get(2)
+                                    .get(1)
                                     .expect("failed to get strace regex match.")
                                     .as_str()
                                     .parse::<usize>()
