@@ -83,8 +83,9 @@ enum DiffMode {
     /// Only take the input into account.
     ///
     /// If the system calls that made an input get flagged as suspicious persist in the base
-    /// version, then the input will be considered safe. Otherwise, it will be considered unsafe
-    /// (since its system calls have changed between the base and current versions of the program).
+    /// version, then the input will be considered safe. Otherwise, it will be considered
+    /// suspicious (since its system calls have changed between the base and current versions of the
+    /// program).
     InputOnly,
     /// Take both the input and the cluster into account, without running a new inference on the
     /// old program.
@@ -97,7 +98,7 @@ enum DiffMode {
     /// A new metamorphic oracle inference will be performed on the base program, using both the
     /// input and the associated cluster. If the full set of divergent system calls (both with
     /// regards to the input and to the cluster) are found to be equal, then the input will be
-    /// considered safe. Otherwise, it will be considered unsafe.
+    /// considered safe. Otherwise, it will be considered suspicious.
     FullInference,
 }
 
