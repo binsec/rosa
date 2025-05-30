@@ -7,7 +7,7 @@ use std::{
     collections::HashMap,
     env, fmt,
     fs::{self, File},
-    io::Seek,
+    io::Write,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
@@ -320,13 +320,35 @@ impl FuzzerBackend for AFLPlusPlus {
                     .map(|test_input_path| {
                         // In "standard" mode, we need to call `afl-showmap` and `strace` to get the
                         // edges and syscalls respectively.
-                        let mut test_input_file = File::open(&test_input_path).map_err(|err| {
+                        //
+                        // Time may have passed since we collected the test input files, and they
+                        // might not be there anymore (AFL++ deletes/replaces files sometimes). In
+                        // order to deal with that, we skip the input files we can't open.
+                        if skip_missing_traces && !test_input_path.exists() {
+                            return Ok(None);
+                        }
+
+                        // Copy the test input path to a temporary file. This way, even if AFL++
+                        // renames or deletes it, we still have it.
+                        let test_input: Vec<u8> = fs::read(&test_input_path).map_err(|err| {
                             error!(
-                                "could not open test input file '{}': {}.",
+                                "could not read test input file '{}': {}.",
                                 test_input_path.display(),
                                 err
                             )
                         })?;
+                        let original_test_input_path = test_input_path.clone();
+                        let test_input_file_name = original_test_input_path
+                            .file_name()
+                            .expect("failed to get filename for test input.")
+                            .to_string_lossy();
+
+                        let mut test_input_file = NamedTempFile::new()
+                            .map_err(|err| error!("could not create temporary file: {}.", err))?;
+                        test_input_file.write_all(&test_input).map_err(|err| {
+                            error!("could not write test input to temporary file: {}.", err)
+                        })?;
+                        let test_input_path = test_input_file.into_temp_path();
 
                         // For `afl-showmap`, we need to do:
                         // ```
@@ -334,8 +356,6 @@ impl FuzzerBackend for AFLPlusPlus {
                         //       && cat /tmp/trace.txt \
                         //       | sed -nE 's/^0*([[:digit:]]+):1$/\1/p'
                         // ```
-                        // Maybe it's worth it to modify afl-showmap to add an option to print to
-                        // stdout?
                         let showmap_output_file = NamedTempFile::new()
                             .map_err(|err| error!("could not create temporary file: {}.", err))?;
                         let showmap_output_path = showmap_output_file.into_temp_path();
@@ -360,9 +380,8 @@ impl FuzzerBackend for AFLPlusPlus {
                             AFLPlusPlusInput::Stdin => afl_showmap_cmd
                                 .args([afl_showmap_args, self.target.clone()].concat())
                                 .stdin(
-                                    test_input_file
-                                        .try_clone()
-                                        .expect("failed to clone test input file."),
+                                    File::open(&test_input_path)
+                                        .expect("failed to open test input file."),
                                 ),
                             // If the input is read from a file, there is no need to pass anything
                             // to the `stdin` of the process. However, we should replace all
@@ -430,14 +449,6 @@ impl FuzzerBackend for AFLPlusPlus {
                             })
                             .collect();
 
-                        // Make sure to rewind the input file before running `strace`.
-                        test_input_file.rewind().map_err(|err| {
-                            error!(
-                                "could not rewind test input file '{}': {}.",
-                                test_input_path.display(),
-                                err
-                            )
-                        })?;
                         // For `strace`, we need to do:
                         // ```
                         // $ strace -e abbrev=all \
@@ -488,7 +499,10 @@ impl FuzzerBackend for AFLPlusPlus {
                             // `stdin` of the process.
                             AFLPlusPlusInput::Stdin => strace_cmd
                                 .args([strace_args, self.target.clone()].concat())
-                                .stdin(test_input_file),
+                                .stdin(
+                                    File::open(&test_input_path)
+                                        .expect("failed to open test input file."),
+                                ),
                             // If the input is read from a file, there is no need to pass anything
                             // to the `stdin` of the process. However, we should replace all
                             // occurrences of `@@` in the target command by the path to the file.
@@ -564,31 +578,20 @@ impl FuzzerBackend for AFLPlusPlus {
                             .parse::<usize>()
                             .expect("failed to parse max edge count.");
 
-                        Ok((
+                        Ok(Some((
                             Trace::from(
-                                &format!(
-                                    "{}__{}",
-                                    self.name(),
-                                    test_input_path
-                                        .file_name()
-                                        .expect("failed to get filename for test input.")
-                                        .to_string_lossy()
-                                ),
-                                &fs::read(&test_input_path).map_err(|err| {
-                                    error!(
-                                        "could not read test input file '{}': {}.",
-                                        test_input_path.display(),
-                                        err
-                                    )
-                                })?,
+                                &format!("{}__{}", self.name(), test_input_file_name),
+                                &test_input,
                                 &edges,
                                 max_edges,
                                 &syscalls,
                                 MAX_SYSCALLS,
                             ),
-                            test_input_path,
-                        ))
+                            test_input_path.to_path_buf(),
+                        )))
                     })
+                    // Filter out `Ok(None)`s, corresponding to skipped files.
+                    .filter_map(|result| result.transpose())
                     .collect::<Result<Vec<(Trace, PathBuf)>, RosaError>>()?;
 
                 let new_traces =
