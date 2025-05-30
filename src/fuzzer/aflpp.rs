@@ -5,7 +5,7 @@
 
 use std::{
     collections::HashMap,
-    fmt,
+    env, fmt,
     fs::{self, File},
     io::Seek,
     path::{Path, PathBuf},
@@ -277,6 +277,10 @@ impl FuzzerBackend for AFLPlusPlus {
                         err
                     )
                 })?;
+
+            let map_size = fs::read_to_string(output_dir.join(".max-edges"))
+                .map_err(|err| error!("could not read map size from .max-edges file: {}.", err))?;
+            env::set_var("AFL_MAP_SIZE", map_size);
         }
 
         Ok(())
