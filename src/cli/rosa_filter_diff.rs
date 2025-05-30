@@ -660,6 +660,8 @@ fn run(
             Ok(())
         })?;
 
+    println_info!("Done!");
+
     Ok(())
 }
 
