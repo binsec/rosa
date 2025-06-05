@@ -374,7 +374,7 @@ impl FuzzerBackend for AFLPlusPlus {
                         ];
 
                         let mut afl_showmap_cmd = Command::new(afl_showmap);
-                        match self.input {
+                        let afl_showmap_status = match self.input {
                             // If the input is read from `stdin`, then simply pass the file to the
                             // `stdin` of the process.
                             AFLPlusPlusInput::Stdin => afl_showmap_cmd
@@ -415,23 +415,21 @@ impl FuzzerBackend for AFLPlusPlus {
                         .envs(config::replace_env_var_placeholders(&self.env()))
                         .stdout(Stdio::null())
                         .stderr(Stdio::null())
-                        .status()
-                        .map_or_else(
-                            |err| fail!("`afl-showmap` failed: {}.", err),
-                            |status| {
-                                if status.success() {
-                                    Ok(())
-                                } else {
-                                    fail!(
-                                        "`afl-showmap` failed: {}.",
-                                        status
-                                            .code()
-                                            .map(|code| format!("exit code {}", code))
-                                            .unwrap_or("terminated by signal".to_string())
-                                    )
-                                }
-                            },
-                        )?;
+                        .status();
+
+                        // `afl-showmap` can fail spuriously for certain target programs. That's
+                        // okay, we can just skip the trace for now and hope to collect it later.
+                        //
+                        // If it keeps crashing then it will become apparent when no traces are
+                        // collected at all, so this still (indirectly) lets the user know there is
+                        // a problem.
+                        if skip_missing_traces
+                            && !afl_showmap_status
+                                .map(|status| status.success())
+                                .unwrap_or(false)
+                        {
+                            return Ok(None);
+                        }
 
                         let showmap_output = fs::read_to_string(showmap_output_path)
                             .map_err(|err| error!("could not read afl-showmap output: {}.", err))?;
