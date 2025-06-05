@@ -323,9 +323,17 @@ impl FuzzerBackend for AFLPlusPlus {
                         //
                         // Time may have passed since we collected the test input files, and they
                         // might not be there anymore (AFL++ deletes/replaces files sometimes). In
-                        // order to deal with that, we skip the input files we can't open.
-                        if skip_missing_traces && !test_input_path.exists() {
-                            return Ok(None);
+                        // order to deal with that, we skip the input files we can't open, if we're
+                        // allowed to.
+                        if !test_input_path.exists() {
+                            if skip_missing_traces {
+                                return Ok(None);
+                            } else {
+                                fail!(
+                                    "could not open test input file '{}': file does not exist.",
+                                    test_input_path.display()
+                                )?;
+                            }
                         }
 
                         // Copy the test input path to a temporary file. This way, even if AFL++
@@ -418,17 +426,29 @@ impl FuzzerBackend for AFLPlusPlus {
                         .status();
 
                         // `afl-showmap` can fail spuriously for certain target programs. That's
-                        // okay, we can just skip the trace for now and hope to collect it later.
+                        // okay, we can just skip the trace for now and hope to collect it later,
+                        // if we're allowed to skip.
                         //
                         // If it keeps crashing then it will become apparent when no traces are
                         // collected at all, so this still (indirectly) lets the user know there is
                         // a problem.
-                        if skip_missing_traces
-                            && !afl_showmap_status
-                                .map(|status| status.success())
-                                .unwrap_or(false)
+                        if !afl_showmap_status
+                            .map(|status| status.success())
+                            .unwrap_or(false)
                         {
-                            return Ok(None);
+                            if skip_missing_traces {
+                                return Ok(None);
+                            } else {
+                                let input_dump = "afl-showmap-crashing-test-input";
+                                fs::write(input_dump, &test_input)
+                                    .expect("failed to write input to emergency file.");
+                                fail!(
+                                    "`afl-showmap` failed while processing '{}'. \
+                                    Input dumped to {}.",
+                                    original_test_input_path.display(),
+                                    input_dump
+                                )?;
+                            }
                         }
 
                         let showmap_output = fs::read_to_string(showmap_output_path)
