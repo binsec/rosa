@@ -253,6 +253,12 @@ impl FuzzerBackend for AFLPlusPlus {
         }
     }
 
+    /// WARNING: this function is technically _unsafe_, as it sets an environment variable.
+    ///
+    /// See <https://doc.rust-lang.org/std/env/fn.set_var.html#safety>.
+    ///
+    /// This is because some targets fail to run if `AFL_MAP_SIZE` is not set to the actual map
+    /// size, obtained by running `AFL_DUMP_MAP_SIZE=1 /path/to/target`.
     fn setup(&self, output_dir: &Path) -> Result<(), RosaError> {
         if self.name() == "main" && self.backend_id() == *"afl++-standard" {
             let output_dir = output_dir.join("aflpp");
@@ -280,7 +286,10 @@ impl FuzzerBackend for AFLPlusPlus {
 
             let map_size = fs::read_to_string(output_dir.join(".max-edges"))
                 .map_err(|err| error!("could not read map size from .max-edges file: {}.", err))?;
-            env::set_var("AFL_MAP_SIZE", map_size);
+
+            unsafe {
+                env::set_var("AFL_MAP_SIZE", map_size);
+            }
         }
 
         Ok(())
