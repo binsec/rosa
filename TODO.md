@@ -1,3 +1,4 @@
 - [ ] Add CITATION.cff
 - [ ] Treat remaining TODOs in the documentation and READMEs (mostly regarding missing links)
 - [ ] Document new source-fuzzing features
+- [ ] Document `rosa-filter-diff`
