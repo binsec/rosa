@@ -10,7 +10,7 @@ use std::{
     fmt,
     fs::File,
     path::{Path, PathBuf},
-    process::{Command, ExitCode, Stdio},
+    process::{Command, ExitCode},
 };
 
 use clap::{ArgAction, Parser};
@@ -171,13 +171,28 @@ fn check_decision(
             err
         )
     })?;
-    let output = Command::new(&cmd[0])
-        // TODO handle `@@` case.
-        .stdin(Stdio::from(test_input_file))
-        .args(&cmd[1..])
-        .envs(config::replace_env_var_placeholders(env))
-        .output()
-        .map_err(|err| error!("failed to run target program: {}", err))?;
+
+    // If the target program implements the `LLVMFuzzerTestOneInput()` interface, or simply
+    // receives input via a file, then the user can pass `@@` (just like in AFL++) to denote that.
+    let mut target_cmd = Command::new(&cmd[0]);
+    let output = if cmd.contains(&"@@".to_string()) {
+        let args: Vec<String> = cmd[1..]
+            .iter()
+            .filter_map(|arg| {
+                if arg == "@@" {
+                    None
+                } else {
+                    Some(arg.to_string())
+                }
+            })
+            .collect();
+        target_cmd.args(&args)
+    } else {
+        target_cmd.args(&cmd[1..]).stdin(test_input_file)
+    }
+    .envs(config::replace_env_var_placeholders(env))
+    .output()
+    .map_err(|err| error!("failed to run target program: {}", err))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
