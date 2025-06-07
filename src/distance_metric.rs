@@ -6,7 +6,7 @@
 
 use std::str;
 
-use dyn_clone::{clone_trait_object, DynClone};
+use dyn_clone::{DynClone, clone_trait_object};
 
 pub mod hamming;
 

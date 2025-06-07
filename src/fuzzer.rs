@@ -10,7 +10,7 @@ use std::{
     process::{Child, Command, Stdio},
 };
 
-use dyn_clone::{clone_trait_object, DynClone};
+use dyn_clone::{DynClone, clone_trait_object};
 use serde::{Deserialize, Serialize};
 
 use crate::{

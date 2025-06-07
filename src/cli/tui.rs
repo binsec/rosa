@@ -1,17 +1,17 @@
 use std::{
     fs,
-    io::{stdout, Stdout},
+    io::{Stdout, stdout},
     path::{Path, PathBuf},
     time::Instant,
 };
 
 use ratatui::{
+    Frame, Terminal,
     prelude::{
         Alignment, Color, Constraint, CrosstermBackend, Direction, Layout, Line, Rect, Span, Style,
     },
     style::Stylize,
     widgets::{Block, Paragraph, Wrap},
-    Frame, Terminal,
 };
 
 use rosa::{
@@ -19,7 +19,7 @@ use rosa::{
     criterion::Criterion,
     error::RosaError,
     fuzzer::FuzzerStatus,
-    oracle::{comp_min_max::CompMinMax, Oracle},
+    oracle::{Oracle, comp_min_max::CompMinMax},
 };
 use rosa::{error, fail};
 
@@ -405,11 +405,9 @@ impl RosaTui {
         .split(main_layout[0]);
         let title = Paragraph::new(vec![Line::from(vec![" rosa backdoor detector".into()])])
             .style(Style::reset().fg(Color::Rgb(255, 135, 135)).bold());
-        let phase = Paragraph::new(vec![Line::from(vec![format!(
-            "[{}]",
-            stats.phase.to_string().replace('-', " ")
-        )
-        .into()])])
+        let phase = Paragraph::new(vec![Line::from(vec![
+            format!("[{}]", stats.phase.to_string().replace('-', " ")).into(),
+        ])])
         .alignment(Alignment::Right)
         .style(Style::reset().fg(Color::Rgb(167, 171, 221)).bold());
 

@@ -16,8 +16,8 @@ use rosa::{
     error,
     error::RosaError,
     fuzzer::{
-        aflpp::{AFLPlusPlus, AFLPlusPlusInput, AFLPlusPlusMode},
         FuzzerConfig,
+        aflpp::{AFLPlusPlus, AFLPlusPlusInput, AFLPlusPlusMode},
     },
 };
 

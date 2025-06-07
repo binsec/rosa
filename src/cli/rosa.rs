@@ -9,8 +9,8 @@ use std::{
     process::ExitCode,
     sync::mpsc::{self, TryRecvError},
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
     thread,
     time::{Duration, Instant},

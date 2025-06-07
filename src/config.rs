@@ -16,10 +16,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     criterion::Criterion,
-    distance_metric::{hamming::Hamming, DistanceMetric},
+    distance_metric::{DistanceMetric, hamming::Hamming},
     error::RosaError,
     fuzzer::FuzzerConfig,
-    oracle::{comp_min_max::CompMinMax, Oracle},
+    oracle::{Oracle, comp_min_max::CompMinMax},
 };
 
 /// The conditions that describe when to stop collecting seed traces.
