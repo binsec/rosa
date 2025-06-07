@@ -190,7 +190,11 @@ fn run(
                 .join(format!("fuzzer_{}", fuzzer_config.backend.name()))
                 .with_extension("log");
 
-            FuzzerInstance::create(fuzzer_config.clone(), log_file_path)
+            FuzzerInstance::create(
+                fuzzer_config.clone(),
+                config.scratch_dir().join(fuzzer_config.backend.name()),
+                log_file_path,
+            )
         })
         .collect::<Result<Vec<FuzzerInstance>, RosaError>>()?;
 
@@ -313,11 +317,11 @@ fn run(
         // Collect new traces.
         let new_traces = with_cleanup!(
             if collect_from_all_fuzzers {
-                config
+                let traces = config
                     .fuzzers
                     .iter()
-                    .flat_map(|fuzzer_config| {
-                        match fuzzer_config.backend.collect_traces(
+                    .map(|fuzzer_config| {
+                        fuzzer_config.backend.collect_one_trace(
                             &mut trace_db,
                             // Skip missing traces, because the fuzzer is continually producing
                             // new ones, and we might miss some because of the timing of the
@@ -325,19 +329,17 @@ fn run(
                             true,
                             &fuzzer_config.backend.test_input_dir(),
                             &config.output_dir,
-                        ) {
-                            // We have to do this little dance because `flat_map()` will
-                            // essentially strip `Err()`s out. We want to keep them in explicitly.
-                            //
-                            // See https://stackoverflow.com/a/59852696.
-                            Ok(vec) => vec.into_iter().map(Ok).collect(),
-                            Err(err) => vec![Err(err)],
-                        }
+                        )
                     })
-                    .collect()
+                    .collect::<Result<Vec<Option<Trace>>, RosaError>>()?
+                    .into_iter()
+                    .flatten()
+                    .collect();
+
+                Ok(traces)
             } else {
                 let main_fuzzer = config.main_fuzzer()?;
-                main_fuzzer.backend.collect_traces(
+                let new_trace = main_fuzzer.backend.collect_one_trace(
                     &mut trace_db,
                     // Skip missing traces, because the fuzzer is continually producing new
                     // ones, and we might miss some because of the timing of the writes; it's
@@ -345,7 +347,9 @@ fn run(
                     true,
                     &main_fuzzer.backend.test_input_dir(),
                     &config.output_dir,
-                )
+                )?;
+
+                Ok(new_trace.map(|trace| vec![trace]).unwrap_or(Vec::new()))
             },
             fuzzer_instances
         )?;

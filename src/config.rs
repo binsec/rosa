@@ -311,6 +311,12 @@ impl Config {
         "so far. See the documentation for details on the format of the decision files.",
         "",
     ];
+    /// The README to put in the `scratch` directory in the output directory.
+    const SCRATCH_DIR_README: [&'static str; 3] = [
+        "This directory is used as a 'scratch' directory by the fuzzer instances to store",
+        "temporary files.",
+        "",
+    ];
     /// The README to put in the `logs` directory in the output directory.
     const LOGS_DIR_README: [&'static str; 6] = [
         "This directory contains the logs created by the fuzzer processes (both stdout and",
@@ -394,6 +400,7 @@ impl Config {
             (&self.backdoors_dir(), Self::BACKDOORS_DIR_README.join("\n")),
             (&self.clusters_dir(), Self::CLUSTERS_DIR_README.join("\n")),
             (&self.decisions_dir(), Self::DECISIONS_DIR_README.join("\n")),
+            (&self.scratch_dir(), Self::SCRATCH_DIR_README.join("\n")),
             (&self.logs_dir(), Self::LOGS_DIR_README.join("\n")),
             (&self.traces_dir(), Self::TRACES_DIR_README.join("\n")),
         ] {
@@ -561,6 +568,11 @@ impl Config {
     /// Get the path to the `decisions` output directory.
     pub fn decisions_dir(&self) -> PathBuf {
         self.output_dir.join("decisions")
+    }
+
+    /// Get the path to the `scratch` output directory.
+    pub fn scratch_dir(&self) -> PathBuf {
+        self.output_dir.join("scratch")
     }
 
     /// Get the path to the `logs` output directory.

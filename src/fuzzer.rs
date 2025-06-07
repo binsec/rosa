@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     config,
     error::RosaError,
-    trace::{self, Trace, TraceDatabase},
+    trace::{Trace, TraceDatabase},
 };
 
 pub mod aflpp;
@@ -29,57 +29,49 @@ pub mod aflpp;
 pub trait FuzzerBackend: DynClone {
     /// Get the ID (full name) of the backend.
     fn backend_id(&self) -> String;
+
     /// Get the name of the fuzzer instance.
     fn name(&self) -> &str;
+
     /// Get the full command used to invoke the fuzzer.
     fn cmd(&self) -> Vec<String>;
+
     /// Get the set of environment variables that need to be passed to the fuzzer.
     fn env(&self) -> HashMap<String, String>;
+
     /// Get the path to the directory where the fuzzer places new test inputs.
     fn test_input_dir(&self) -> PathBuf;
-    /// Get the path to the directory where the fuzzer places runtime traces, corresponding to test
-    /// inputs.
-    fn runtime_trace_dir(&self) -> PathBuf;
+
     /// Check if the fuzzer has found any crashes.
     fn found_crashes(&self) -> Result<bool, RosaError>;
+
     /// Get the status of the fuzzer.
     fn status(&self) -> FuzzerStatus;
-    /// Set up things in the output directory before the fuzzing campaign starts.
-    ///
-    /// The output directory here is ROSA's not the fuzzer's; take caution to avoid conflicts
-    /// between fuzzer instances.
-    fn setup(&self, _output_dir: &Path) -> Result<(), RosaError> {
-        Ok(())
-    }
-    /// Tear down things in the output directory after the fuzzing campaign ends.
-    ///
-    /// The output directory here is ROSA's not the fuzzer's; take caution to avoid conflicts
-    /// between fuzzer instances.
-    fn teardown(&self, _output_dir: &Path) -> Result<(), RosaError> {
-        Ok(())
-    }
-    /// Collect traces from the fuzzer.
+
+    /// Collect a single (new) trace from the fuzzer.
     ///
     /// A database of known inputs and traces is passed to make the collection more efficient, by
     /// ignoring inputs and traces that have already been evaluated. The option to skip missing
     /// traces is also passed, in the case where the trace dump is not yet complete.
     ///
-    /// By default, this will use [trace::load_traces](crate::trace::load_traces), but
-    /// implementations can alter it if needed.
-    fn collect_traces(
+    /// The reason behind collecting one trace is to avoid blocking in this function if there's a
+    /// huge backlog to take care of.
+    fn collect_one_trace(
         &self,
         trace_db: &mut TraceDatabase,
         skip_missing_traces: bool,
         input_dir: &Path,
-        _output_dir: &Path,
-    ) -> Result<Vec<Trace>, RosaError> {
-        trace::load_traces(
-            input_dir,
-            &self.runtime_trace_dir(),
-            self.name(),
-            trace_db,
-            skip_missing_traces,
-        )
+        output_dir: &Path,
+    ) -> Result<Option<Trace>, RosaError>;
+
+    /// Set up things in the scratch directory before the fuzzing campaign starts.
+    fn setup(&self, _scratch_dir: &Path) -> Result<(), RosaError> {
+        Ok(())
+    }
+
+    /// Tear down things in the scratch directory after the fuzzing campaign ends.
+    fn teardown(&self, _scratch_dir: &Path) -> Result<(), RosaError> {
+        Ok(())
     }
 }
 clone_trait_object!(FuzzerBackend);
@@ -95,6 +87,8 @@ pub struct FuzzerConfig {
 pub struct FuzzerInstance {
     /// The configuration of the instance.
     pub config: FuzzerConfig,
+    /// The scratch directory dedicated to the instance.
+    pub scratch_dir: PathBuf,
     /// The log file that holds the fuzzer's output (`stdout` & `stderr`).
     pub log_file: PathBuf,
     /// The [Command] of the fuzzer instance.
@@ -139,10 +133,15 @@ impl FuzzerInstance {
     ///             env: HashMap::from([("AFL_DEBUG".to_string(), "1".to_string())]),
     ///         }),
     ///     },
+    ///     PathBuf::from("/path/to/scratch_dir"),
     ///     PathBuf::from("/path/to/log_file.log"),
     /// );
     /// ```
-    pub fn create(config: FuzzerConfig, log_file: PathBuf) -> Result<Self, RosaError> {
+    pub fn create(
+        config: FuzzerConfig,
+        scratch_dir: PathBuf,
+        log_file: PathBuf,
+    ) -> Result<Self, RosaError> {
         let log_stdout = File::create(&log_file).map_err(|err| {
             error!(
                 "could not create log file '{}': {}.",
@@ -164,6 +163,7 @@ impl FuzzerInstance {
 
         Ok(FuzzerInstance {
             config,
+            scratch_dir,
             log_file,
             command,
             process: None,

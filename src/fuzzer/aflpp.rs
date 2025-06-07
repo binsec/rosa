@@ -7,7 +7,6 @@ use std::{
     collections::HashMap,
     env, fmt,
     fs::{self, File},
-    io::Write,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
@@ -146,6 +145,299 @@ impl AFLPlusPlus {
             },
         )
     }
+
+    /// TODO
+    fn collect_one_trace_standard(
+        &self,
+        skip_missing_traces: bool,
+        original_test_input_path: &Path,
+        test_input_path: &Path,
+        test_input: &[u8],
+        scratch_dir: &Path,
+    ) -> Result<Option<Trace>, RosaError> {
+        // For `afl-showmap`, we need to do:
+        // ```
+        // $ afl-showmap -o /tmp/trace.txt -q -e -- <program + arguments> \
+        //       && cat /tmp/trace.txt \
+        //       | sed -nE 's/^0*([[:digit:]]+):1$/\1/p'
+        // ```
+        let showmap_output_file = NamedTempFile::new()
+            .map_err(|err| error!("could not create temporary file: {}.", err))?;
+        let showmap_output_path = showmap_output_file.into_temp_path();
+
+        let afl_showmap = self
+            .afl_fuzz
+            .parent()
+            .expect("failed to get parent directory of afl-fuzz.")
+            .join("afl-showmap");
+        let afl_showmap_args = vec![
+            "-o".to_string(),
+            showmap_output_path.to_string_lossy().to_string(),
+            "-q".to_string(),
+            "-e".to_string(),
+            "--".to_string(),
+        ];
+
+        let mut afl_showmap_cmd = Command::new(afl_showmap);
+        let afl_showmap_status = match self.input {
+            // If the input is read from `stdin`, then simply pass the file to the
+            // `stdin` of the process.
+            AFLPlusPlusInput::Stdin => afl_showmap_cmd
+                .args([afl_showmap_args, self.target.clone()].concat())
+                .stdin(File::open(test_input_path).expect("failed to open test input file.")),
+            // If the input is read from a file, there is no need to pass anything
+            // to the `stdin` of the process. However, we should replace all
+            // occurrences of `@@` in the target command by the path to the file.
+            AFLPlusPlusInput::File => afl_showmap_cmd.args(
+                [
+                    afl_showmap_args,
+                    self.target
+                        .clone()
+                        .into_iter()
+                        .map(|arg| {
+                            if arg == "@@" {
+                                test_input_path.display().to_string()
+                            } else {
+                                arg
+                            }
+                        })
+                        .collect(),
+                ]
+                .concat(),
+            ),
+            AFLPlusPlusInput::LibFuzzer => afl_showmap_cmd.args(
+                [
+                    afl_showmap_args,
+                    self.target.clone(),
+                    vec![test_input_path.display().to_string()],
+                ]
+                .concat(),
+            ),
+        }
+        .envs(config::replace_env_var_placeholders(&self.env()))
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+
+        // `afl-showmap` can fail spuriously for certain target programs. That's
+        // okay, we can just skip the trace for now and hope to collect it later,
+        // if we're allowed to skip.
+        //
+        // If it keeps crashing then it will become apparent when no traces are
+        // collected at all, so this still (indirectly) lets the user know there is
+        // a problem.
+        if !afl_showmap_status
+            .map(|status| status.success())
+            .unwrap_or(false)
+        {
+            if skip_missing_traces {
+                return Ok(None);
+            } else {
+                let input_dump = scratch_dir.join("afl-showmap-crashing-test-input");
+                fs::write(&input_dump, test_input)
+                    .expect("failed to write input to emergency file.");
+                fail!(
+                    "`afl-showmap` failed while processing '{}'. Input dumped to {}.",
+                    original_test_input_path.display(),
+                    input_dump.display()
+                )?;
+            }
+        }
+
+        let showmap_output = fs::read_to_string(showmap_output_path)
+            .map_err(|err| error!("could not read afl-showmap output: {}.", err))?;
+        let showmap_regex =
+            Regex::new(r"(?m)^0*([[:digit:]]+):1$").expect("failed to compile showmap regex.");
+        let edges: Vec<usize> = showmap_regex
+            .captures_iter(&showmap_output)
+            .map(|capture| {
+                capture
+                    .get(1)
+                    .expect("failed to get showmap regex match.")
+                    .as_str()
+                    .parse::<usize>()
+                    .expect("failed to convert showmap regex match to `usize`.")
+            })
+            .collect();
+
+        // For `strace`, we need to do:
+        // ```
+        // $ strace -e abbrev=all \
+        //       -e quiet=attach,exit,path-resolution,personality,thread-execve \
+        //       -ff -n -- \
+        //       <program + arguments> \
+        //       | sed -nE 's/^\[[[:space:]]*([[:digit:]]+)\].+$/\1/p' \
+        //       | sort \
+        //       | uniq
+        // ```
+        let strace_output_file = NamedTempFile::new()
+            .map_err(|err| error!("could not create temporary file: {}.", err))?;
+        let strace_output_path = strace_output_file.into_temp_path();
+
+        let strace_args = [
+            vec![
+                "-e".to_string(),
+                "abbrev=all".to_string(),
+                "-e".to_string(),
+                "quiet=attach,exit,path-resolution,\
+                                                personality,thread-execve"
+                    .to_string(),
+                "--follow-forks".to_string(),
+                "--syscall-number".to_string(),
+                format!("--output={}", strace_output_path.display()),
+            ],
+            // We want to take `AFL_PRELOAD` into account (if it's declared). The
+            // trouble is, `AFL_PRELOAD` does not mean anything to `strace`.
+            // So, we replace it by `LD_PRELOAD`, which will actually change
+            // things for `strace`.
+            config::replace_env_var_placeholders(&self.env())
+                .into_iter()
+                .map(|(key, value)| {
+                    if key == "AFL_PRELOAD" {
+                        format!("--env=LD_PRELOAD={}", value)
+                    } else {
+                        format!("--env={}={}", key, value)
+                    }
+                })
+                .collect::<Vec<String>>(),
+            vec!["--".to_string()],
+        ]
+        .concat();
+
+        let mut strace_cmd = Command::new("strace");
+        match self.input {
+            // If the input is read from `stdin`, then simply pass the file to the
+            // `stdin` of the process.
+            AFLPlusPlusInput::Stdin => strace_cmd
+                .args([strace_args, self.target.clone()].concat())
+                .stdin(File::open(test_input_path).expect("failed to open test input file.")),
+            // If the input is read from a file, there is no need to pass anything
+            // to the `stdin` of the process. However, we should replace all
+            // occurrences of `@@` in the target command by the path to the file.
+            AFLPlusPlusInput::File => strace_cmd.args(
+                [
+                    strace_args,
+                    self.target
+                        .clone()
+                        .into_iter()
+                        .map(|arg| {
+                            if arg == "@@" {
+                                test_input_path.display().to_string()
+                            } else {
+                                arg
+                            }
+                        })
+                        .collect(),
+                ]
+                .concat(),
+            ),
+            AFLPlusPlusInput::LibFuzzer => strace_cmd.args(
+                [
+                    strace_args,
+                    self.target.clone(),
+                    vec![test_input_path.display().to_string()],
+                ]
+                .concat(),
+            ),
+        }
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        // Note that we do not check if the `strace` command returned a non-0 exit
+        // code. This is because that `strace` will transparently return the
+        // target program's exit code, which means that we can't rely on it to
+        // judge whether or not `strace` succeeded. In fact, we do not need to
+        // check for this at all, because we're already checking for the presence
+        // of the ROSA marker; if the marker is there, it's highly unlikely that
+        // `strace` failed.
+        .status()
+        .map_err(|err| error!("`strace` failed: {}.", err))?;
+
+        //let strace_output = String::from_utf8_lossy(&strace_output.stderr);
+        let strace_output = fs::read_to_string(strace_output_path)
+            .map_err(|err| error!("could not read strace output: {}.", err))?;
+        let start_index = strace_output.find("__ROSAS_CANTINA__").ok_or(error!(
+            "could not find ROSA's trace marker, maybe a missing \
+                                `__ROSA_TRACE_START()`?"
+        ))?;
+        let strace_regex = Regex::new(concat!(
+            r"(?m)^",
+            r"[[:digit:]]+[[:space:]]*",
+            r"\[[[:space:]]*([[:digit:]]+)\].+$"
+        ))
+        .expect("failed to compile strace regex.");
+        let syscalls: Vec<usize> = strace_regex
+            .captures_iter(&strace_output[start_index..])
+            .map(|capture| {
+                capture
+                    .get(1)
+                    .expect("failed to get strace regex match.")
+                    .as_str()
+                    .parse::<usize>()
+                    .expect("failed to convert strace regex match to `usize`.")
+            })
+            .collect();
+
+        // Get the map size produced during setup.
+        let max_edges = fs::read_to_string(scratch_dir.join(".max-edges"))
+            .expect("failed to read max edge count from file (setup issue?).");
+        let max_edges = max_edges
+            .trim_end()
+            .parse::<usize>()
+            .expect("failed to parse max edge count.");
+
+        Ok(Some(Trace::from(
+            &format!(
+                "{}__{}",
+                self.name(),
+                original_test_input_path
+                    .file_name()
+                    .expect("failed to get file name for test input.")
+                    .to_string_lossy()
+            ),
+            test_input,
+            &edges,
+            max_edges,
+            &syscalls,
+            MAX_SYSCALLS,
+        )))
+    }
+
+    /// TODO
+    fn collect_one_trace_qemu(
+        &self,
+        skip_missing_traces: bool,
+        original_test_input_path: &Path,
+        test_input_path: &Path,
+    ) -> Result<Option<Trace>, RosaError> {
+        let test_input_file_name = original_test_input_path
+            .file_name()
+            .expect("failed to get file name for test input.")
+            .to_string_lossy();
+
+        let trace_dump_path = self
+            .output_dir
+            .join(self.name())
+            .join("trace_dumps")
+            .join(test_input_file_name.to_string())
+            .with_extension("trace");
+
+        if trace_dump_path.exists() {
+            let new_trace = Trace::load(
+                &format!("{}_{}", self.name(), test_input_file_name),
+                test_input_path,
+                &trace_dump_path,
+            )?;
+
+            Ok(Some(new_trace))
+        } else if skip_missing_traces {
+            Ok(None)
+        } else {
+            fail!(
+                "missing trace dump file for test input '{}'.",
+                test_input_file_name
+            )
+        }
+    }
 }
 
 #[typetag::serde(name = "afl++")]
@@ -191,10 +483,6 @@ impl FuzzerBackend for AFLPlusPlus {
 
     fn test_input_dir(&self) -> PathBuf {
         self.output_dir.join(&self.name).join("queue")
-    }
-
-    fn runtime_trace_dir(&self) -> PathBuf {
-        self.output_dir.join(&self.name).join("trace_dumps")
     }
 
     fn found_crashes(&self) -> Result<bool, RosaError> {
@@ -305,346 +593,80 @@ impl FuzzerBackend for AFLPlusPlus {
         Ok(())
     }
 
-    fn collect_traces(
+    fn collect_one_trace(
         &self,
         trace_db: &mut TraceDatabase,
         skip_missing_traces: bool,
         input_dir: &Path,
-        output_dir: &Path,
-    ) -> Result<Vec<Trace>, RosaError> {
-        // Unfortunately, we can't just call the default implementation, so we'll have to duplicate
-        // it here.
-        match self.mode {
-            AFLPlusPlusMode::Standard => {
-                let mut test_inputs: Vec<PathBuf> = trace::get_test_input_files(input_dir)?
-                    .into_iter()
-                    // Only keep new inputs.
-                    .filter(|input| !trace_db.is_known_input(input))
-                    .collect();
-                // Make sure the test input names are sorted so that we have consistency when loading.
-                test_inputs.sort();
+        scratch_dir: &Path,
+    ) -> Result<Option<Trace>, RosaError> {
+        let mut test_inputs: Vec<PathBuf> = trace::get_test_input_files(input_dir)?
+            .into_iter()
+            // Only keep new inputs.
+            .filter(|input| !trace_db.is_known_input(input))
+            .collect();
 
-                let traces_and_inputs: Vec<(Trace, PathBuf)> = test_inputs
-                    .into_iter()
-                    .map(|test_input_path| {
-                        // In "standard" mode, we need to call `afl-showmap` and `strace` to get the
-                        // edges and syscalls respectively.
-                        //
-                        // Time may have passed since we collected the test input files, and they
-                        // might not be there anymore (AFL++ deletes/replaces files sometimes). In
-                        // order to deal with that, we skip the input files we can't open, if we're
-                        // allowed to.
-                        if !test_input_path.exists() {
-                            if skip_missing_traces {
-                                return Ok(None);
-                            } else {
-                                fail!(
-                                    "could not open test input file '{}': file does not exist.",
-                                    test_input_path.display()
-                                )?;
-                            }
+        // Attempt to get the last (most recent) test input.
+        test_inputs.sort();
+        test_inputs
+            .last()
+            .map(|test_input_path| {
+                // First, check that the test input file still exists.
+                if test_input_path.exists() {
+                    // If the test input exists, save it to a temporary file. This way, even if AFL++
+                    // renames or deletes it, we still have it.
+                    let original_test_input_path = test_input_path.clone();
+                    let test_input: Vec<u8> = fs::read(test_input_path).map_err(|err| {
+                        error!(
+                            "could not read test input file '{}': {}.",
+                            test_input_path.display(),
+                            err
+                        )
+                    })?;
+                    let test_input_path = NamedTempFile::new()
+                        .map_err(|err| error!("could not create temporary file: {}.", err))?
+                        .into_temp_path();
+                    fs::write(&test_input_path, &test_input).map_err(|err| {
+                        error!("could not write test input to temporary file: {}.", err)
+                    })?;
+
+                    let new_trace = match self.mode {
+                        AFLPlusPlusMode::Standard => self.collect_one_trace_standard(
+                            skip_missing_traces,
+                            &original_test_input_path,
+                            &test_input_path,
+                            &test_input,
+                            scratch_dir,
+                        ),
+                        AFLPlusPlusMode::QEMU => self.collect_one_trace_qemu(
+                            skip_missing_traces,
+                            &original_test_input_path,
+                            &test_input_path,
+                        ),
+                    }?;
+
+                    // Register input & trace (if needed).
+                    Ok(new_trace.and_then(|trace| {
+                        trace_db.register_input(&original_test_input_path);
+
+                        if !trace_db.has_trace(&trace.uid()) {
+                            trace_db.insert_trace(trace.clone());
+
+                            Some(trace)
+                        } else {
+                            None
                         }
-
-                        // Copy the test input path to a temporary file. This way, even if AFL++
-                        // renames or deletes it, we still have it.
-                        let test_input: Vec<u8> = fs::read(&test_input_path).map_err(|err| {
-                            error!(
-                                "could not read test input file '{}': {}.",
-                                test_input_path.display(),
-                                err
-                            )
-                        })?;
-                        let original_test_input_path = test_input_path.clone();
-                        let test_input_file_name = original_test_input_path
-                            .file_name()
-                            .expect("failed to get filename for test input.")
-                            .to_string_lossy();
-
-                        let mut test_input_file = NamedTempFile::new()
-                            .map_err(|err| error!("could not create temporary file: {}.", err))?;
-                        test_input_file.write_all(&test_input).map_err(|err| {
-                            error!("could not write test input to temporary file: {}.", err)
-                        })?;
-                        let test_input_path = test_input_file.into_temp_path();
-
-                        // For `afl-showmap`, we need to do:
-                        // ```
-                        // $ afl-showmap -o /tmp/trace.txt -q -e -- <program + arguments> \
-                        //       && cat /tmp/trace.txt \
-                        //       | sed -nE 's/^0*([[:digit:]]+):1$/\1/p'
-                        // ```
-                        let showmap_output_file = NamedTempFile::new()
-                            .map_err(|err| error!("could not create temporary file: {}.", err))?;
-                        let showmap_output_path = showmap_output_file.into_temp_path();
-
-                        let afl_showmap = self
-                            .afl_fuzz
-                            .parent()
-                            .expect("failed to get parent directory of afl-fuzz.")
-                            .join("afl-showmap");
-                        let afl_showmap_args = vec![
-                            "-o".to_string(),
-                            showmap_output_path.to_string_lossy().to_string(),
-                            "-q".to_string(),
-                            "-e".to_string(),
-                            "--".to_string(),
-                        ];
-
-                        let mut afl_showmap_cmd = Command::new(afl_showmap);
-                        let afl_showmap_status = match self.input {
-                            // If the input is read from `stdin`, then simply pass the file to the
-                            // `stdin` of the process.
-                            AFLPlusPlusInput::Stdin => afl_showmap_cmd
-                                .args([afl_showmap_args, self.target.clone()].concat())
-                                .stdin(
-                                    File::open(&test_input_path)
-                                        .expect("failed to open test input file."),
-                                ),
-                            // If the input is read from a file, there is no need to pass anything
-                            // to the `stdin` of the process. However, we should replace all
-                            // occurrences of `@@` in the target command by the path to the file.
-                            AFLPlusPlusInput::File => afl_showmap_cmd.args(
-                                [
-                                    afl_showmap_args,
-                                    self.target
-                                        .clone()
-                                        .into_iter()
-                                        .map(|arg| {
-                                            if arg == "@@" {
-                                                test_input_path.display().to_string()
-                                            } else {
-                                                arg
-                                            }
-                                        })
-                                        .collect(),
-                                ]
-                                .concat(),
-                            ),
-                            AFLPlusPlusInput::LibFuzzer => afl_showmap_cmd.args(
-                                [
-                                    afl_showmap_args,
-                                    self.target.clone(),
-                                    vec![test_input_path.display().to_string()],
-                                ]
-                                .concat(),
-                            ),
-                        }
-                        .envs(config::replace_env_var_placeholders(&self.env()))
-                        .stdout(Stdio::null())
-                        .stderr(Stdio::null())
-                        .status();
-
-                        // `afl-showmap` can fail spuriously for certain target programs. That's
-                        // okay, we can just skip the trace for now and hope to collect it later,
-                        // if we're allowed to skip.
-                        //
-                        // If it keeps crashing then it will become apparent when no traces are
-                        // collected at all, so this still (indirectly) lets the user know there is
-                        // a problem.
-                        if !afl_showmap_status
-                            .map(|status| status.success())
-                            .unwrap_or(false)
-                        {
-                            if skip_missing_traces {
-                                return Ok(None);
-                            } else {
-                                let input_dump = "afl-showmap-crashing-test-input";
-                                fs::write(input_dump, &test_input)
-                                    .expect("failed to write input to emergency file.");
-                                fail!(
-                                    "`afl-showmap` failed while processing '{}'. \
-                                    Input dumped to {}.",
-                                    original_test_input_path.display(),
-                                    input_dump
-                                )?;
-                            }
-                        }
-
-                        let showmap_output = fs::read_to_string(showmap_output_path)
-                            .map_err(|err| error!("could not read afl-showmap output: {}.", err))?;
-                        let showmap_regex = Regex::new(r"(?m)^0*([[:digit:]]+):1$")
-                            .expect("failed to compile showmap regex.");
-                        let edges: Vec<usize> = showmap_regex
-                            .captures_iter(&showmap_output)
-                            .map(|capture| {
-                                capture
-                                    .get(1)
-                                    .expect("failed to get showmap regex match.")
-                                    .as_str()
-                                    .parse::<usize>()
-                                    .expect("failed to convert showmap regex match to `usize`.")
-                            })
-                            .collect();
-
-                        // For `strace`, we need to do:
-                        // ```
-                        // $ strace -e abbrev=all \
-                        //       -e quiet=attach,exit,path-resolution,personality,thread-execve \
-                        //       -ff -n -- \
-                        //       <program + arguments> \
-                        //       | sed -nE 's/^\[[[:space:]]*([[:digit:]]+)\].+$/\1/p' \
-                        //       | sort \
-                        //       | uniq
-                        // ```
-                        let strace_output_file = NamedTempFile::new()
-                            .map_err(|err| error!("could not create temporary file: {}.", err))?;
-                        let strace_output_path = strace_output_file.into_temp_path();
-
-                        let strace_args = [
-                            vec![
-                                "-e".to_string(),
-                                "abbrev=all".to_string(),
-                                "-e".to_string(),
-                                "quiet=attach,exit,path-resolution,\
-                                                personality,thread-execve"
-                                    .to_string(),
-                                "--follow-forks".to_string(),
-                                "--syscall-number".to_string(),
-                                format!("--output={}", strace_output_path.display()),
-                            ],
-                            // We want to take `AFL_PRELOAD` into account (if it's declared). The
-                            // trouble is, `AFL_PRELOAD` does not mean anything to `strace`.
-                            // So, we replace it by `LD_PRELOAD`, which will actually change
-                            // things for `strace`.
-                            config::replace_env_var_placeholders(&self.env())
-                                .into_iter()
-                                .map(|(key, value)| {
-                                    if key == "AFL_PRELOAD" {
-                                        format!("--env=LD_PRELOAD={}", value)
-                                    } else {
-                                        format!("--env={}={}", key, value)
-                                    }
-                                })
-                                .collect::<Vec<String>>(),
-                            vec!["--".to_string()],
-                        ]
-                        .concat();
-
-                        let mut strace_cmd = Command::new("strace");
-                        match self.input {
-                            // If the input is read from `stdin`, then simply pass the file to the
-                            // `stdin` of the process.
-                            AFLPlusPlusInput::Stdin => strace_cmd
-                                .args([strace_args, self.target.clone()].concat())
-                                .stdin(
-                                    File::open(&test_input_path)
-                                        .expect("failed to open test input file."),
-                                ),
-                            // If the input is read from a file, there is no need to pass anything
-                            // to the `stdin` of the process. However, we should replace all
-                            // occurrences of `@@` in the target command by the path to the file.
-                            AFLPlusPlusInput::File => strace_cmd.args(
-                                [
-                                    strace_args,
-                                    self.target
-                                        .clone()
-                                        .into_iter()
-                                        .map(|arg| {
-                                            if arg == "@@" {
-                                                test_input_path.display().to_string()
-                                            } else {
-                                                arg
-                                            }
-                                        })
-                                        .collect(),
-                                ]
-                                .concat(),
-                            ),
-                            AFLPlusPlusInput::LibFuzzer => strace_cmd.args(
-                                [
-                                    strace_args,
-                                    self.target.clone(),
-                                    vec![test_input_path.display().to_string()],
-                                ]
-                                .concat(),
-                            ),
-                        }
-                        .stdout(Stdio::null())
-                        .stderr(Stdio::null())
-                        // Note that we do not check if the `strace` command returned a non-0 exit
-                        // code. This is because that `strace` will transparently return the
-                        // target program's exit code, which means that we can't rely on it to
-                        // judge whether or not `strace` succeeded. In fact, we do not need to
-                        // check for this at all, because we're already checking for the presence
-                        // of the ROSA marker; if the marker is there, it's highly unlikely that
-                        // `strace` failed.
-                        .status()
-                        .map_err(|err| error!("`strace` failed: {}.", err))?;
-
-                        //let strace_output = String::from_utf8_lossy(&strace_output.stderr);
-                        let strace_output = fs::read_to_string(strace_output_path)
-                            .map_err(|err| error!("could not read strace output: {}.", err))?;
-                        let start_index = strace_output.find("__ROSAS_CANTINA__").ok_or(error!(
-                            "could not find ROSA's trace marker, maybe a missing \
-                                `__ROSA_TRACE_START()`?"
-                        ))?;
-                        let strace_regex = Regex::new(concat!(
-                            r"(?m)^",
-                            r"[[:digit:]]+[[:space:]]*",
-                            r"\[[[:space:]]*([[:digit:]]+)\].+$"
-                        ))
-                        .expect("failed to compile strace regex.");
-                        let syscalls: Vec<usize> = strace_regex
-                            .captures_iter(&strace_output[start_index..])
-                            .map(|capture| {
-                                capture
-                                    .get(1)
-                                    .expect("failed to get strace regex match.")
-                                    .as_str()
-                                    .parse::<usize>()
-                                    .expect("failed to convert strace regex match to `usize`.")
-                            })
-                            .collect();
-
-                        // Get the map size produced during setup.
-                        let max_edges =
-                            fs::read_to_string(output_dir.join("aflpp").join(".max-edges"))
-                                .expect("failed to read max edge count from file (setup issue?).");
-                        let max_edges = max_edges
-                            .trim_end()
-                            .parse::<usize>()
-                            .expect("failed to parse max edge count.");
-
-                        Ok(Some((
-                            Trace::from(
-                                &format!("{}__{}", self.name(), test_input_file_name),
-                                &test_input,
-                                &edges,
-                                max_edges,
-                                &syscalls,
-                                MAX_SYSCALLS,
-                            ),
-                            test_input_path.to_path_buf(),
-                        )))
-                    })
-                    // Filter out `Ok(None)`s, corresponding to skipped files.
-                    .filter_map(|result| result.transpose())
-                    .collect::<Result<Vec<(Trace, PathBuf)>, RosaError>>()?;
-
-                let new_traces =
-                    traces_and_inputs
-                        .into_iter()
-                        .fold(Vec::new(), |new_traces, (trace, input)| {
-                            trace_db.register_input(&input);
-                            if !trace_db.has_trace(&trace.uid()) {
-                                trace_db.insert_trace(trace.clone());
-
-                                [vec![trace], new_traces].concat()
-                            } else {
-                                new_traces
-                            }
-                        });
-
-                Ok(new_traces)
-            }
-            AFLPlusPlusMode::QEMU => trace::load_traces(
-                &self.test_input_dir(),
-                &self.runtime_trace_dir(),
-                self.name(),
-                trace_db,
-                skip_missing_traces,
-            ),
-        }
+                    }))
+                } else if skip_missing_traces {
+                    Ok(None)
+                } else {
+                    fail!(
+                        "could not open test input file '{}': file does not exist.",
+                        test_input_path.display()
+                    )
+                }
+            })
+            .unwrap_or(Ok(None))
     }
 }
 
