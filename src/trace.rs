@@ -473,6 +473,7 @@ impl Default for TraceDatabase {
 /// Get all the test input files from a directory.
 ///
 /// Input files are expected to be any files that do not have the extension `.trace`.
+/// TODO: move this to aflpp.rs...
 pub fn get_test_input_files(test_input_dir: &Path) -> Result<Vec<PathBuf>, RosaError> {
     fs::read_dir(test_input_dir).map_or_else(
         |err| {
@@ -499,164 +500,67 @@ pub fn get_test_input_files(test_input_dir: &Path) -> Result<Vec<PathBuf>, RosaE
     )
 }
 
-/// Get the full trace info needed to load traces.
+/// Load multiple stored traces.
 ///
-/// This function returns a 3-tuple `(trace_name, trace_test_input_file, trace_dump_file)` for each
-/// corresponding test input file passed to it. That is later used to load traces.
-fn get_trace_info(
-    test_input_files: Vec<PathBuf>,
-    trace_dump_dir: &Path,
-    skip_missing_traces: bool,
-) -> Vec<(String, PathBuf, PathBuf)> {
-    test_input_files
-        .into_iter()
-        // Get the name of the trace from the name of the test input file.
-        .map(|test_input_file| {
-            (
-                test_input_file
-                    .file_name()
-                    .expect("failed to get basename for test input file.")
-                    .to_os_string()
-                    .into_string()
-                    .expect("failed to convert basename to string."),
-                test_input_file,
-            )
-        })
-        // Get the name of the trace dump file, potentially skipping if it doesn't exist.
-        .filter_map(|(trace_name, test_input_file)| {
-            let trace_dump_file = trace_dump_dir.join(&trace_name).with_extension(
-                // Make sure to preserve any extension present on the test input file itself.
-                match test_input_file.extension() {
-                    None => "trace".to_string(),
-                    Some(extension) => format!(
-                        "{}.trace",
-                        extension
-                            .to_str()
-                            .expect("failed to convert test input file extension to str.")
-                    ),
-                }
-                .as_str(),
-            );
-
-            // If the trace dump file does not exist and we're skipping incomplete traces, we'll
-            // simply let the map filter it out. Otherwise, we will put it in; if it doesn't exist,
-            // the error will get detected when we try to read the file.
-            if !trace_dump_file.is_file() && skip_missing_traces {
-                None
-            } else {
-                Some((trace_name, test_input_file.to_path_buf(), trace_dump_file))
-            }
-        })
-        .collect()
-}
-
-/// Load multiple traces from file.
-///
-/// This function is used to load a lot of traces in bulk, while filtering some of them out
-/// depending on different criteria. It's the function to use when "hot-loading", i.e. loading
-/// while the fuzzer is actively producing new traces.
-///
-/// For each test input file `X` discovered in `test_input_dir`, exactly one trace dump file
-/// `X.trace` is expected to be found in `trace_dump_dir`. Whether this will provoke an error or
-/// not is determined by the `skip_missing_traces` argument (see below).
+/// This function is used to load traces stored after a ROSA campaign, e.g., in the ROSA output
+/// directory. It is **not** meant to be used to "hot-load" traces while the fuzzer is running; use
+/// [collect_one_trace](crate::fuzzer::FuzzerBackend::collect_one_trace) instead.
 ///
 /// # Examples
 /// ```
 /// use std::path::Path;
-/// use rosa::trace::{self, TraceDatabase};
+/// use rosa::trace;
 ///
-/// let mut trace_db = TraceDatabase::new();
 /// let _traces = trace::load_traces(
-///     &Path::new("/path/to/test_input_dir/"),
-///     &Path::new("/path/to/trace_dump_dir/"),
-///     "main",
-///     &mut trace_db,
-///     // Will skip any incomplete/missing trace dumps.
-///     false,
-/// );
-///
-/// // The previous call populated the `trace_db` database, which means that this call will only
-/// // pick up traces that the previous one did not.
-/// let _new_traces = trace::load_traces(
-///     &Path::new("/path/to/test_input_dir/"),
-///     &Path::new("/path/to/trace_dump_dir/"),
-///     "main",
-///     &mut trace_db,
-///     // Will expect every trace dump to be present & complete.
-///     true,
+///     &Path::new("/path/to/rosa-out/traces")
 /// );
 /// ```
-pub fn load_traces(
-    test_input_dir: &Path,
-    trace_dump_dir: &Path,
-    name_prefix: &str,
-    trace_db: &mut TraceDatabase,
-    skip_missing_traces: bool,
-) -> Result<Vec<Trace>, RosaError> {
-    let mut test_inputs: Vec<PathBuf> = get_test_input_files(test_input_dir)?
-        .into_iter()
-        // Only keep new inputs.
-        .filter(|input| !trace_db.is_known_input(input))
-        .collect();
-    // Make sure the test input names are sorted so that we have consistency when loading.
-    test_inputs.sort();
-    let trace_info = get_trace_info(test_inputs, trace_dump_dir, skip_missing_traces);
+pub fn load_traces(traces_dir: &Path) -> Result<Vec<Trace>, RosaError> {
+    // Get all files corresponding to test inputs.
+    // These are expected to be all files which do not end in `.trace`.
+    let test_input_paths: Vec<PathBuf> = fs::read_dir(traces_dir).map_or_else(
+        |err| {
+            fail!(
+                "invalid test input directory '{}': {}.",
+                traces_dir.display(),
+                err
+            )
+        },
+        |res| {
+            Ok(res
+                // Ignore files/dirs we cannot read.
+                .filter_map(|item| item.ok())
+                .map(|item| item.path())
+                // Only keep files that do not end in `.trace`.
+                // Ignore `README.txt` files (as those are put in the output directories of ROSA by
+                // default).
+                .filter(|path| {
+                    path.is_file()
+                        && path
+                            .extension()
+                            .is_none_or(|extension| extension != "trace")
+                        && path
+                            .file_name()
+                            .expect("could not get file name for potential test input file.")
+                            != "README.txt"
+                })
+                .collect())
+        },
+    )?;
 
-    let traces_and_inputs: Vec<(Trace, PathBuf)> = trace_info
+    test_input_paths
         .into_iter()
-        // Attempt to load the trace.
-        .map(|(trace_name, test_input_file, trace_dump_file)| {
-            if trace_dump_file.is_file() {
-                // Sometimes a trace load might fail because the trace file is still being
-                // written. In that case, if we're skipping traces anyway, might as well skip
-                // it here too.
-                let trace = Trace::load(
-                    &format!("{}_{}", name_prefix, trace_name),
-                    &test_input_file,
-                    &trace_dump_file,
-                );
-
-                match (trace, skip_missing_traces) {
-                    // If load was successful, then the trace is ok.
-                    (Ok(trace), _) => Ok(Some((trace, test_input_file))),
-                    // Load was unsuccessful, but we're skipping traces so it's fine.
-                    (Err(_), true) => Ok(None),
-                    // Load was unsuccessful, and we're not skipping traces: not fine.
-                    (Err(err), false) => Err(err),
-                }
-            } else {
-                fail!("missing trace dump file for trace '{}'.", trace_name)
-            }
+        .map(|test_input_path| {
+            Trace::load(
+                &test_input_path
+                    .file_name()
+                    .expect("could not get file name for potential test input file.")
+                    .to_string_lossy(),
+                &test_input_path,
+                &test_input_path.with_extension("trace"),
+            )
         })
-        // Filter out the skipped traces.
-        .filter_map(|element| element.transpose())
-        .collect::<Result<Vec<(Trace, PathBuf)>, RosaError>>()?;
-
-    // Register all new inputs.
-    //
-    // No matter whether we keep or discard the associated traces, by the end we will have looked
-    // through all of them, so we shouldn't have to go over them again.
-    traces_and_inputs
-        .iter()
-        .for_each(|(_, input)| trace_db.register_input(input));
-
-    // Filter new traces.
-    let new_traces: Vec<Trace> = traces_and_inputs
-        .into_iter()
-        .map(|(trace, _)| (trace.clone(), trace.uid()))
-        // Traces with duplicate UIDs should be discarded anyway, no need to look in the database.
-        .unique_by(|(_trace, uid)| uid.clone())
-        // Of the unique traces, we should only keep those that are not already in the database.
-        .filter(|(_trace, uid)| !trace_db.has_trace(uid))
-        .map(|(trace, _)| trace)
-        .collect();
-
-    // Insert new traces in the database.
-    new_traces
-        .iter()
-        .for_each(|trace| trace_db.insert_trace(trace.clone()));
-
-    Ok(new_traces)
+        .collect()
 }
 
 /// Save a collection of traces to an output directory.

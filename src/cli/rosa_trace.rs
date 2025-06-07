@@ -78,15 +78,11 @@ fn run(config_file: &Path, input_file: &Path, output_file: Option<&Path>) -> Res
 
     let mut trace_db = TraceDatabase::new();
     main_fuzzer.backend.setup(trace_dir.path())?;
-    let traces = main_fuzzer.backend.collect_traces(
-        &mut trace_db,
-        false,
-        trace_dir.path(),
-        trace_dir.path(),
-    )?;
+    let trace = main_fuzzer
+        .backend
+        .collect_one_trace(&mut trace_db, false, trace_dir.path(), trace_dir.path())?
+        .ok_or(error!("could not load any traces."))?;
     main_fuzzer.backend.teardown(trace_dir.path())?;
-    assert_eq!(traces.len(), 1);
-    let trace = &traces[0];
 
     let default_file = PathBuf::from(".").join(trace.uid()).with_extension("trace");
     let output_file = output_file.unwrap_or(&default_file);

@@ -22,7 +22,7 @@ use rosa::{
     config::{self, Config},
     error::RosaError,
     oracle::TimedDecision,
-    trace::{self, TraceDatabase},
+    trace::{self},
 };
 
 mod common;
@@ -237,14 +237,7 @@ fn run(
     let config = Config::load(&output_dir.join("config").with_extension("toml"))?;
 
     println_info!("Loading traces...");
-    let mut trace_db = TraceDatabase::new();
-    let all_traces = trace::load_traces(
-        &output_dir.join("traces"),
-        &output_dir.join("traces"),
-        "rosa",
-        &mut trace_db,
-        true,
-    )?;
+    let all_traces = trace::load_traces(&config.traces_dir())?;
 
     let selected_trace_uids: Vec<String> = match trace_uids.len() {
         0 => all_traces.iter().map(|trace| trace.uid()).collect(),

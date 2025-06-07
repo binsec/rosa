@@ -23,7 +23,7 @@ use rosa::{
     error::RosaError,
     fail,
     oracle::{Decision, DecisionReason, Discriminants, TimedDecision},
-    trace::{self, Trace, TraceDatabase},
+    trace::{self, Trace},
 };
 
 mod common;
@@ -191,14 +191,7 @@ fn run(
     }
 
     println_info!("Loading traces...");
-    let mut trace_db = TraceDatabase::new();
-    let all_traces = trace::load_traces(
-        &config.traces_dir(),
-        &config.traces_dir(),
-        "rosa",
-        &mut trace_db,
-        true,
-    )?;
+    let all_traces = trace::load_traces(&config.traces_dir())?;
 
     let timed_traces: Vec<TimedTrace> = all_traces
         .into_iter()
