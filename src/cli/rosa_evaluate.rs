@@ -159,15 +159,15 @@ struct Sample {
 fn check_decision(
     cmd: &[String],
     env: &HashMap<String, String>,
-    test_input_file: &Path,
+    test_input_path: &Path,
     timed_decision: &TimedDecision,
     discriminant_uid: String,
     show_output: bool,
 ) -> Result<Sample, RosaError> {
-    let test_input_file = File::open(test_input_file).map_err(|err| {
+    let test_input_file = File::open(test_input_path).map_err(|err| {
         error!(
             "failed to read test input from file {}: {}.",
-            test_input_file.display(),
+            test_input_path.display(),
             err
         )
     })?;
@@ -178,11 +178,11 @@ fn check_decision(
     let output = if cmd.contains(&"@@".to_string()) {
         let args: Vec<String> = cmd[1..]
             .iter()
-            .filter_map(|arg| {
+            .map(|arg| {
                 if arg == "@@" {
-                    None
+                    test_input_path.display().to_string()
                 } else {
-                    Some(arg.to_string())
+                    arg.to_string()
                 }
             })
             .collect();
