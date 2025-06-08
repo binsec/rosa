@@ -470,36 +470,6 @@ impl Default for TraceDatabase {
     }
 }
 
-/// Get all the test input files from a directory.
-///
-/// Input files are expected to be any files that do not have the extension `.trace`.
-/// TODO: move this to aflpp.rs...
-pub fn get_test_input_files(test_input_dir: &Path) -> Result<Vec<PathBuf>, RosaError> {
-    fs::read_dir(test_input_dir).map_or_else(
-        |err| {
-            fail!(
-                "invalid test input directory '{}': {}.",
-                test_input_dir.display(),
-                err
-            )
-        },
-        |res| {
-            Ok(res
-                // Ignore files/dirs we cannot read.
-                .filter_map(|item| item.ok())
-                .map(|item| item.path())
-                // Only keep files that do not end in `.trace`.
-                .filter(|path| {
-                    path.is_file()
-                        && path
-                            .extension()
-                            .is_none_or(|extension| extension != "trace")
-                })
-                .collect())
-        },
-    )
-}
-
 /// Load multiple stored traces.
 ///
 /// This function is used to load traces stored after a ROSA campaign, e.g., in the ROSA output

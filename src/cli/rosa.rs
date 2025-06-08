@@ -181,8 +181,9 @@ fn run(
         .fuzzers
         .iter()
         .map(|fuzzer_config| {
+            let scratch_dir = config.fuzzer_scratch_dir(fuzzer_config);
             // Run the setup for each instance.
-            fuzzer_config.backend.setup(&config.output_dir)?;
+            fuzzer_config.backend.setup(&scratch_dir)?;
 
             let log_file_path = config
                 .logs_dir()
@@ -190,11 +191,7 @@ fn run(
                 .join(format!("fuzzer_{}", fuzzer_config.backend.name()))
                 .with_extension("log");
 
-            FuzzerInstance::create(
-                fuzzer_config.clone(),
-                config.scratch_dir().join(fuzzer_config.backend.name()),
-                log_file_path,
-            )
+            FuzzerInstance::create(fuzzer_config.clone(), scratch_dir, log_file_path)
         })
         .collect::<Result<Vec<FuzzerInstance>, RosaError>>()?;
 
@@ -327,8 +324,8 @@ fn run(
                             // new ones, and we might miss some because of the timing of the
                             // writes; it's okay, we'll pick them up on the next iteration.
                             true,
-                            &fuzzer_config.backend.test_input_dir(),
-                            &config.output_dir,
+                            &config.fuzzer_scratch_dir(fuzzer_config),
+                            None,
                         )
                     })
                     .collect::<Result<Vec<Option<Trace>>, RosaError>>()?
@@ -345,8 +342,8 @@ fn run(
                     // ones, and we might miss some because of the timing of the writes; it's
                     // okay, we'll pick them up on the next iteration.
                     true,
-                    &main_fuzzer.backend.test_input_dir(),
-                    &config.output_dir,
+                    &config.fuzzer_scratch_dir(main_fuzzer),
+                    None,
                 )?;
 
                 Ok(new_trace.map(|trace| vec![trace]).unwrap_or(Vec::new()))

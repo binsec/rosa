@@ -56,12 +56,16 @@ pub trait FuzzerBackend: DynClone {
     ///
     /// The reason behind collecting one trace is to avoid blocking in this function if there's a
     /// huge backlog to take care of.
+    ///
+    /// The `input_dir` parameter can be used to override the directory where we should look for
+    /// test input files (by default, [test_input_dir](crate::fuzzer::FuzzerBackend::test_input_dir)
+    /// is used).
     fn collect_one_trace(
         &self,
         trace_db: &mut TraceDatabase,
         skip_missing_traces: bool,
-        input_dir: &Path,
         output_dir: &Path,
+        input_dir: Option<&Path>,
     ) -> Result<Option<Trace>, RosaError>;
 
     /// Set up things in the scratch directory before the fuzzing campaign starts.

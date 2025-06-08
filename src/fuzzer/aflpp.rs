@@ -19,7 +19,7 @@ use crate::{
     config,
     error::RosaError,
     fuzzer::{FuzzerBackend, FuzzerStatus},
-    trace::{self, Trace, TraceDatabase},
+    trace::{Trace, TraceDatabase},
 };
 
 /// The maximum system call ID supported in the source version.
@@ -146,7 +146,31 @@ impl AFLPlusPlus {
         )
     }
 
-    /// TODO
+    fn get_test_input_files(&self, input_dir: Option<&Path>) -> Result<Vec<PathBuf>, RosaError> {
+        let default_input_dir = self.test_input_dir();
+        let input_dir = input_dir.unwrap_or(&default_input_dir);
+        fs::read_dir(input_dir)
+            .map(|res| {
+                res
+                    // Ignore files/dirs we cannot read.
+                    .filter_map(|item| item.ok())
+                    .map(|item| item.path())
+                    .collect()
+            })
+            .map_err(|err| {
+                error!(
+                    "invalid test input directory '{}': {}.",
+                    input_dir.display(),
+                    err
+                )
+            })
+    }
+
+    /// Collect one trace in AFL++ standard mode (source instrumentation).
+    ///
+    /// This function calls `afl-showmap` to get the CFG edges and `strace` to get the system calls
+    /// associated with the test input. Naturally, `afl-showmap` is expected to be found in the
+    /// same directory as `afl-fuzz` ([afl_fuzz](crate::fuzzer::aflpp::AFLPlusPlus::afl_fuzz)).
     fn collect_one_trace_standard(
         &self,
         skip_missing_traces: bool,
@@ -402,7 +426,10 @@ impl AFLPlusPlus {
         )))
     }
 
-    /// TODO
+    /// Collect one trace in AFL++ QEMU mode (binary on-the-fly instrumentation).
+    ///
+    /// In this mode, AFL++ should be dumping the `.trace` files, so this function will simply
+    /// pick them up.
     fn collect_one_trace_qemu(
         &self,
         skip_missing_traces: bool,
@@ -547,14 +574,16 @@ impl FuzzerBackend for AFLPlusPlus {
     ///
     /// This is because some targets fail to run if `AFL_MAP_SIZE` is not set to the actual map
     /// size, obtained by running `AFL_DUMP_MAP_SIZE=1 /path/to/target`.
-    fn setup(&self, output_dir: &Path) -> Result<(), RosaError> {
-        if self.name() == "main" && self.backend_id() == *"afl++-standard" {
-            let output_dir = output_dir.join("aflpp");
-            fs::create_dir(&output_dir)
-                .map_err(|err| error!("could not create '{}': {}.", &output_dir.display(), err))?;
+    fn setup(&self, scratch_dir: &Path) -> Result<(), RosaError> {
+        if self.backend_id() == *"afl++-standard" {
+            if !scratch_dir.exists() {
+                fs::create_dir(scratch_dir).map_err(|err| {
+                    error!("could not create '{}': {}.", &scratch_dir.display(), err)
+                })?;
+            }
 
             // Write the maximum number of edges to a file.
-            let max_edges_file = File::create(output_dir.join(".max-edges"))
+            let max_edges_file = File::create(scratch_dir.join(".max-edges"))
                 .map_err(|err| error!("could not create .max-edges file: {}.", err))?;
 
             let target_cmd = self.target.clone();
@@ -572,7 +601,7 @@ impl FuzzerBackend for AFLPlusPlus {
                     )
                 })?;
 
-            let map_size = fs::read_to_string(output_dir.join(".max-edges"))
+            let map_size = fs::read_to_string(scratch_dir.join(".max-edges"))
                 .map_err(|err| error!("could not read map size from .max-edges file: {}.", err))?;
 
             unsafe {
@@ -583,24 +612,15 @@ impl FuzzerBackend for AFLPlusPlus {
         Ok(())
     }
 
-    fn teardown(&self, output_dir: &Path) -> Result<(), RosaError> {
-        if self.name() == "main" && self.backend_id() == *"afl++-standard" {
-            let output_dir = output_dir.join("aflpp");
-            fs::remove_dir_all(&output_dir)
-                .map_err(|err| error!("could not remove '{}': {}.", &output_dir.display(), err))?;
-        }
-
-        Ok(())
-    }
-
     fn collect_one_trace(
         &self,
         trace_db: &mut TraceDatabase,
         skip_missing_traces: bool,
-        input_dir: &Path,
         scratch_dir: &Path,
+        input_dir: Option<&Path>,
     ) -> Result<Option<Trace>, RosaError> {
-        let mut test_inputs: Vec<PathBuf> = trace::get_test_input_files(input_dir)?
+        let mut test_inputs: Vec<PathBuf> = self
+            .get_test_input_files(input_dir)?
             .into_iter()
             // Only keep new inputs.
             .filter(|input| !trace_db.is_known_input(input))

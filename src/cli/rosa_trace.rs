@@ -80,7 +80,12 @@ fn run(config_file: &Path, input_file: &Path, output_file: Option<&Path>) -> Res
     main_fuzzer.backend.setup(trace_dir.path())?;
     let trace = main_fuzzer
         .backend
-        .collect_one_trace(&mut trace_db, false, trace_dir.path(), trace_dir.path())?
+        .collect_one_trace(
+            &mut trace_db,
+            false,
+            trace_dir.path(),
+            Some(trace_dir.path()),
+        )?
         .ok_or(error!("could not load any traces."))?;
     main_fuzzer.backend.teardown(trace_dir.path())?;
 

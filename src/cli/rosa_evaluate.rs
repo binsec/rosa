@@ -235,9 +235,13 @@ fn run(
     time_limit: Option<u64>,
 ) -> Result<(), RosaError> {
     let config = Config::load(&output_dir.join("config").with_extension("toml"))?;
+    let root_dir = output_dir.parent().ok_or(error!(
+        "could not get parent directory of '{}'.",
+        output_dir.display()
+    ))?;
 
     println_info!("Loading traces...");
-    let all_traces = trace::load_traces(&config.traces_dir())?;
+    let all_traces = trace::load_traces(&root_dir.join(config.traces_dir()))?;
 
     let selected_trace_uids: Vec<String> = match trace_uids.len() {
         0 => all_traces.iter().map(|trace| trace.uid()).collect(),

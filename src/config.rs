@@ -575,6 +575,11 @@ impl Config {
         self.output_dir.join("scratch")
     }
 
+    /// Get the path to the scratch directory for a specific fuzzer configuration.
+    pub fn fuzzer_scratch_dir(&self, fuzzer_config: &FuzzerConfig) -> PathBuf {
+        self.scratch_dir().join(fuzzer_config.backend.name())
+    }
+
     /// Get the path to the `logs` output directory.
     pub fn logs_dir(&self) -> PathBuf {
         self.output_dir.join("logs")
