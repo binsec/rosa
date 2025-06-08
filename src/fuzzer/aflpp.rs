@@ -380,10 +380,27 @@ impl AFLPlusPlus {
         //let strace_output = String::from_utf8_lossy(&strace_output.stderr);
         let strace_output = fs::read_to_string(strace_output_path)
             .map_err(|err| error!("could not read strace output: {}.", err))?;
-        let start_index = strace_output.find("__ROSAS_CANTINA__").ok_or(error!(
-            "could not find ROSA's trace marker, maybe a missing \
-                                `__ROSA_TRACE_START()`?"
-        ))?;
+
+        // `strace` can fail spuriously for certain target programs. That's
+        // okay, we can just skip the trace for now and hope to collect it later,
+        // if we're allowed to skip.
+        //
+        // If it keeps crashing then it will become apparent when no traces are
+        // collected at all, so this still (indirectly) lets the user know there is
+        // a problem.
+        let find_result = strace_output.find("__ROSAS_CANTINA__");
+        if find_result.is_none() {
+            if skip_missing_traces {
+                return Ok(None);
+            } else {
+                fail!(
+                    "could not find ROSA's trace marker, maybe a missing `__ROSA_TRACE_START()`?"
+                )?;
+            }
+        }
+        let start_index =
+            find_result.expect("find_result should be `Some(...)` after `is_none()` check.");
+
         let strace_regex = Regex::new(concat!(
             r"(?m)^",
             r"[[:digit:]]+[[:space:]]*",
