@@ -263,26 +263,15 @@ fn reevaluate_decision(
                 .filter(|syscall| base_trace_syscalls.contains(syscall))
                 .collect();
 
-            // If the current trace has all the trace discriminants, it means that the discriminants
-            // only appear in the current trace and not in the base trace.
-            let has_all_trace_discriminants = timed_decision
-                .decision
-                .discriminants
-                .trace_syscalls
-                .iter()
-                .all(|syscall| !base_trace_syscalls.contains(syscall));
-            // If the base case lacks all cluster discriminants, it means that the discriminants
-            // are only absent in the current trace, but present in the base trace.
-            let lacks_all_cluster_discriminants = timed_decision
-                .decision
-                .discriminants
-                .cluster_syscalls
-                .iter()
-                .all(|syscall| base_trace_syscalls.contains(syscall));
-
             DiffDecision {
-                // If both aforementioned conditions are true, then this trace is suspicious.
-                is_backdoor: has_all_trace_discriminants && lacks_all_cluster_discriminants,
+                // If one or more of the following are true, then this is a backdoor:
+                //
+                // 1. There is **at least one** trace discriminant in the current trace which does
+                //    **not** come up in the base trace;
+                // 2. There is **at least one** cluster discriminant in the current trace which
+                //    does **not** come up in the base trace.
+                is_backdoor: !trace_syscalls_not_in_base.is_empty()
+                    || !cluster_syscalls_in_base.is_empty(),
                 current_cluster_discriminants: cluster_syscalls_in_base,
                 base_cluster_discriminants: Vec::new(),
                 current_trace_discriminants: trace_syscalls_not_in_base,
