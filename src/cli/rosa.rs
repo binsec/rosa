@@ -83,6 +83,17 @@ struct Cli {
     )]
     wait_for_fuzzers: bool,
 
+    /// Stop immediately after Ctrl-C/SIGINT without collecting any remaining fuzzer inputs.
+    /// By default, ROSA will not stop immediately after Ctrl-C/SIGINT, but will spend some time
+    /// collecting any unprocessed/not yet seen fuzzer-generated inputs. This option overrides that
+    /// behavior and can be used to stop ROSA immediately.
+    #[arg(
+        long_help,
+        long,
+        help = "Stop immediately (will not collect any remaining fuzzer inputs)"
+    )]
+    hard_stop: bool,
+
     /// Collect traces from all the fuzzer instances if there are multiple of them. By default,
     /// only traces from the "main" instance will be collected. Be warned: this will probably speed
     /// up backdoor detection, but it might also produce duplicate traces, since there may be
@@ -143,6 +154,46 @@ fn start_fuzzer_instance(
     Ok(())
 }
 
+/// Collect new traces from one or more fuzzer instances.
+///
+/// Note that this function will attempt to collect at most one trace from each fuzzer.
+fn collect_new_traces(
+    config: &Config,
+    trace_db: &mut TraceDatabase,
+    skip_missing_traces: bool,
+    collect_from_all_fuzzers: bool,
+) -> Result<Vec<Trace>, RosaError> {
+    if collect_from_all_fuzzers {
+        let traces = config
+            .fuzzers
+            .iter()
+            .map(|fuzzer_config| {
+                fuzzer_config.backend.collect_one_trace(
+                    trace_db,
+                    skip_missing_traces,
+                    &config.fuzzer_scratch_dir(fuzzer_config),
+                    None,
+                )
+            })
+            .collect::<Result<Vec<Option<Trace>>, RosaError>>()?
+            .into_iter()
+            .flatten()
+            .collect();
+
+        Ok(traces)
+    } else {
+        let main_fuzzer = config.main_fuzzer()?;
+        let new_trace = main_fuzzer.backend.collect_one_trace(
+            trace_db,
+            skip_missing_traces,
+            &config.fuzzer_scratch_dir(main_fuzzer),
+            None,
+        )?;
+
+        Ok(new_trace.map(|trace| vec![trace]).unwrap_or(Vec::new()))
+    }
+}
+
 /// Run the backdoor detection tool.
 ///
 /// This function implements the backdoor detection approach introduced by ROSA:
@@ -154,6 +205,7 @@ fn run(
     verbose: bool,
     no_tui: bool,
     wait_for_fuzzers: bool,
+    hard_stop: bool,
     collect_from_all_fuzzers: bool,
 ) -> Result<(), RosaError> {
     // Load the configuration and set up the output directories.
@@ -313,41 +365,15 @@ fn run(
 
         // Collect new traces.
         let new_traces = with_cleanup!(
-            if collect_from_all_fuzzers {
-                let traces = config
-                    .fuzzers
-                    .iter()
-                    .map(|fuzzer_config| {
-                        fuzzer_config.backend.collect_one_trace(
-                            &mut trace_db,
-                            // Skip missing traces, because the fuzzer is continually producing
-                            // new ones, and we might miss some because of the timing of the
-                            // writes; it's okay, we'll pick them up on the next iteration.
-                            true,
-                            &config.fuzzer_scratch_dir(fuzzer_config),
-                            None,
-                        )
-                    })
-                    .collect::<Result<Vec<Option<Trace>>, RosaError>>()?
-                    .into_iter()
-                    .flatten()
-                    .collect();
-
-                Ok(traces)
-            } else {
-                let main_fuzzer = config.main_fuzzer()?;
-                let new_trace = main_fuzzer.backend.collect_one_trace(
-                    &mut trace_db,
-                    // Skip missing traces, because the fuzzer is continually producing new
-                    // ones, and we might miss some because of the timing of the writes; it's
-                    // okay, we'll pick them up on the next iteration.
-                    true,
-                    &config.fuzzer_scratch_dir(main_fuzzer),
-                    None,
-                )?;
-
-                Ok(new_trace.map(|trace| vec![trace]).unwrap_or(Vec::new()))
-            },
+            collect_new_traces(
+                &config,
+                &mut trace_db,
+                // Skip missing traces, because the fuzzer(s) is/are continually producing new ones,
+                // and we might miss some because of the timing of the writes; it's okay, we'll pick
+                // them up on the next iteration.
+                false,
+                collect_from_all_fuzzers
+            ),
             fuzzer_instances
         )?;
         // Save traces to output dir for later inspection.
@@ -550,6 +576,105 @@ fn run(
             fuzzer_instance.config.backend.teardown(&config.output_dir)
         })?;
 
+    if !hard_stop {
+        println_info!("Collecting remaining fuzzer inputs...");
+        loop {
+            let new_traces = collect_new_traces(
+                &config,
+                &mut trace_db,
+                // Do not skip missing traces. The fuzzers are stopped, so every trace we're
+                // interested in should be there.
+                false,
+                collect_from_all_fuzzers,
+            )?;
+            // Save traces to output dir for later inspection.
+            trace::save_traces(&new_traces, &config.traces_dir())?;
+
+            // Run the oracle on the traces.
+            new_traces
+                .iter()
+                // Get most similar cluster.
+                .map(|trace| {
+                    (
+                        trace,
+                        clustering::get_most_similar_cluster(
+                            trace,
+                            &clusters,
+                            config.cluster_selection_criterion,
+                            config.cluster_selection_distance_metric.clone(),
+                        )
+                        .expect("failed to get most similar cluster."),
+                    )
+                })
+                // Perform oracle inference.
+                .map(|(trace, cluster)| {
+                    let decision = config.oracle.decide(
+                        trace,
+                        cluster,
+                        config.oracle_criterion,
+                        config.oracle_distance_metric.clone(),
+                    );
+                    (trace, decision)
+                })
+                .try_for_each(|(trace, decision)| {
+                    if decision.is_backdoor {
+                        nb_total_backdoors += 1;
+
+                        // Get the fingeprint to deduplicate backdoor.
+                        // Essentially, if the backdoor was detected for the same reason as a
+                        // pre-existing backdoor, we should avoid listing them as two different
+                        // backdoors.
+                        let fingerprint = decision
+                            .discriminants
+                            .fingerprint(config.oracle_criterion, &decision.cluster_uid);
+
+                        // Attempt to create a directory for this category of backdoor.
+                        let backdoor_dir = config.backdoors_dir().join(fingerprint);
+                        match fs::create_dir(&backdoor_dir) {
+                            Ok(_) => {
+                                nb_unique_backdoors += 1;
+                                Ok(())
+                            }
+                            Err(error) => match error.kind() {
+                                ErrorKind::AlreadyExists => Ok(()),
+                                _ => Err(error),
+                            },
+                        }
+                        .map_err(|err| {
+                            error!("could not create '{}': {}", &backdoor_dir.display(), err)
+                        })?;
+
+                        // Save backdoor.
+                        trace.save_test_input(&backdoor_dir.join(trace.uid()))?;
+                    }
+
+                    let timed_decision = TimedDecision {
+                        decision,
+                        seconds: start_time.elapsed().as_secs(),
+                    };
+
+                    timed_decision.save(&config.decisions_dir())
+                })?;
+
+            if new_traces.is_empty() {
+                break;
+            }
+        }
+
+        // Before exiting, update coverage & stats.
+        let current_traces: Vec<Trace> = trace_db.traces().clone();
+        let (edge_coverage, syscall_coverage) = trace::get_coverage(&current_traces);
+        config.set_current_coverage(edge_coverage, syscall_coverage)?;
+        config.log_stats(
+            start_time.elapsed().as_secs(),
+            current_traces.len() as u64,
+            nb_unique_backdoors,
+            nb_total_backdoors,
+            edge_coverage,
+            syscall_coverage,
+        )?;
+    }
+
     config.set_current_phase(RosaPhase::Stopped)?;
 
     Ok(())
@@ -565,6 +690,7 @@ fn main() -> ExitCode {
         cli.verbose,
         cli.no_tui,
         cli.wait_for_fuzzers,
+        cli.hard_stop,
         cli.collect_from_all_fuzzers,
     ) {
         Ok(_) => {
