@@ -155,6 +155,7 @@ impl AFLPlusPlus {
                     // Ignore files/dirs we cannot read.
                     .filter_map(|item| item.ok())
                     .map(|item| item.path())
+                    .filter(|path| path.is_file())
                     .collect()
             })
             .map_err(|err| {
