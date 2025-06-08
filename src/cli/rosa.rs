@@ -371,7 +371,7 @@ fn run(
                 // Skip missing traces, because the fuzzer(s) is/are continually producing new ones,
                 // and we might miss some because of the timing of the writes; it's okay, we'll pick
                 // them up on the next iteration.
-                false,
+                true,
                 collect_from_all_fuzzers
             ),
             fuzzer_instances
