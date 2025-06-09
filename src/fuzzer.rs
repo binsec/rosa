@@ -50,6 +50,8 @@ pub trait FuzzerBackend: DynClone {
 
     /// Collect a single (new) trace from the fuzzer.
     ///
+    /// This is the function to use when "hot-loading" traces while the fuzzer is running.
+    ///
     /// A database of known inputs and traces is passed to make the collection more efficient, by
     /// ignoring inputs and traces that have already been evaluated. The option to skip missing
     /// traces is also passed, in the case where the trace dump is not yet complete.
@@ -64,9 +66,28 @@ pub trait FuzzerBackend: DynClone {
         &self,
         trace_db: &mut TraceDatabase,
         skip_missing_traces: bool,
-        output_dir: &Path,
+        scratch_dir: &Path,
         input_dir: Option<&Path>,
     ) -> Result<Option<Trace>, RosaError>;
+
+    /// Collect all remaining traces from the fuzzer.
+    ///
+    /// This is the function to use when "cold-loading" traces while the fuzzer is stopped.
+    ///
+    /// A database of known inputs and traces is passed to make the collection more efficient, by
+    /// ignoring inputs and traces that have already been evaluated. The option to skip missing
+    /// traces is also passed, in the case where the trace dump is not yet complete.
+    ///
+    /// The `input_dir` parameter can be used to override the directory where we should look for
+    /// test input files (by default, [test_input_dir](crate::fuzzer::FuzzerBackend::test_input_dir)
+    /// is used).
+    fn collect_all_traces(
+        &self,
+        trace_db: &mut TraceDatabase,
+        skip_missing_traces: bool,
+        scratch_dir: &Path,
+        input_dir: Option<&Path>,
+    ) -> Result<Vec<Trace>, RosaError>;
 
     /// Set up things in the scratch directory before the fuzzing campaign starts.
     fn setup(&self, _scratch_dir: &Path) -> Result<(), RosaError> {

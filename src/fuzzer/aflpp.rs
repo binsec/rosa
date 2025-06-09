@@ -11,6 +11,7 @@ use std::{
     process::{Command, Stdio},
 };
 
+use rand::seq::IndexedRandom;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tempfile::{self, NamedTempFile};
@@ -481,6 +482,69 @@ impl AFLPlusPlus {
             )
         }
     }
+
+    /// A wrapper to handle collecting a single trace regardless of AFL++ mode.
+    fn collect_one_trace_from_one_input(
+        &self,
+        trace_db: &mut TraceDatabase,
+        skip_missing_traces: bool,
+        scratch_dir: &Path,
+        test_input_path: &Path,
+    ) -> Result<Option<Trace>, RosaError> {
+        // First, check that the test input file still exists.
+        if test_input_path.exists() {
+            // If the test input exists, save it to a temporary file. This way, even if
+            // AFL++ renames or deletes it, we still have it.
+            let original_test_input_path = test_input_path;
+            let test_input: Vec<u8> = fs::read(test_input_path).map_err(|err| {
+                error!(
+                    "could not read test input file '{}': {}.",
+                    test_input_path.display(),
+                    err
+                )
+            })?;
+            let test_input_path = NamedTempFile::new()
+                .map_err(|err| error!("could not create temporary file: {}.", err))?
+                .into_temp_path();
+            fs::write(&test_input_path, &test_input)
+                .map_err(|err| error!("could not write test input to temporary file: {}.", err))?;
+
+            let new_trace = match self.mode {
+                AFLPlusPlusMode::Standard => self.collect_one_trace_standard(
+                    skip_missing_traces,
+                    original_test_input_path,
+                    &test_input_path,
+                    &test_input,
+                    scratch_dir,
+                ),
+                AFLPlusPlusMode::QEMU => self.collect_one_trace_qemu(
+                    skip_missing_traces,
+                    original_test_input_path,
+                    &test_input_path,
+                ),
+            }?;
+
+            // Register input & trace (if needed).
+            Ok(new_trace.and_then(|trace| {
+                trace_db.register_input(original_test_input_path);
+
+                if !trace_db.has_trace(&trace.uid()) {
+                    trace_db.insert_trace(trace.clone());
+
+                    Some(trace)
+                } else {
+                    None
+                }
+            }))
+        } else if skip_missing_traces {
+            Ok(None)
+        } else {
+            fail!(
+                "could not open test input file '{}': file does not exist.",
+                test_input_path.display()
+            )
+        }
+    }
 }
 
 #[typetag::serde(name = "afl++")]
@@ -635,74 +699,54 @@ impl FuzzerBackend for AFLPlusPlus {
         scratch_dir: &Path,
         input_dir: Option<&Path>,
     ) -> Result<Option<Trace>, RosaError> {
-        let mut test_inputs: Vec<PathBuf> = self
+        let test_inputs: Vec<PathBuf> = self
             .get_test_input_files(input_dir)?
             .into_iter()
             // Only keep new inputs.
             .filter(|input| !trace_db.is_known_input(input))
             .collect();
 
-        // Attempt to get the last (most recent) test input.
-        test_inputs.sort();
+        // Choose a random input from the available ones.
         test_inputs
-            .last()
+            .choose(&mut rand::rng())
             .map(|test_input_path| {
-                // First, check that the test input file still exists.
-                if test_input_path.exists() {
-                    // If the test input exists, save it to a temporary file. This way, even if
-                    // AFL++ renames or deletes it, we still have it.
-                    let original_test_input_path = test_input_path.clone();
-                    let test_input: Vec<u8> = fs::read(test_input_path).map_err(|err| {
-                        error!(
-                            "could not read test input file '{}': {}.",
-                            test_input_path.display(),
-                            err
-                        )
-                    })?;
-                    let test_input_path = NamedTempFile::new()
-                        .map_err(|err| error!("could not create temporary file: {}.", err))?
-                        .into_temp_path();
-                    fs::write(&test_input_path, &test_input).map_err(|err| {
-                        error!("could not write test input to temporary file: {}.", err)
-                    })?;
-
-                    let new_trace = match self.mode {
-                        AFLPlusPlusMode::Standard => self.collect_one_trace_standard(
-                            skip_missing_traces,
-                            &original_test_input_path,
-                            &test_input_path,
-                            &test_input,
-                            scratch_dir,
-                        ),
-                        AFLPlusPlusMode::QEMU => self.collect_one_trace_qemu(
-                            skip_missing_traces,
-                            &original_test_input_path,
-                            &test_input_path,
-                        ),
-                    }?;
-
-                    // Register input & trace (if needed).
-                    Ok(new_trace.and_then(|trace| {
-                        trace_db.register_input(&original_test_input_path);
-
-                        if !trace_db.has_trace(&trace.uid()) {
-                            trace_db.insert_trace(trace.clone());
-
-                            Some(trace)
-                        } else {
-                            None
-                        }
-                    }))
-                } else if skip_missing_traces {
-                    Ok(None)
-                } else {
-                    fail!(
-                        "could not open test input file '{}': file does not exist.",
-                        test_input_path.display()
-                    )
-                }
+                self.collect_one_trace_from_one_input(
+                    trace_db,
+                    skip_missing_traces,
+                    scratch_dir,
+                    test_input_path,
+                )
             })
             .unwrap_or(Ok(None))
+    }
+
+    fn collect_all_traces(
+        &self,
+        trace_db: &mut TraceDatabase,
+        skip_missing_traces: bool,
+        scratch_dir: &Path,
+        input_dir: Option<&Path>,
+    ) -> Result<Vec<Trace>, RosaError> {
+        let test_inputs: Vec<PathBuf> = self
+            .get_test_input_files(input_dir)?
+            .into_iter()
+            // Only keep new inputs.
+            .filter(|input| !trace_db.is_known_input(input))
+            .collect();
+
+        test_inputs
+            .into_iter()
+            // Filter out `None` traces, usually corresponding to failures.
+            .filter_map(|test_input_path| {
+                self.collect_one_trace_from_one_input(
+                    trace_db,
+                    skip_missing_traces,
+                    scratch_dir,
+                    &test_input_path,
+                )
+                .transpose()
+            })
+            .collect()
     }
 }
 

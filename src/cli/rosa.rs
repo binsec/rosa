@@ -162,35 +162,68 @@ fn collect_new_traces(
     trace_db: &mut TraceDatabase,
     skip_missing_traces: bool,
     collect_from_all_fuzzers: bool,
+    collect_all_traces: bool,
 ) -> Result<Vec<Trace>, RosaError> {
     if collect_from_all_fuzzers {
-        let traces = config
-            .fuzzers
-            .iter()
-            .map(|fuzzer_config| {
-                fuzzer_config.backend.collect_one_trace(
-                    trace_db,
-                    skip_missing_traces,
-                    &config.fuzzer_scratch_dir(fuzzer_config),
-                    None,
-                )
-            })
-            .collect::<Result<Vec<Option<Trace>>, RosaError>>()?
-            .into_iter()
-            .flatten()
-            .collect();
+        let traces = if collect_all_traces {
+            config
+                .fuzzers
+                .iter()
+                .flat_map(|fuzzer_config| {
+                    match fuzzer_config.backend.collect_all_traces(
+                        trace_db,
+                        skip_missing_traces,
+                        &config.fuzzer_scratch_dir(fuzzer_config),
+                        None,
+                    ) {
+                        // We have to do this little dance because `flat_map()` will
+                        // essentially strip `Err()`s out. We want to keep them in explicitly.
+                        //
+                        // See https://stackoverflow.com/a/59852696.
+                        Ok(vec) => vec.into_iter().map(Ok).collect(),
+                        Err(err) => vec![Err(err)],
+                    }
+                })
+                .collect::<Result<Vec<Trace>, RosaError>>()?
+        } else {
+            config
+                .fuzzers
+                .iter()
+                .map(|fuzzer_config| {
+                    fuzzer_config.backend.collect_one_trace(
+                        trace_db,
+                        skip_missing_traces,
+                        &config.fuzzer_scratch_dir(fuzzer_config),
+                        None,
+                    )
+                })
+                .collect::<Result<Vec<Option<Trace>>, RosaError>>()?
+                .into_iter()
+                .flatten()
+                .collect()
+        };
 
         Ok(traces)
     } else {
         let main_fuzzer = config.main_fuzzer()?;
-        let new_trace = main_fuzzer.backend.collect_one_trace(
-            trace_db,
-            skip_missing_traces,
-            &config.fuzzer_scratch_dir(main_fuzzer),
-            None,
-        )?;
 
-        Ok(new_trace.map(|trace| vec![trace]).unwrap_or(Vec::new()))
+        if collect_all_traces {
+            main_fuzzer.backend.collect_all_traces(
+                trace_db,
+                skip_missing_traces,
+                &config.fuzzer_scratch_dir(main_fuzzer),
+                None,
+            )
+        } else {
+            let new_trace = main_fuzzer.backend.collect_one_trace(
+                trace_db,
+                skip_missing_traces,
+                &config.fuzzer_scratch_dir(main_fuzzer),
+                None,
+            )?;
+
+            Ok(new_trace.map(|trace| vec![trace]).unwrap_or(Vec::new()))
+        }
     }
 }
 
@@ -378,7 +411,9 @@ fn run(
                 // and we might miss some because of the timing of the writes; it's okay, we'll pick
                 // them up on the next iteration.
                 true,
-                collect_from_all_fuzzers
+                collect_from_all_fuzzers,
+                // Only collect one trace to keep performance optimal.
+                false,
             ),
             fuzzer_instances
         )?;
@@ -595,6 +630,9 @@ fn run(
                 // interested in should be there.
                 false,
                 collect_from_all_fuzzers,
+                // Collect all remaining traces. We don't care about iterating fast per trace here,
+                // since the fuzzers are stopped.
+                true,
             )?;
             // Save traces to output dir for later inspection.
             trace::save_traces(&new_traces, &config.traces_dir())?;
