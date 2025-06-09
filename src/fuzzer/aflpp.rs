@@ -242,7 +242,8 @@ impl AFLPlusPlus {
         .envs(config::replace_env_var_placeholders(&self.env()))
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .status();
+        .status()
+        .map_err(|err| error!("could not get `afl-showmap`'s status: {}.", err))?;
 
         // `afl-showmap` can fail spuriously for certain target programs. That's
         // okay, we can just skip the trace for now and hope to collect it later,
@@ -251,10 +252,7 @@ impl AFLPlusPlus {
         // If it keeps crashing then it will become apparent when no traces are
         // collected at all, so this still (indirectly) lets the user know there is
         // a problem.
-        if !afl_showmap_status
-            .map(|status| status.success())
-            .unwrap_or(false)
-        {
+        if !afl_showmap_status.success() {
             if skip_missing_traces {
                 return Ok(None);
             } else {
@@ -262,8 +260,9 @@ impl AFLPlusPlus {
                 fs::write(&input_dump, test_input)
                     .expect("failed to write input to emergency file.");
                 fail!(
-                    "`afl-showmap` failed while processing '{}'. Input dumped to {}.",
+                    "`afl-showmap` failed while processing '{}' ({:?}). Input dumped to {}.",
                     original_test_input_path.display(),
+                    afl_showmap_status,
                     input_dump.display()
                 )?;
             }
@@ -375,9 +374,8 @@ impl AFLPlusPlus {
         // of the ROSA marker; if the marker is there, it's highly unlikely that
         // `strace` failed.
         .status()
-        .map_err(|err| error!("`strace` failed: {}.", err))?;
+        .map_err(|err| error!("could not get `strace`'s status: {}.", err))?;
 
-        //let strace_output = String::from_utf8_lossy(&strace_output.stderr);
         let strace_output = fs::read_to_string(strace_output_path)
             .map_err(|err| error!("could not read strace output: {}.", err))?;
 
@@ -651,8 +649,8 @@ impl FuzzerBackend for AFLPlusPlus {
             .map(|test_input_path| {
                 // First, check that the test input file still exists.
                 if test_input_path.exists() {
-                    // If the test input exists, save it to a temporary file. This way, even if AFL++
-                    // renames or deletes it, we still have it.
+                    // If the test input exists, save it to a temporary file. This way, even if
+                    // AFL++ renames or deletes it, we still have it.
                     let original_test_input_path = test_input_path.clone();
                     let test_input: Vec<u8> = fs::read(test_input_path).map_err(|err| {
                         error!(
