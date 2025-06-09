@@ -706,7 +706,7 @@ impl FuzzerBackend for AFLPlusPlus {
         scratch_dir: &Path,
         input_dir: Option<&Path>,
     ) -> Result<Option<Trace>, RosaError> {
-        let test_inputs: Vec<PathBuf> = self
+        let mut test_inputs: Vec<PathBuf> = self
             .get_test_input_files(input_dir)?
             .into_iter()
             // Only keep new inputs.
@@ -714,6 +714,7 @@ impl FuzzerBackend for AFLPlusPlus {
             .collect();
 
         // Get the first available input.
+        test_inputs.sort();
         test_inputs
             .first()
             .map(|test_input_path| {
@@ -734,13 +735,14 @@ impl FuzzerBackend for AFLPlusPlus {
         scratch_dir: &Path,
         input_dir: Option<&Path>,
     ) -> Result<Vec<Trace>, RosaError> {
-        let test_inputs: Vec<PathBuf> = self
+        let mut test_inputs: Vec<PathBuf> = self
             .get_test_input_files(input_dir)?
             .into_iter()
             // Only keep new inputs.
             .filter(|input| !trace_db.is_known_input(input))
             .collect();
 
+        test_inputs.sort();
         test_inputs
             .into_iter()
             // Filter out `None` traces, usually corresponding to failures.
