@@ -234,8 +234,6 @@ fn run(
         .iter()
         .map(|fuzzer_config| {
             let scratch_dir = config.fuzzer_scratch_dir(fuzzer_config);
-            // Run the setup for each instance.
-            fuzzer_config.backend.setup(&scratch_dir)?;
 
             let log_file_path = config
                 .logs_dir()
@@ -243,7 +241,15 @@ fn run(
                 .join(format!("fuzzer_{}", fuzzer_config.backend.name()))
                 .with_extension("log");
 
-            FuzzerInstance::create(fuzzer_config.clone(), scratch_dir, log_file_path)
+            let fuzzer_instance =
+                FuzzerInstance::create(fuzzer_config.clone(), scratch_dir, log_file_path)?;
+            // Run the setup for each instance.
+            fuzzer_instance
+                .config
+                .backend
+                .setup(&fuzzer_instance.scratch_dir)?;
+
+            Ok(fuzzer_instance)
         })
         .collect::<Result<Vec<FuzzerInstance>, RosaError>>()?;
 
@@ -573,7 +579,10 @@ fn run(
         .try_for_each(|fuzzer_instance| {
             fuzzer_instance.stop()?;
             // Run the teardown for each instance.
-            fuzzer_instance.config.backend.teardown(&config.output_dir)
+            fuzzer_instance
+                .config
+                .backend
+                .teardown(&fuzzer_instance.scratch_dir)
         })?;
 
     if !hard_stop {
