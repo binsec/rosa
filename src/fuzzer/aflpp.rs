@@ -200,6 +200,14 @@ impl AFLPlusPlus {
             showmap_output_path.to_string_lossy().to_string(),
             "-q".to_string(),
             "-e".to_string(),
+            // This is a very silly thing to do, however we do not really care if there is a
+            // timeout when running afl-showmap. Annoyingly, when there is a timeout, `afl-showmap`
+            // exits with an error code (2) which is also used for other exit reasons, making it
+            // ambiguous. Since we can't depend on that to know that there actually is an issue, we
+            // raise the timeout to 5 seconds. If an input takes longer than that, then there is
+            // probably an issue with the corpus, although this is not a super elegant solution.
+            "-t".to_string(),
+            "5000".to_string(),
             "--".to_string(),
         ];
 
