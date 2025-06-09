@@ -622,91 +622,85 @@ fn run(
 
     if !hard_stop {
         println_info!("Collecting remaining fuzzer inputs...");
-        loop {
-            let new_traces = collect_new_traces(
-                &config,
-                &mut trace_db,
-                // Do not skip missing traces. The fuzzers are stopped, so every trace we're
-                // interested in should be there.
-                false,
-                collect_from_all_fuzzers,
-                // Collect all remaining traces. We don't care about iterating fast per trace here,
-                // since the fuzzers are stopped.
-                true,
-            )?;
-            // Save traces to output dir for later inspection.
-            trace::save_traces(&new_traces, &config.traces_dir())?;
+        let new_traces = collect_new_traces(
+            &config,
+            &mut trace_db,
+            // Do not skip missing traces. The fuzzers are stopped, so every trace we're
+            // interested in should be there.
+            false,
+            collect_from_all_fuzzers,
+            // Collect all remaining traces. We don't care about iterating fast per trace here,
+            // since the fuzzers are stopped.
+            true,
+        )?;
+        // Save traces to output dir for later inspection.
+        trace::save_traces(&new_traces, &config.traces_dir())?;
 
-            // Run the oracle on the traces.
-            new_traces
-                .iter()
-                // Get most similar cluster.
-                .map(|trace| {
-                    (
+        // Run the oracle on the traces.
+        new_traces
+            .iter()
+            // Get most similar cluster.
+            .map(|trace| {
+                (
+                    trace,
+                    clustering::get_most_similar_cluster(
                         trace,
-                        clustering::get_most_similar_cluster(
-                            trace,
-                            &clusters,
-                            config.cluster_selection_criterion,
-                            config.cluster_selection_distance_metric.clone(),
-                        )
-                        .expect("failed to get most similar cluster."),
+                        &clusters,
+                        config.cluster_selection_criterion,
+                        config.cluster_selection_distance_metric.clone(),
                     )
-                })
-                // Perform oracle inference.
-                .map(|(trace, cluster)| {
-                    let decision = config.oracle.decide(
-                        trace,
-                        cluster,
-                        config.oracle_criterion,
-                        config.oracle_distance_metric.clone(),
-                    );
-                    (trace, decision)
-                })
-                .try_for_each(|(trace, decision)| {
-                    if decision.is_backdoor {
-                        nb_total_backdoors += 1;
+                    .expect("failed to get most similar cluster."),
+                )
+            })
+            // Perform oracle inference.
+            .map(|(trace, cluster)| {
+                let decision = config.oracle.decide(
+                    trace,
+                    cluster,
+                    config.oracle_criterion,
+                    config.oracle_distance_metric.clone(),
+                );
+                (trace, decision)
+            })
+            .try_for_each(|(trace, decision)| {
+                if decision.is_backdoor {
+                    nb_total_backdoors += 1;
 
-                        // Get the fingeprint to deduplicate backdoor.
-                        // Essentially, if the backdoor was detected for the same reason as a
-                        // pre-existing backdoor, we should avoid listing them as two different
-                        // backdoors.
-                        let fingerprint = decision
-                            .discriminants
-                            .fingerprint(config.oracle_criterion, &decision.cluster_uid);
+                    // Get the fingeprint to deduplicate backdoor.
+                    // Essentially, if the backdoor was detected for the same reason as a
+                    // pre-existing backdoor, we should avoid listing them as two different
+                    // backdoors.
+                    let fingerprint = decision
+                        .discriminants
+                        .fingerprint(config.oracle_criterion, &decision.cluster_uid);
 
-                        // Attempt to create a directory for this category of backdoor.
-                        let backdoor_dir = config.backdoors_dir().join(fingerprint);
-                        match fs::create_dir(&backdoor_dir) {
-                            Ok(_) => {
-                                nb_unique_backdoors += 1;
-                                Ok(())
-                            }
-                            Err(error) => match error.kind() {
-                                ErrorKind::AlreadyExists => Ok(()),
-                                _ => Err(error),
-                            },
+                    // Attempt to create a directory for this category of backdoor.
+                    let backdoor_dir = config.backdoors_dir().join(fingerprint);
+                    match fs::create_dir(&backdoor_dir) {
+                        Ok(_) => {
+                            nb_unique_backdoors += 1;
+                            Ok(())
                         }
-                        .map_err(|err| {
-                            error!("could not create '{}': {}", &backdoor_dir.display(), err)
-                        })?;
-
-                        // Save backdoor.
-                        trace.save_test_input(&backdoor_dir.join(trace.uid()))?;
+                        Err(error) => match error.kind() {
+                            ErrorKind::AlreadyExists => Ok(()),
+                            _ => Err(error),
+                        },
                     }
+                    .map_err(|err| {
+                        error!("could not create '{}': {}", &backdoor_dir.display(), err)
+                    })?;
 
-                    let timed_decision = TimedDecision {
-                        decision,
-                        seconds: start_time.elapsed().as_secs(),
-                    };
+                    // Save backdoor.
+                    trace.save_test_input(&backdoor_dir.join(trace.uid()))?;
+                }
 
-                    timed_decision.save(&config.decisions_dir())
-                })?;
+                let timed_decision = TimedDecision {
+                    decision,
+                    seconds: start_time.elapsed().as_secs(),
+                };
 
-            if new_traces.is_empty() {
-                break;
-            }
-        }
+                timed_decision.save(&config.decisions_dir())
+            })?;
 
         // Before exiting, update coverage & stats.
         let current_traces: Vec<Trace> = trace_db.traces().clone();
