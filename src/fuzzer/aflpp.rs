@@ -11,7 +11,6 @@ use std::{
     process::{Command, Stdio},
 };
 
-use rand::seq::IndexedRandom;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tempfile::{self, NamedTempFile};
@@ -706,9 +705,9 @@ impl FuzzerBackend for AFLPlusPlus {
             .filter(|input| !trace_db.is_known_input(input))
             .collect();
 
-        // Choose a random input from the available ones.
+        // Get the first available input.
         test_inputs
-            .choose(&mut rand::rng())
+            .first()
             .map(|test_input_path| {
                 self.collect_one_trace_from_one_input(
                     trace_db,
