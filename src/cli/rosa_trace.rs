@@ -63,6 +63,8 @@ fn run(config_file: &Path, input_file: &Path, output_file: Option<&Path>) -> Res
     // trace collection mechanism.
     let trace_dir = tempfile::tempdir()
         .map_err(|err| error!("could not create temporary directory: {}.", err))?;
+    let scratch_dir = tempfile::tempdir()
+        .map_err(|err| error!("could not create temporary directory: {}.", err))?;
     let input_copy = trace_dir.path().join(
         input_file
             .file_name()
@@ -77,17 +79,17 @@ fn run(config_file: &Path, input_file: &Path, output_file: Option<&Path>) -> Res
     })?;
 
     let mut trace_db = TraceDatabase::new();
-    main_fuzzer.backend.setup(trace_dir.path())?;
+    main_fuzzer.backend.setup(scratch_dir.path())?;
     let trace = main_fuzzer
         .backend
         .collect_one_trace(
             &mut trace_db,
             false,
-            trace_dir.path(),
+            scratch_dir.path(),
             Some(trace_dir.path()),
         )?
         .ok_or(error!("could not load any traces."))?;
-    main_fuzzer.backend.teardown(trace_dir.path())?;
+    main_fuzzer.backend.teardown(scratch_dir.path())?;
 
     let default_file = PathBuf::from(".").join(trace.uid()).with_extension("trace");
     let output_file = output_file.unwrap_or(&default_file);
