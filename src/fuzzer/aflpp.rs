@@ -200,14 +200,6 @@ impl AFLPlusPlus {
             showmap_output_path.to_string_lossy().to_string(),
             "-q".to_string(),
             "-e".to_string(),
-            // This is a very silly thing to do, however we do not really care if there is a
-            // timeout when running afl-showmap. Annoyingly, when there is a timeout, `afl-showmap`
-            // exits with an error code (2) which is also used for other exit reasons, making it
-            // ambiguous. Since we can't depend on that to know that there actually is an issue, we
-            // raise the timeout to 5 seconds. If an input takes longer than that, then there is
-            // probably an issue with the corpus, although this is not a super elegant solution.
-            "-t".to_string(),
-            "5000".to_string(),
             "--".to_string(),
         ];
 
@@ -261,9 +253,18 @@ impl AFLPlusPlus {
         // collected at all, so this still (indirectly) lets the user know there is
         // a problem.
         if !afl_showmap_status.success() {
+            // `afl-showmap` exits with code `2` on timeout. We don't really care about the timeout
+            // itself (we will still gladly take the captured edges), so we will just not consider
+            // this to be an error. However, there is no real guarantee that exit code `2` does not
+            // mean that something *else* went wrong, but this is blocking too many things to not
+            // skip.
+            //
+            // You can set `ROSA_DO_NOT_IGNORE_AFL_SHOWMAP=1` to exit on any `afl-showmap` error.
             if skip_missing_traces {
                 return Ok(None);
-            } else {
+            } else if afl_showmap_status.code().unwrap_or(0) != 2
+                || env::var("ROSA_DO_NOT_IGNORE_AFL_SHOWMAP").unwrap_or("0".to_string()) == "1"
+            {
                 let input_dump = scratch_dir.join("afl-showmap-crashing-test-input");
                 fs::write(&input_dump, test_input)
                     .expect("failed to write input to emergency file.");
