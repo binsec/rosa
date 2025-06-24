@@ -18,7 +18,7 @@ use colored::Colorize;
 
 use rosa::{
     clustering,
-    config::Config,
+    config::{Config, phase_one::PhaseOne},
     error,
     error::RosaError,
     fail,
@@ -85,6 +85,11 @@ fn run(
     force: bool,
 ) -> Result<(), RosaError> {
     let config = Config::load(config_file)?;
+    let phase_1_seconds = match config.phase_one {
+        PhaseOne::Seconds(seconds) => Ok(seconds),
+        _ => fail!("only a phase-1 condition based on seconds is compatible with this tool."),
+    }?;
+
     let old_traces_dir = existing_rosa_dir
         .to_path_buf()
         .join("traces")
@@ -207,13 +212,10 @@ fn run(
 
     // Separate phase 1 and phase 2 traces.
     let (phase_1_timed_traces, phase_2_timed_traces): (Vec<TimedTrace>, Vec<TimedTrace>) =
-        timed_traces.clone().into_iter().partition(|timed_trace| {
-            timed_trace.seconds
-                <= config
-                    .seed_conditions
-                    .seconds
-                    .expect("failed to get phase 1 duration from config.")
-        });
+        timed_traces
+            .clone()
+            .into_iter()
+            .partition(|timed_trace| timed_trace.seconds <= phase_1_seconds);
 
     // Cluster phase 1 traces.
     println_info!(

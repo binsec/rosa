@@ -12,7 +12,7 @@ use std::{
 use colored::Colorize;
 
 use rosa::{
-    config::{Config, SeedConditions},
+    config::{Config, phase_one::PhaseOne},
     error,
     error::RosaError,
     fuzzer::{
@@ -315,11 +315,7 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
                     false,
                 ),
             ],
-            seed_conditions: SeedConditions {
-                seconds: Some(phase_1_duration),
-                edge_coverage: None,
-                syscall_coverage: None,
-            },
+            phase_one: PhaseOne::Seconds(phase_1_duration),
             cluster_formation_criterion: Config::default_cluster_formation_criterion(),
             cluster_formation_distance_metric: Config::default_cluster_formation_distance_metric(),
             cluster_formation_edge_tolerance: Config::default_cluster_formation_edge_tolerance(),

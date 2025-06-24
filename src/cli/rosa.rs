@@ -21,7 +21,7 @@ use colored::Colorize;
 
 use rosa::{
     clustering,
-    config::{Config, RosaPhase},
+    config::{Config, RosaPhase, phase_one::PhaseOne},
     error,
     error::RosaError,
     fuzzer::{FuzzerInstance, FuzzerStatus},
@@ -227,6 +227,23 @@ fn collect_new_traces(
     }
 }
 
+/// Check if the phase-1 criteria have been met.
+fn check_phase_one(
+    phase_one: &PhaseOne,
+    seconds: u64,
+    edge_coverage: f64,
+    syscall_coverage: f64,
+) -> bool {
+    match phase_one {
+        PhaseOne::Seconds(s) => seconds >= *s,
+        PhaseOne::EdgeCoverage(c) => edge_coverage >= *c,
+        PhaseOne::SyscallCoverage(c) => syscall_coverage >= *c,
+        // Since the corpus condition will be taken care of before the campaign even starts, we
+        // will assume it's been done whenever this function is called.
+        PhaseOne::Corpus(_) => true,
+    }
+}
+
 /// Run the backdoor detection tool.
 ///
 /// This function implements the backdoor detection approach introduced by ROSA:
@@ -302,39 +319,66 @@ fn run(
         env!("CARGO_PKG_VERSION")
     );
 
-    println_info!("Cluster formation config:");
+    // Print the configuration details.
     println_info!(
-        "  Distance metric: {}",
-        config.cluster_formation_distance_metric.name()
+        "{}",
+        [
+            "Configuration:".to_string(),
+            "  Phase 1:".to_string(),
+            match config.phase_one {
+                PhaseOne::Corpus(ref dir) =>
+                    format!("    Using existing corpus ({})", dir.display()),
+                PhaseOne::Seconds(seconds) => format!("    Stopping at {} seconds", seconds),
+                PhaseOne::EdgeCoverage(coverage) =>
+                    format!("    Stopping at {:.2}% edge coverage", coverage * 100.0),
+                PhaseOne::SyscallCoverage(coverage) =>
+                    format!("    Stopping at {:.2}% syscall coverage", coverage * 100.0),
+            },
+            "  Cluster formation:".to_string(),
+            format!(
+                "    Distance metric: {}",
+                config.cluster_formation_distance_metric.name()
+            ),
+            format!("    Criterion: {}", config.cluster_formation_criterion),
+            format!(
+                "    Edge tolerance: {}",
+                config.cluster_formation_edge_tolerance
+            ),
+            format!(
+                "    Syscall tolerance: {}",
+                config.cluster_formation_syscall_tolerance
+            ),
+            "  Cluster selection:".to_string(),
+            format!(
+                "    Distance metric: {}",
+                config.cluster_selection_distance_metric.name()
+            ),
+            format!("    Criterion: {}", config.cluster_selection_criterion),
+            "  Oracle:".to_string(),
+            format!("    Algorithm: {}", config.oracle.name()),
+            format!(
+                "    Distance metric: {}",
+                config.oracle_distance_metric.name()
+            ),
+            format!("    Criterion: {}", config.oracle_criterion)
+        ]
+        .join("\n")
     );
-    println_info!("  Criterion: {}", config.cluster_formation_criterion);
-    println_info!(
-        "  Edge tolerance: {}",
-        config.cluster_formation_edge_tolerance
-    );
-    println_info!(
-        "  Syscall tolerance: {}",
-        config.cluster_formation_syscall_tolerance
-    );
-
-    println_info!("Cluster selection config:");
-    println_info!(
-        "  Distance metric: {}",
-        config.cluster_selection_distance_metric.name()
-    );
-    println_info!("  Criterion: {}", config.cluster_selection_criterion);
-
-    println_info!("Oracle config:");
-    println_info!(
-        "  Distance metric: {}",
-        config.oracle_distance_metric.name()
-    );
-    println_info!("  Criterion: {}", config.oracle_criterion);
-    println_info!("  Algorithm: {}", config.oracle.name());
 
     println_info!("Ready to go!");
     // Pause for a sec to let the user read the config.
     thread::sleep(Duration::from_secs(2));
+
+    // Load phase-1 corpus if needed.
+    if let PhaseOne::Corpus(ref corpus_dir) = config.phase_one {
+        let phase_one_traces = trace::load_traces(corpus_dir)?;
+        // Save the traces in the output directory.
+        trace::save_traces(&phase_one_traces, &config.traces_dir())?;
+        // Log the traces in the database.
+        phase_one_traces
+            .into_iter()
+            .for_each(|trace| trace_db.insert_trace(trace));
+    }
 
     println_info!("Starting up fuzzers...");
     // Start the fuzzers.
@@ -487,7 +531,8 @@ fn run(
             )?;
 
             // Check if the seed stopping conditions have been met.
-            if config.seed_conditions.check(
+            if check_phase_one(
+                &config.phase_one,
                 start_time.elapsed().as_secs(),
                 edge_coverage,
                 syscall_coverage,
@@ -608,6 +653,8 @@ fn run(
         let _ = handle.join();
     }
 
+    // Print a newline to clear screen after exiting TUI.
+    eprintln!();
     println_info!("Stopping fuzzer processes.");
     fuzzer_instances
         .iter_mut()

@@ -22,100 +22,8 @@ use crate::{
     oracle::{Oracle, comp_min_max::CompMinMax},
 };
 
-/// The conditions that describe when to stop collecting seed traces.
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SeedConditions {
-    /// Stop after a given amount of seconds.
-    #[serde(default = "SeedConditions::default_seconds")]
-    pub seconds: Option<u64>,
-    /// Stop once a given edge coverage has been reached (percentage between 0.0 and 1.0).
-    #[serde(default = "SeedConditions::default_edge_coverage")]
-    pub edge_coverage: Option<f64>,
-    /// Stop once a given syscall coverage has been reached (percentage between 0.0 and 1.0).
-    #[serde(default = "SeedConditions::default_syscall_coverage")]
-    pub syscall_coverage: Option<f64>,
-}
-
-impl SeedConditions {
-    const fn default_seconds() -> Option<u64> {
-        None
-    }
-
-    const fn default_edge_coverage() -> Option<f64> {
-        None
-    }
-
-    const fn default_syscall_coverage() -> Option<f64> {
-        None
-    }
-
-    /// Check if a set of seed conditions is valid.
-    ///
-    /// # Examples
-    /// ```
-    /// use rosa::config::SeedConditions;
-    ///
-    /// let conditions = SeedConditions {
-    ///     seconds: None,
-    ///     edge_coverage: None,
-    ///     syscall_coverage: None,
-    /// };
-    /// assert_eq!(conditions.valid(), false);
-    ///
-    /// let conditions = SeedConditions {
-    ///     seconds: None,
-    ///     edge_coverage: Some(100.00),
-    ///     syscall_coverage: None,
-    /// };
-    /// assert_eq!(conditions.valid(), true);
-    ///
-    /// let conditions = SeedConditions {
-    ///     seconds: Some(300),
-    ///     edge_coverage: Some(32.34),
-    ///     syscall_coverage: Some(1.2),
-    /// };
-    /// assert_eq!(conditions.valid(), true);
-    /// ```
-    pub fn valid(&self) -> bool {
-        self.seconds.is_some() || self.edge_coverage.is_some() || self.syscall_coverage.is_some()
-    }
-
-    /// Check if the seed conditions have been met.
-    ///
-    /// # Parameters
-    /// * `seconds` - The current seconds.
-    /// * `edge_coverage` - The current edge coverage.
-    /// * `syscall_coverage` - The current syscall coverage.
-    ///
-    /// # Examples
-    /// ```
-    /// use rosa::config::SeedConditions;
-    ///
-    /// let conditions = SeedConditions {
-    ///     seconds: Some(32),
-    ///     edge_coverage: None,
-    ///     syscall_coverage: None,
-    /// };
-    /// assert_eq!(conditions.check(10, 0.9999, 0.9999), false);
-    /// assert_eq!(conditions.check(32, 0.0, 0.0), true);
-    /// ```
-    pub fn check(&self, seconds: u64, edge_coverage: f64, syscall_coverage: f64) -> bool {
-        let seconds_check = self
-            .seconds
-            .map(|seconds_limit| seconds >= seconds_limit)
-            .unwrap_or(false);
-        let edge_coverage_check = self
-            .edge_coverage
-            .map(|edge_coverage_limit| edge_coverage >= edge_coverage_limit)
-            .unwrap_or(false);
-        let syscall_coverage_check = self
-            .syscall_coverage
-            .map(|syscall_coverage_limit| syscall_coverage >= syscall_coverage_limit)
-            .unwrap_or(false);
-
-        seconds_check || edge_coverage_check || syscall_coverage_check
-    }
-}
+pub mod phase_one;
+use phase_one::PhaseOne;
 
 /// The possible phases of ROSA.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -177,7 +85,7 @@ pub struct Config {
     /// The conditions that describe when to stop collecting seed traces.
     /// If multiple, the seed collection will stop once the first is met; at least one condition
     /// must be supplied.
-    pub seed_conditions: SeedConditions,
+    pub phase_one: PhaseOne,
 
     /// The criterion to use during cluster formation.
     /// See [cluster_traces](crate::clustering::cluster_traces).
@@ -361,14 +269,10 @@ impl Config {
         let config: Self = toml::from_str(&config_toml)
             .map_err(|err| error!("failed to deserialize config TOML: {}.", err))?;
 
-        config
-            .seed_conditions
-            .valid()
-            .then_some(config)
-            .ok_or(error!(
-                "at least one seed condition must be specified to know when to stop collecting \
-                    seeds."
-            ))
+        config.phase_one.is_valid().then_some(config).ok_or(error!(
+            "at least one phase 1 condition must be specified to know when to stop collecting \
+                    representative inputs."
+        ))
     }
 
     /// Set up ROSA's output directories.
