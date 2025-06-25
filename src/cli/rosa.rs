@@ -374,10 +374,28 @@ fn run(
         let phase_one_traces = trace::load_traces(corpus_dir)?;
         // Save the traces in the output directory.
         trace::save_traces(&phase_one_traces, &config.traces_dir())?;
-        // Log the traces in the database.
-        phase_one_traces
-            .into_iter()
-            .for_each(|trace| trace_db.insert_trace(trace));
+        // Save the trace decisions and log the traces in the database.
+        phase_one_traces.into_iter().try_for_each(|trace| {
+            trace_db.insert_trace(trace.clone());
+
+            let decision = TimedDecision {
+                decision: Decision {
+                    trace_uid: trace.uid(),
+                    trace_name: trace.name.clone(),
+                    cluster_uid: "<none>".to_string(),
+                    is_backdoor: false,
+                    reason: DecisionReason::Seed,
+                    discriminants: Discriminants {
+                        trace_edges: Vec::new(),
+                        cluster_edges: Vec::new(),
+                        trace_syscalls: Vec::new(),
+                        cluster_syscalls: Vec::new(),
+                    },
+                },
+                seconds: 0,
+            };
+            decision.save(&config.decisions_dir())
+        })?;
     }
 
     println_info!("Starting up fuzzers...");
