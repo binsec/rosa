@@ -65,6 +65,10 @@ struct Cli {
     )]
     force: bool,
 
+    /// Force the use of a phase-1 corpus directory (regardless of what the configuration says).
+    #[arg(long_help, long, help = "Force use of phase-1 corpus directory")]
+    phase_one_corpus: Option<PathBuf>,
+
     /// Provide more verbose output about each fuzzer instance.
     #[arg(long_help, short, long, help = "Be more verbose")]
     verbose: bool,
@@ -249,9 +253,11 @@ fn check_phase_one(
 /// This function implements the backdoor detection approach introduced by ROSA:
 /// * Phase 1: collect family-representative inputs
 /// * Phase 2: collect new inputs and use metamorphic oracle with family-representative inputs
+#[allow(clippy::too_many_arguments)]
 fn run(
     config_file: &Path,
     force: bool,
+    phase_one_corpus: Option<&Path>,
     verbose: bool,
     no_tui: bool,
     wait_for_fuzzers: bool,
@@ -259,7 +265,12 @@ fn run(
     collect_from_all_fuzzers: bool,
 ) -> Result<(), RosaError> {
     // Load the configuration and set up the output directories.
-    let config = Config::load(config_file)?;
+    let mut config = Config::load(config_file)?;
+    if let Some(phase_one_corpus_dir) = phase_one_corpus {
+        // Make the config use a phase-1 corpus.
+        config.phase_one = PhaseOne::Corpus(phase_one_corpus_dir.to_path_buf());
+    }
+
     config.setup_dirs(force)?;
     // We save the config in the output directory for reproducibility puproses.
     config.save(&config.output_dir.join("config").with_extension("toml"))?;
@@ -793,6 +804,7 @@ fn main() -> ExitCode {
     match run(
         &cli.config_file,
         cli.force,
+        cli.phase_one_corpus.as_deref(),
         cli.verbose,
         cli.no_tui,
         cli.wait_for_fuzzers,
