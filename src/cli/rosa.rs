@@ -530,49 +530,55 @@ fn run(
             }
         }
 
+        // Check whether the seed stopping conditions have been met.
         if with_cleanup!(config.get_current_phase(), fuzzer_instances)?
             == RosaPhase::CollectingInputs
-        {
-            // We're in the seed collection phase.
-            // Save the decisions for the seed traces, even though we know what they're gonna be.
-            with_cleanup!(
-                new_traces.iter().try_for_each(|trace| {
-                    let decision = TimedDecision {
-                        decision: Decision {
-                            trace_uid: trace.uid(),
-                            trace_name: trace.name.clone(),
-                            cluster_uid: "<none>".to_string(),
-                            is_backdoor: false,
-                            reason: DecisionReason::Seed,
-                            discriminants: Discriminants {
-                                trace_edges: Vec::new(),
-                                cluster_edges: Vec::new(),
-                                trace_syscalls: Vec::new(),
-                                cluster_syscalls: Vec::new(),
-                            },
-                        },
-                        seconds: start_time.elapsed().as_secs(),
-                    };
-
-                    decision.save(&config.decisions_dir())
-                }),
-                fuzzer_instances
-            )?;
-
-            // Check if the seed stopping conditions have been met.
-            if check_phase_one(
+            && check_phase_one(
                 &config.phase_one,
                 start_time.elapsed().as_secs(),
                 edge_coverage,
                 syscall_coverage,
-            ) {
-                // We're entering seed clustering phase; write it into the phase file so that the
-                // TUI can keep up.
+            )
+        {
+            // We're entering seed clustering phase; write it into the phase file so that the
+            // TUI can keep up.
+            with_cleanup!(
+                config.set_current_phase(RosaPhase::ClusteringInputs),
+                fuzzer_instances
+            )?;
+        }
+
+        match with_cleanup!(config.get_current_phase(), fuzzer_instances)? {
+            RosaPhase::Starting | RosaPhase::Stopped => {}
+            RosaPhase::CollectingInputs => {
+                // We're in the seed collection phase.
+
+                // Save the decisions for the seed traces, even though we know what they're gonna be.
                 with_cleanup!(
-                    config.set_current_phase(RosaPhase::ClusteringInputs),
+                    new_traces.iter().try_for_each(|trace| {
+                        let decision = TimedDecision {
+                            decision: Decision {
+                                trace_uid: trace.uid(),
+                                trace_name: trace.name.clone(),
+                                cluster_uid: "<none>".to_string(),
+                                is_backdoor: false,
+                                reason: DecisionReason::Seed,
+                                discriminants: Discriminants {
+                                    trace_edges: Vec::new(),
+                                    cluster_edges: Vec::new(),
+                                    trace_syscalls: Vec::new(),
+                                    cluster_syscalls: Vec::new(),
+                                },
+                            },
+                            seconds: start_time.elapsed().as_secs(),
+                        };
+
+                        decision.save(&config.decisions_dir())
+                    }),
                     fuzzer_instances
                 )?;
-
+            }
+            RosaPhase::ClusteringInputs => {
                 // Form seed clusters.
                 if no_tui {
                     println_info!("Clustering family-representative inputs...");
@@ -600,79 +606,80 @@ fn run(
                     fuzzer_instances
                 )?;
             }
-        } else {
-            // We're in the backdoor detection phase.
+            RosaPhase::DetectingBackdoors => {
+                // We're in the backdoor detection phase.
 
-            new_traces
-                .iter()
-                // Get most similar cluster.
-                .map(|trace| {
-                    (
-                        trace,
-                        clustering::get_most_similar_cluster(
+                new_traces
+                    .iter()
+                    // Get most similar cluster.
+                    .map(|trace| {
+                        (
                             trace,
-                            &clusters,
-                            config.cluster_selection_criterion,
-                            config.cluster_selection_distance_metric.clone(),
+                            clustering::get_most_similar_cluster(
+                                trace,
+                                &clusters,
+                                config.cluster_selection_criterion,
+                                config.cluster_selection_distance_metric.clone(),
+                            )
+                            .expect("failed to get most similar cluster."),
                         )
-                        .expect("failed to get most similar cluster."),
-                    )
-                })
-                // Perform oracle inference.
-                .map(|(trace, cluster)| {
-                    let decision = config.oracle.decide(
-                        trace,
-                        cluster,
-                        config.oracle_criterion,
-                        config.oracle_distance_metric.clone(),
-                    );
-                    (trace, decision)
-                })
-                .try_for_each(|(trace, decision)| {
-                    if decision.is_backdoor {
-                        nb_total_backdoors += 1;
+                    })
+                    // Perform oracle inference.
+                    .map(|(trace, cluster)| {
+                        let decision = config.oracle.decide(
+                            trace,
+                            cluster,
+                            config.oracle_criterion,
+                            config.oracle_distance_metric.clone(),
+                        );
+                        (trace, decision)
+                    })
+                    .try_for_each(|(trace, decision)| {
+                        if decision.is_backdoor {
+                            nb_total_backdoors += 1;
 
-                        // Get the fingeprint to deduplicate backdoor.
-                        // Essentially, if the backdoor was detected for the same reason as a
-                        // pre-existing backdoor, we should avoid listing them as two different
-                        // backdoors.
-                        let fingerprint = decision
-                            .discriminants
-                            .fingerprint(config.oracle_criterion, &decision.cluster_uid);
+                            // Get the fingeprint to deduplicate backdoor.
+                            // Essentially, if the backdoor was detected for the same reason as a
+                            // pre-existing backdoor, we should avoid listing them as two different
+                            // backdoors.
+                            let fingerprint = decision
+                                .discriminants
+                                .fingerprint(config.oracle_criterion, &decision.cluster_uid);
 
-                        // Attempt to create a directory for this category of backdoor.
-                        let backdoor_dir = config.backdoors_dir().join(fingerprint);
-                        match fs::create_dir(&backdoor_dir) {
-                            Ok(_) => {
-                                nb_unique_backdoors += 1;
-                                Ok(())
+                            // Attempt to create a directory for this category of backdoor.
+                            let backdoor_dir = config.backdoors_dir().join(fingerprint);
+                            match fs::create_dir(&backdoor_dir) {
+                                Ok(_) => {
+                                    nb_unique_backdoors += 1;
+                                    Ok(())
+                                }
+                                Err(error) => match error.kind() {
+                                    ErrorKind::AlreadyExists => Ok(()),
+                                    _ => Err(error),
+                                },
                             }
-                            Err(error) => match error.kind() {
-                                ErrorKind::AlreadyExists => Ok(()),
-                                _ => Err(error),
-                            },
+                            .map_err(|err| {
+                                error!("could not create '{}': {}", &backdoor_dir.display(), err)
+                            })?;
+
+                            // Save backdoor.
+                            with_cleanup!(
+                                trace.save_test_input(&backdoor_dir.join(trace.uid())),
+                                fuzzer_instances
+                            )?;
                         }
-                        .map_err(|err| {
-                            error!("could not create '{}': {}", &backdoor_dir.display(), err)
-                        })?;
 
-                        // Save backdoor.
+                        let timed_decision = TimedDecision {
+                            decision,
+                            seconds: start_time.elapsed().as_secs(),
+                        };
+
                         with_cleanup!(
-                            trace.save_test_input(&backdoor_dir.join(trace.uid())),
+                            timed_decision.save(&config.decisions_dir()),
                             fuzzer_instances
-                        )?;
-                    }
-
-                    let timed_decision = TimedDecision {
-                        decision,
-                        seconds: start_time.elapsed().as_secs(),
-                    };
-
-                    with_cleanup!(
-                        timed_decision.save(&config.decisions_dir()),
-                        fuzzer_instances
-                    )
-                })?;
+                        )
+                    })?;
+            }
         }
     }
 
