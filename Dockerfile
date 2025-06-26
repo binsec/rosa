@@ -25,6 +25,9 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 RUN apt-get update && apt-get install -y strace gdb
 # `libssl-dev` is needed by `simple-http-server`.
 RUN apt-get update && apt-get install -y libssl-dev
+# Install mdbook and simple-http-server to have the documentation available via an HTTP server on
+# localhost.
+RUN cargo install mdbook simple-http-server
 
 WORKDIR /root
 COPY . ./rosa/
@@ -52,9 +55,6 @@ RUN cargo build --release
 RUN cargo install --path .
 RUN cargo clean
 
-# Install mdbook and simple-http-server to have the documentation available via an HTTP server on
-# localhost.
-RUN cargo install mdbook simple-http-server
 RUN mdbook build /root/rosa/doc
 
 # Needed to have accurate colors for the ROSA toolchain binaries.
