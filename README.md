@@ -1,5 +1,7 @@
 # ROSA: Finding Backdoors with Fuzzing
 
+[![Paper DOI badge](https://img.shields.io/badge/Paper%20DOI-10.1109%2FICSE55347.2025.00183-blue?style=flat)](https://doi.org/10.1109/ICSE55347.2025.00183)
+[![Zenodo DOI badge](https://img.shields.io/badge/Zenodo%20DOI-10.5281%2Fzenodo.14724250-blue?style=flat)](https://doi.org/10.5281/zenodo.14724250)
 [![SWH](https://archive.softwareheritage.org/badge/origin/https://github.com/binsec/rosa/)](https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/binsec/rosa)
 
 ## About
@@ -141,7 +143,24 @@ Please read [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## Citing this repo
 
-TODO: add citation/link towards paper
+When citing the associated [ICSE'25 paper](https://doi.org/10.1109/ICSE55347.2025.00183), use the
+following snippet:
+
+```bibtex
+@inproceedings{kokkonis-2025-rosa,
+    author = {Kokkonis, Dimitri and Marcozzi, Michaël and Decoux, Emilien and Zacchiroli, Stefano},
+    booktitle = {2025 IEEE/ACM 47th International Conference on Software Engineering (ICSE)}, 
+    title = {ROSA: Finding Backdoors with Fuzzing}, 
+    year = {2025},
+    volume = {},
+    number = {},
+    pages = {2816-2828},
+    keywords = {Runtime;Automation;Manuals;Binary codes;Fuzzing;Benchmark testing;Robustness;Software;Performance analysis;Standards;fuzzing;dynamic analysis;metamorphic testing;backdoors;vulnerability detection},
+    doi = {10.1109/ICSE55347.2025.00183},
+}
+```
+
+When citing the actual repository/tool itself, use [CITATION.cff](./CITATION.cff).
 
 [^1]: ROSA is a reference to the song
     [_El Paso_](https://genius.com/Marty-robbins-el-paso-lyrics#:~:text=the%20back%20door%20of%20Rosa%27s),

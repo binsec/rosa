@@ -31,4 +31,4 @@ configuration file:
 - **Path to seed directory**: the full path to the seed corpus directory to be passed to the fuzzer.
   This is the `-i` option passed to AFL++.
 
-[^rosa-paper]: TODO add link/DOI to paper
+[^rosa-paper]: <https://doi.org/10.1109/ICSE55347.2025.00183>

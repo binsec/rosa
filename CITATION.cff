@@ -1,0 +1,74 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: ROSA
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Dimitri
+    family-names: Kokkonis
+    email: dimitri.kokkonis@cea.fr
+    affiliation: 'Université Paris-Saclay, CEA, List'
+    orcid: 'https://orcid.org/0009-0009-5171-2992'
+  - given-names: Michaël
+    family-names: Marcozzi
+    email: michael.marcozzi@cea.fr
+    affiliation: 'Université Paris-Saclay, CEA, List'
+    orcid: 'https://orcid.org/0000-0002-8087-0537'
+  - given-names: Emilien
+    family-names: Decoux
+    email: emilien.decoux@protonmail.com
+    affiliation: 'Université Paris-Saclay, CEA, List'
+  - given-names: Stefano
+    family-names: Zacchiroli
+    email: stefano.zacchiroli@telecom-paris.fr
+    affiliation: 'LTCI, Télécom Paris, Institut Polytechnique de Paris'
+    orcid: 'https://orcid.org/0000-0002-4576-136X'
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.14724250
+    description: Zenodo artifact
+  - type: swh
+    value: 'swh:1:rev:d30f7f1800a5dde3b9991125f9b911f8396c6346'
+repository-code: 'https://github.com/binsec/rosa'
+abstract: >-
+  A code-level backdoor is a hidden access, programmed and
+  concealed within the code of a program. For instance,
+  hard-coded credentials planted in the code of a file
+  server application would enable maliciously logging into
+  all deployed instances of this application. Confirmed
+  software supplychain attacks have led to the injection of
+  backdoors into popular open-source projects, and backdoors
+  have been discovered in various router firmware. Manual
+  code auditing for backdoors is challenging and existing
+  semi-automated approaches can handle only a limited scope
+  of programs and backdoors, while requiring manual
+  reverse-engineering of the audited (binary) program.
+  Graybox fuzzing (automated semi-randomized testing) has
+  grown in popularity due to its success in discovering
+  vulnerabilities and hence stands as a strong candidate for
+  improved backdoor detection. However, current fuzzing
+  knowledge does not offer any means to detect the
+  triggering of a backdoor at runtime. In this work we
+  introduce ROSA, a novel approach (and tool) which combines
+  a state-of-the-art fuzzer (AFL++) with a new metamorphic
+  test oracle, capable of detecting runtime backdoor
+  triggers. To facilitate the evaluation of ROSA, we have
+  created ROSARUM, the first openly available benchmark for
+  assessing the detection of various backdoors in diverse
+  programs. Experimental evaluation shows that ROSA has a
+  level of robustness, speed and automation similar to
+  classical fuzzing. It finds all 17 authentic or synthetic
+  backdooors from ROSARUM in 1 h 30 on average. Compared to
+  existing detection tools, it can handle a diversity of
+  backdoors and programs and it does not rely on manual
+  reverse-engineering of the fuzzed binary code.
+keywords:
+  - Backdoors
+  - Fuzzing
+  - Vulnerability detection
+  - Binary programs
+license: LGPL-2.1-only
