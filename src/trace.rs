@@ -180,8 +180,8 @@ impl Trace {
     ///     Trace {
     ///         name: "my_trace".to_string(),
     ///         test_input: vec![0x01, 0x02, 0x03, 0x04],
-    ///         edges: vec![0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
-    ///         syscalls: vec![0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+    ///         edges: vec![0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+    ///         syscalls: vec![0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
     ///     }
     /// );
     /// ```
@@ -193,8 +193,11 @@ impl Trace {
         syscalls: &[usize],
         syscalls_len: usize,
     ) -> Self {
-        let mut edges_vector = vec![0; edges_len];
-        let mut syscalls_vector = vec![0; syscalls_len];
+        // It's not entirely clear whether or not the different instrumentation modes of AFL++ use
+        // 0-indexed or 1-indexed numbers for the edge coverage. Just to cover all bases, we
+        // increase the size by 1 here.
+        let mut edges_vector = vec![0; edges_len + 1];
+        let mut syscalls_vector = vec![0; syscalls_len + 1];
 
         edges.iter().unique().for_each(|index| {
             edges_vector[*index] = 1;
