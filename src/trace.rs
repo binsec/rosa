@@ -446,10 +446,10 @@ impl TraceDatabase {
     /// This should be done once an input file has been evaluated, whether is has been accepted
     /// (and added to the database) or not.
     pub fn register_input(&mut self, input: &Path) {
-        if let Ok(input) = input.canonicalize() {
-            if !self.is_known_input(&input) {
-                self.known_inputs.insert(input);
-            }
+        if let Ok(input) = input.canonicalize()
+            && !self.is_known_input(&input)
+        {
+            self.known_inputs.insert(input);
         }
     }
 
