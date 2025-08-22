@@ -1,6 +1,6 @@
 --- a/accel/tcg/cpu-exec.c
 +++ b/accel/tcg/cpu-exec.c
-@@ -81,6 +81,19 @@ __thread abi_ulong afl_prev_loc;
+@@ -84,6 +84,19 @@ __thread abi_ulong afl_prev_loc;
  
  struct cmp_map *__afl_cmp_map;
  
@@ -20,7 +20,7 @@
  /* Set in the child process in forkserver mode: */
  
  static int forkserver_installed = 0;
-@@ -367,6 +380,31 @@ void afl_setup(void) {
+@@ -370,6 +383,31 @@ void afl_setup(void) {
  
    }
  
@@ -52,7 +52,7 @@
    if (getenv("AFL_INST_LIBS")) {
  
      afl_start_code = 0;
-@@ -806,6 +844,8 @@ void afl_persistent_iter(CPUArchState *env) {
+@@ -809,6 +847,8 @@ void afl_persistent_iter(CPUArchState *env) {
  
          /* Exit the persistent loop on pipe error */
          afl_area_ptr = dummy;
@@ -61,7 +61,7 @@
          exit(0);
  
        }
-@@ -832,6 +872,8 @@ void afl_persistent_iter(CPUArchState *env) {
+@@ -835,6 +875,8 @@ void afl_persistent_iter(CPUArchState *env) {
    } else {
  
      afl_area_ptr = dummy;
@@ -108,7 +108,7 @@
  #include "api.h"
  
  /* We use one additional file descriptor to relay "needs translation"
-@@ -124,6 +125,9 @@ extern __thread abi_ulong afl_prev_loc;
+@@ -126,6 +127,9 @@ extern __thread abi_ulong afl_prev_loc;
  
  extern struct cmp_map *__afl_cmp_map;
  

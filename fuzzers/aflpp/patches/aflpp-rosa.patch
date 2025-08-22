@@ -1,3 +1,22 @@
+--- a/include/forkserver.h
++++ b/include/forkserver.h
+@@ -34,6 +34,7 @@
+ #include <unistd.h>
+ 
+ #include "types.h"
++#include "runtime-trace.h"
+ 
+ #ifdef __linux__
+ /**
+@@ -107,6 +108,8 @@ typedef struct afl_forkserver {
+ 
+   u8 *trace_bits;                       /* SHM with instrumentation bitmap  */
+ 
++  struct runtime_trace* runtime_trace;  /* SHM for runtime trace            */
++
+   s32 fsrv_pid,                         /* PID of the fork server           */
+       child_pid,                        /* PID of the fuzzed program        */
+       child_status,                     /* waitpid result for the child     */
 --- /dev/null
 +++ b/include/runtime-trace.h
 @@ -0,0 +1,62 @@
@@ -63,36 +82,17 @@
 +};
 +
 +#endif /* _AFL_RUNTIME_TRACE_H */
---- a/include/forkserver.h
-+++ b/include/forkserver.h
-@@ -32,6 +32,7 @@
- #include <stdbool.h>
- 
- #include "types.h"
-+#include "runtime-trace.h"
- 
- #ifdef __linux__
- /**
-@@ -105,6 +106,8 @@ typedef struct afl_forkserver {
- 
-   u8 *trace_bits;                       /* SHM with instrumentation bitmap  */
- 
-+  struct runtime_trace* runtime_trace;  /* SHM for runtime trace            */
-+
-   s32 fsrv_pid,                         /* PID of the fork server           */
-       child_pid,                        /* PID of the fuzzed program        */
-       child_status,                     /* waitpid result for the child     */
 --- a/include/sharedmem.h
 +++ b/include/sharedmem.h
-@@ -29,6 +29,7 @@
- #define __AFL_SHAREDMEM_H
+@@ -31,6 +31,7 @@
+ #include <unistd.h>
  
  #include "types.h"
 +#include "runtime-trace.h"
  
  typedef struct sharedmem {
  
-@@ -40,10 +41,20 @@ typedef struct sharedmem {
+@@ -42,10 +43,20 @@ typedef struct sharedmem {
    char g_shm_file_path[L_tmpnam];
    int  cmplog_g_shm_fd;
    char cmplog_g_shm_file_path[L_tmpnam];
@@ -113,7 +113,7 @@
  #endif
  
    u8 *map;                                          /* shared memory region */
-@@ -55,6 +66,10 @@ typedef struct sharedmem {
+@@ -57,6 +68,10 @@ typedef struct sharedmem {
    int             shmemfuzz_mode;
    struct cmp_map *cmp_map;
  
@@ -123,10 +123,10 @@
 +
  } sharedmem_t;
  
- u8  *afl_shm_init(sharedmem_t *, size_t, unsigned char non_instrumented_mode);
+ u8  *afl_shm_init(sharedmem_t *, size_t, unsigned char non_instrumented_mode,
 --- a/src/afl-forkserver.c
 +++ b/src/afl-forkserver.c
-@@ -202,6 +202,12 @@ static list_t fsrv_list = {.element_prealloc_count = 0};
+@@ -203,6 +203,12 @@ static list_t fsrv_list = {.element_prealloc_count = 0};
  
  static void fsrv_exec_child(afl_forkserver_t *fsrv, char **argv) {
  
@@ -139,7 +139,7 @@
    if (fsrv->qemu_mode || fsrv->cs_mode) {
  
      setenv("AFL_DISABLE_LLVM_INSTRUMENTATION", "1", 0);
-@@ -934,6 +940,12 @@ void afl_fsrv_start(afl_forkserver_t *fsrv, char **argv,
+@@ -994,6 +1000,12 @@ void afl_fsrv_start(afl_forkserver_t *fsrv, char **argv,
  
        unsetenv(CMPLOG_SHM_ENV_VAR);  // we do not want that in non-cmplog fsrv
  
@@ -152,7 +152,7 @@
      }
  
      /* Umpf. On OpenBSD, the default fd limit for root users is set to
-@@ -1970,12 +1982,22 @@ fsrv_run_result_t __attribute__((hot)) afl_fsrv_run_target(
+@@ -2034,12 +2046,22 @@ fsrv_run_result_t __attribute__((hot)) afl_fsrv_run_target(
      if (likely(!fsrv->nyx_mode)) {
  
        memset(fsrv->trace_bits, 0, fsrv->map_size);
@@ -177,7 +177,7 @@
  
 --- a/src/afl-fuzz-bitmap.c
 +++ b/src/afl-fuzz-bitmap.c
-@@ -539,7 +539,10 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
+@@ -551,7 +551,10 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
    }
  
    u8  fn[PATH_MAX];
@@ -188,7 +188,7 @@
    u8  keeping = 0, res, is_timeout = 0;
    u8  san_fault = 0, san_idx = 0, feed_san = 0;
    s32 fd;
-@@ -696,12 +699,23 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
+@@ -708,12 +711,23 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
  
      if (!afl->afl_env.afl_sha1_filenames) {
  
@@ -214,7 +214,7 @@
  
      } else {
  
-@@ -709,6 +723,11 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
+@@ -721,6 +735,11 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
        queue_fn = alloc_printf(
            "%s/queue/%s%s%s", afl->out_dir, hex, afl->file_extension ? "." : "",
            afl->file_extension ? (const char *)afl->file_extension : "");
@@ -226,7 +226,7 @@
        ck_free((char *)hex);
  
      }
-@@ -719,6 +738,11 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
+@@ -731,6 +750,11 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
          "%s/queue/id_%06u%s%s", afl->out_dir, afl->queued_items,
          afl->file_extension ? "." : "",
          afl->file_extension ? (const char *)afl->file_extension : "");
@@ -238,7 +238,7 @@
  
  #endif                                                    /* ^!SIMPLE_FILES */
      fd = permissive_create(afl, queue_fn);
-@@ -731,6 +755,34 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
+@@ -743,6 +767,34 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
  
      add_to_queue(afl, queue_fn, len, 0);
  
@@ -325,7 +325,7 @@
      /* For AFLFast schedules we update the queue entry */
      if (unlikely(afl->schedule >= FAST && afl->schedule <= RARE) &&
          likely(q->exec_cksum)) {
-@@ -2024,6 +2060,14 @@ static void handle_existing_out_dir(afl_state_t *afl) {
+@@ -2051,6 +2087,14 @@ static void handle_existing_out_dir(afl_state_t *afl) {
    if (delete_files(fn, case_prefix)) { goto dir_cleanup_failed; }
    ck_free(fn);
  
@@ -340,8 +340,8 @@
    /* All right, let's do <afl->out_dir>/crashes/id:* and
     * <afl->out_dir>/hangs/id:*. */
  
-@@ -2311,6 +2355,12 @@ void setup_dirs_fds(afl_state_t *afl) {
-   if (mkdir(tmp, 0700)) { PFATAL("Unable to create '%s'", tmp); }
+@@ -2348,6 +2392,12 @@ void setup_dirs_fds(afl_state_t *afl) {
+   if (mkdir(tmp, afl->dir_perm)) { PFATAL("Unable to create '%s'", tmp); }
    ck_free(tmp);
  
 +  /* Runtime trace dump directory. */
@@ -355,7 +355,7 @@
    if (afl->sync_id) {
 --- a/src/afl-fuzz.c
 +++ b/src/afl-fuzz.c
-@@ -1493,6 +1493,17 @@ int main(int argc, char **argv_orig, char **envp) {
+@@ -1547,6 +1547,17 @@ int main(int argc, char **argv_orig, char **envp) {
  
    }
  
@@ -373,9 +373,9 @@
    if (afl->sync_id && strcmp(afl->sync_id, "addseeds") == 0) {
  
      FATAL("-M/-S name 'addseeds' is a reserved name, choose something else");
-@@ -2507,6 +2518,13 @@ int main(int argc, char **argv_orig, char **envp) {
-   afl->fsrv.trace_bits =
-       afl_shm_init(&afl->shm, afl->fsrv.map_size, afl->non_instrumented_mode);
+@@ -2564,6 +2575,13 @@ int main(int argc, char **argv_orig, char **envp) {
+       afl_shm_init(&afl->shm, afl->fsrv.map_size, afl->non_instrumented_mode,
+                    afl->perm, afl->chown_needed ? afl->fsrv.gid : -1);
  
 +  if (afl->shm.runtime_trace_mode) {
 +
@@ -387,10 +387,10 @@
    if (!afl->non_instrumented_mode && !afl->fsrv.qemu_mode &&
        !afl->unicorn_mode && !afl->fsrv.frida_mode && !afl->fsrv.cs_mode &&
        !afl->afl_env.afl_skip_bin_check) {
-@@ -2534,6 +2552,14 @@ int main(int argc, char **argv_orig, char **envp) {
-       afl->fsrv.map_size = new_map_size;
+@@ -2592,6 +2610,14 @@ int main(int argc, char **argv_orig, char **envp) {
        afl->fsrv.trace_bits =
-           afl_shm_init(&afl->shm, new_map_size, afl->non_instrumented_mode);
+           afl_shm_init(&afl->shm, new_map_size, afl->non_instrumented_mode,
+                        afl->perm, afl->chown_needed ? afl->fsrv.gid : -1);
 +
 +      if (afl->shm.runtime_trace_mode) {
 +
@@ -498,7 +498,7 @@
  }
  
  /* Configure shared memory.
-@@ -148,11 +214,15 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
+@@ -149,11 +215,15 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
  
    shm->map = NULL;
    shm->cmp_map = NULL;
@@ -514,7 +514,7 @@
  
    const int shmflags = O_RDWR | O_EXCL;
  
-@@ -272,6 +342,91 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
+@@ -289,6 +359,91 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
  
    }
  
@@ -604,9 +604,9 @@
 +  }
 +
  #else
-   u8 *shm_str;
- 
-@@ -300,6 +455,33 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
+   u8             *shm_str;
+   struct shmid_ds shmid_ds;
+@@ -352,6 +507,33 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
  
    }
  
@@ -640,7 +640,7 @@
    if (!non_instrumented_mode) {
  
      shm_str = alloc_printf("%d", shm->shm_id);
-@@ -325,6 +507,18 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
+@@ -377,6 +559,18 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
  
    }
  
@@ -659,7 +659,7 @@
    shm->map = shmat(shm->shm_id, NULL, 0);
  
    if (shm->map == (void *)-1 || !shm->map) {
-@@ -337,6 +531,14 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
+@@ -389,6 +583,14 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
  
      }
  
@@ -674,7 +674,7 @@
      PFATAL("shmat() failed");
  
    }
-@@ -357,6 +559,25 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
+@@ -409,6 +611,25 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
  
    }
  
