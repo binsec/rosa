@@ -466,12 +466,22 @@ impl AFLPlusPlus {
             .expect("failed to get file name for test input.")
             .to_string_lossy();
 
+        // Make sure to preserve any existing extension(s).
+        let test_input_extension = original_test_input_path.extension().map(|ext| {
+            ext.to_str()
+                .expect("should be able to convert extension to str")
+                .to_string()
+        });
+        let trace_dump_extension = test_input_extension
+            .map(|ext| format!("{}.trace", ext))
+            .unwrap_or("trace".to_string());
+
         let trace_dump_path = self
             .output_dir
             .join(self.name())
             .join("trace_dumps")
             .join(test_input_file_name.to_string())
-            .with_extension("trace");
+            .with_extension(&trace_dump_extension);
 
         if trace_dump_path.exists() {
             let new_trace = Trace::load(
