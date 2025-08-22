@@ -1,6 +1,6 @@
 output_dir = "rosa-out-sudo-backdoored"
 
-[seed_conditions]
+[phase_one]
 seconds = 60
 
 
