@@ -539,6 +539,13 @@ fn run(
                 edge_coverage,
                 syscall_coverage,
             )
+            // Make sure we have *at least one* trace before we switch to clustering, otherwise we
+            // won't be able to have any clusters.
+            //
+            // This does mean that we may spend more time than expected in phase one, but we can't
+            // move on without at least one trace (i.e., at least one cluster). This probably
+            // happens because the fuzzer instances and/or the target program are too slow.
+            && !current_traces.is_empty()
         {
             // We're entering seed clustering phase; write it into the phase file so that the
             // TUI can keep up.
