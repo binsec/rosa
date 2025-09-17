@@ -56,6 +56,7 @@ struct Cli {
         help = "Existing ROSA output directory"
     )]
     rosa_dir: PathBuf,
+
     /// The configuration file to use.
     #[arg(
         long_help,
@@ -64,9 +65,11 @@ struct Cli {
         help = "Configuration file"
     )]
     config_file: PathBuf,
+
     /// Perform a true copy of the test inputs and trace files instead of using a symbolic link.
     #[arg(long_help, short = 'C', long, help = "Use true copy")]
     copy_inputs: bool,
+
     /// Force the creation of the output directory, potentially overwriting existing results.
     #[arg(
         long_help,
@@ -75,6 +78,10 @@ struct Cli {
         help = "Force (auto-delete existing) output directory"
     )]
     force: bool,
+
+    /// Force the use of a phase-1 corpus directory (regardless of what the configuration says).
+    #[arg(long_help, long, help = "Force use of phase-1 corpus directory")]
+    phase_one_corpus: Option<PathBuf>,
 }
 
 /// Run the simulation.
@@ -83,12 +90,14 @@ fn run(
     config_file: &Path,
     copy_inputs: bool,
     force: bool,
+    phase_one_corpus: Option<&Path>,
 ) -> Result<(), RosaError> {
-    let config = Config::load(config_file)?;
-    let phase_1_seconds = match config.phase_one {
-        PhaseOne::Seconds(seconds) => Ok(seconds),
-        _ => fail!("only a phase-1 condition based on seconds is compatible with this tool."),
-    }?;
+    // Load the configuration and set up the output directories.
+    let mut config = Config::load(config_file)?;
+    if let Some(phase_one_corpus_dir) = phase_one_corpus {
+        // Make the config use a phase-1 corpus.
+        config.phase_one = PhaseOne::Corpus(phase_one_corpus_dir.to_path_buf());
+    }
 
     let old_traces_dir = existing_rosa_dir
         .to_path_buf()
@@ -210,12 +219,47 @@ fn run(
         })
         .collect::<Result<Vec<TimedTrace>, RosaError>>()?;
 
-    // Separate phase 1 and phase 2 traces.
-    let (phase_1_timed_traces, phase_2_timed_traces): (Vec<TimedTrace>, Vec<TimedTrace>) =
-        timed_traces
+    // Handle phase-1 corpus.
+    let (phase_1_timed_traces, phase_2_timed_traces) = match config.phase_one {
+        PhaseOne::Corpus(ref corpus_dir) => {
+            let phase_one_traces = trace::load_traces(corpus_dir)?;
+            // Save the traces in the output directory.
+            trace::save_traces(&phase_one_traces, &config.traces_dir())?;
+            // Save the trace decisions and log the traces in the database.
+            phase_one_traces.clone().into_iter().try_for_each(|trace| {
+                let decision = TimedDecision {
+                    decision: Decision {
+                        trace_uid: trace.uid(),
+                        trace_name: trace.name.clone(),
+                        cluster_uid: "<none>".to_string(),
+                        is_backdoor: false,
+                        reason: DecisionReason::Seed,
+                        discriminants: Discriminants {
+                            trace_edges: Vec::new(),
+                            cluster_edges: Vec::new(),
+                            trace_syscalls: Vec::new(),
+                            cluster_syscalls: Vec::new(),
+                        },
+                    },
+                    seconds: 0,
+                };
+                decision.save(&config.decisions_dir())
+            })?;
+
+            (
+                phase_one_traces
+                    .into_iter()
+                    .map(|trace| TimedTrace { trace, seconds: 0 })
+                    .collect(),
+                timed_traces,
+            )
+        }
+        PhaseOne::Seconds(seconds) => timed_traces
             .clone()
             .into_iter()
-            .partition(|timed_trace| timed_trace.seconds <= phase_1_seconds);
+            .partition(|timed_trace| timed_trace.seconds <= seconds),
+        _ => unimplemented!("phase one condition not supported."),
+    };
 
     // Cluster phase 1 traces.
     println_info!(
@@ -328,7 +372,13 @@ fn main() -> ExitCode {
     common::reset_sigpipe();
     let cli = Cli::parse();
 
-    match run(&cli.rosa_dir, &cli.config_file, cli.copy_inputs, cli.force) {
+    match run(
+        &cli.rosa_dir,
+        &cli.config_file,
+        cli.copy_inputs,
+        cli.force,
+        cli.phase_one_corpus.as_deref(),
+    ) {
         Ok(_) => ExitCode::SUCCESS,
         Err(err) => {
             println_error!(err);
