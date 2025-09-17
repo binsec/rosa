@@ -781,11 +781,11 @@ mod tests {
         let afl_fuzz = PathBuf::from("afl-fuzz");
         let input_dir = PathBuf::from("corpus");
         let output_dir = PathBuf::from("findings");
-        let target: Vec<String> = vec!["sudo", "--stdin", "--reset-timestamp", "--", "id"]
+        let target: Vec<String> = ["sudo", "--stdin", "--reset-timestamp", "--", "id"]
             .iter()
             .map(|arg| arg.to_string())
             .collect();
-        let extra_args: Vec<String> = vec!["-c", "0"].iter().map(|arg| arg.to_string()).collect();
+        let extra_args: Vec<String> = ["-c", "0"].iter().map(|arg| arg.to_string()).collect();
         let env: HashMap<String, String> = [
             ("AFL_INST_LIBS", "1"),
             ("AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES", "1"),
@@ -829,7 +829,7 @@ mod tests {
         let afl_fuzz = PathBuf::from("./afl-fuzz");
         let input_dir = PathBuf::from("in");
         let output_dir = PathBuf::from("out");
-        let target: Vec<String> = vec!["./target"].iter().map(|arg| arg.to_string()).collect();
+        let target: Vec<String> = ["./target"].iter().map(|arg| arg.to_string()).collect();
         let config = AFLPlusPlus {
             name: name.clone(),
             is_main: false,
