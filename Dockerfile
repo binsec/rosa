@@ -8,6 +8,11 @@ LABEL description="Docker image for the ROSA backdoor detector toolchain"
 
 RUN apt-get clean && apt-get update && apt-get upgrade -y
 
+# Install LLVM 21.
+RUN apt-get update && apt-get install -y lsb-release wget software-properties-common gnupg
+RUN wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh
+RUN ./llvm.sh 21 all && rm ./llvm.sh
+ENV LLVM_CONFIG=llvm-config-21
 # Install AFL++ dependencies.
 RUN apt-get update && apt-get install -y build-essential python3-dev automake cmake git flex \
     bison libglib2.0-dev libpixman-1-dev python3-setuptools cargo libgtk-3-dev lld llvm llvm-dev \
