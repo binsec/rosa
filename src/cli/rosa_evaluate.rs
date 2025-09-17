@@ -234,7 +234,10 @@ fn run(
     deduplicate: bool,
     time_limit: Option<u64>,
 ) -> Result<(), RosaError> {
-    let config = Config::load(&output_dir.join("config").with_extension("toml"))?;
+    // Make sure the config is using the output directory passed to this function.
+    let mut config = Config::load(&output_dir.join("config").with_extension("toml"))?;
+    config.output_dir = output_dir.to_path_buf();
+
     let root_dir = output_dir.parent().ok_or(error!(
         "could not get parent directory of '{}'.",
         output_dir.display()
