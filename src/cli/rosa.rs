@@ -272,7 +272,7 @@ fn run(
     }
 
     config.setup_dirs(force)?;
-    // We save the config in the output directory for reproducibility puproses.
+    // We save the config in the output directory for reproducibility purposes.
     config.save(&config.output_dir.join("config").with_extension("toml"))?;
     config.set_current_phase(RosaPhase::Starting)?;
     config.set_current_coverage(0.0, 0.0)?;
@@ -501,35 +501,6 @@ fn run(
         let (edge_coverage, syscall_coverage) = trace::get_coverage(&current_traces);
         config.set_current_coverage(edge_coverage, syscall_coverage)?;
 
-        // Update stats every second.
-        if Instant::now().duration_since(last_log_time).as_secs() >= 1 {
-            with_cleanup!(
-                config.log_stats(
-                    start_time.elapsed().as_secs(),
-                    current_traces.len() as u64,
-                    nb_unique_backdoors,
-                    nb_total_backdoors,
-                    edge_coverage,
-                    syscall_coverage,
-                ),
-                fuzzer_instances
-            )?;
-            last_log_time = Instant::now();
-
-            if no_tui {
-                println_info!(
-                    "Time: {} s | Traces: {} | Backdoors: {} unique ({} total) | \
-                        Edge coverage: {:.2}% | Syscall coverage: {:.2}%",
-                    start_time.elapsed().as_secs(),
-                    current_traces.len() as u64,
-                    nb_unique_backdoors,
-                    nb_total_backdoors,
-                    edge_coverage * 100.0,
-                    syscall_coverage * 100.0
-                );
-            }
-        }
-
         // Check whether the seed stopping conditions have been met.
         if with_cleanup!(config.get_current_phase(), fuzzer_instances)?
             == RosaPhase::CollectingInputs
@@ -555,11 +526,41 @@ fn run(
             )?;
         }
 
-        match with_cleanup!(config.get_current_phase(), fuzzer_instances)? {
-            RosaPhase::Starting | RosaPhase::Stopped => {}
-            RosaPhase::CollectingInputs => {
-                // We're in the seed collection phase.
+        // Take care of clustering (if we've hit that phase).
+        if with_cleanup!(config.get_current_phase(), fuzzer_instances)?
+            == RosaPhase::ClusteringInputs
+        {
+            // Form seed clusters.
+            if no_tui {
+                println_info!("Clustering family-representative inputs...");
+            }
+            clusters = clustering::cluster_traces(
+                &current_traces,
+                config.cluster_formation_criterion,
+                config.cluster_formation_distance_metric.clone(),
+                config.cluster_formation_edge_tolerance,
+                config.cluster_formation_syscall_tolerance,
+            );
+            // Save clusters to output dir for later inspection.
+            with_cleanup!(
+                clustering::save_clusters(&clusters, &config.clusters_dir()),
+                fuzzer_instances
+            )?;
+            if no_tui {
+                println_info!("Created {} clusters.", clusters.len());
+            }
 
+            // We're entering detection phase; write it into the phase file so that the TUI can
+            // keep up.
+            with_cleanup!(
+                config.set_current_phase(RosaPhase::DetectingBackdoors),
+                fuzzer_instances
+            )?;
+        }
+
+        // Save decisions.
+        match with_cleanup!(config.get_current_phase(), fuzzer_instances)? {
+            RosaPhase::Starting | RosaPhase::CollectingInputs | RosaPhase::ClusteringInputs => {
                 // Save the decisions for the seed traces, even though we know what they're gonna be.
                 with_cleanup!(
                     new_traces.iter().try_for_each(|trace| {
@@ -585,37 +586,7 @@ fn run(
                     fuzzer_instances
                 )?;
             }
-            RosaPhase::ClusteringInputs => {
-                // Form seed clusters.
-                if no_tui {
-                    println_info!("Clustering family-representative inputs...");
-                }
-                clusters = clustering::cluster_traces(
-                    &current_traces,
-                    config.cluster_formation_criterion,
-                    config.cluster_formation_distance_metric.clone(),
-                    config.cluster_formation_edge_tolerance,
-                    config.cluster_formation_syscall_tolerance,
-                );
-                // Save clusters to output dir for later inspection.
-                with_cleanup!(
-                    clustering::save_clusters(&clusters, &config.clusters_dir()),
-                    fuzzer_instances
-                )?;
-                if no_tui {
-                    println_info!("Created {} clusters.", clusters.len());
-                }
-
-                // We're entering detection phase; write it into the phase file so that the TUI can
-                // keep up.
-                with_cleanup!(
-                    config.set_current_phase(RosaPhase::DetectingBackdoors),
-                    fuzzer_instances
-                )?;
-            }
-            RosaPhase::DetectingBackdoors => {
-                // We're in the backdoor detection phase.
-
+            RosaPhase::DetectingBackdoors | RosaPhase::Stopped => {
                 new_traces
                     .iter()
                     // Get most similar cluster.
@@ -686,6 +657,40 @@ fn run(
                             fuzzer_instances
                         )
                     })?;
+            }
+        }
+
+        // Update coverage.
+        let current_traces: Vec<Trace> = trace_db.traces().clone();
+        let (edge_coverage, syscall_coverage) = trace::get_coverage(&current_traces);
+        config.set_current_coverage(edge_coverage, syscall_coverage)?;
+
+        // Update stats every second.
+        if Instant::now().duration_since(last_log_time).as_secs() >= 1 {
+            with_cleanup!(
+                config.log_stats(
+                    start_time.elapsed().as_secs(),
+                    current_traces.len() as u64,
+                    nb_unique_backdoors,
+                    nb_total_backdoors,
+                    edge_coverage,
+                    syscall_coverage,
+                ),
+                fuzzer_instances
+            )?;
+            last_log_time = Instant::now();
+
+            if no_tui {
+                println_info!(
+                    "Time: {} s | Traces: {} | Backdoors: {} unique ({} total) | \
+                        Edge coverage: {:.2}% | Syscall coverage: {:.2}%",
+                    start_time.elapsed().as_secs(),
+                    current_traces.len() as u64,
+                    nb_unique_backdoors,
+                    nb_total_backdoors,
+                    edge_coverage * 100.0,
+                    syscall_coverage * 100.0
+                );
             }
         }
     }
