@@ -1,6 +1,6 @@
 [package]
 name = "rosa"
-version = "0.6.0-alpha18"
+version = "0.6.0-alpha19.dev"
 edition = "2024"
 
 [dependencies]
