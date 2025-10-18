@@ -15,6 +15,7 @@ use std::{
 
 use clap::Parser;
 use colored::Colorize;
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 
 use rosa::{
     clustering,
@@ -208,11 +209,11 @@ fn run(
     let all_traces = trace::load_traces(&config.traces_dir())?;
 
     let timed_traces: Vec<TimedTrace> = all_traces
-        .into_iter()
+        .par_iter()
         .map(|trace| {
             TimedDecision::load(&old_decisions_dir.join(trace.uid()).with_extension("toml")).map(
                 |timed_decision| TimedTrace {
-                    trace,
+                    trace: trace.clone(),
                     seconds: timed_decision.seconds,
                 },
             )
@@ -310,7 +311,7 @@ fn run(
         phase_2_timed_traces.len()
     );
     phase_2_timed_traces
-        .into_iter()
+        .par_iter()
         .try_for_each(|timed_trace| {
             let most_similar_cluster = clustering::get_most_similar_cluster(
                 &timed_trace.trace,

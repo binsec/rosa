@@ -14,7 +14,7 @@ pub mod hamming;
 ///
 /// This distance metric will be used when comparing runtime traces.
 #[typetag::serde(tag = "kind")]
-pub trait DistanceMetric: DynClone {
+pub trait DistanceMetric: DynClone + Sync {
     /// Get the name of the distance metric.
     fn name(&self) -> &str;
     /// Get the distance between two vectors of bytes.

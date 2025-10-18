@@ -26,7 +26,7 @@ pub mod aflpp;
 /// This backend is expected to generate (test input, runtime trace) pairs that can then be
 /// collected by ROSA.
 #[typetag::serde(tag = "kind")]
-pub trait FuzzerBackend: DynClone {
+pub trait FuzzerBackend: DynClone + Sync {
     /// Get the ID (full name) of the backend.
     fn backend_id(&self) -> String;
 

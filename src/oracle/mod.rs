@@ -27,7 +27,7 @@ pub mod comp_min_max;
 /// The oracle is expected to compare a trace to a representative cluster and make a decision
 /// (safe, suspicious) based on a [Criterion](crate::criterion::Criterion).
 #[typetag::serde(tag = "kind")]
-pub trait Oracle: DynClone {
+pub trait Oracle: DynClone + Sync {
     /// Get the name of the oracle.
     fn name(&self) -> &str;
     /// Decide if a given trace is safe or suspicious.
