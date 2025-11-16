@@ -11,6 +11,7 @@ use std::{
     process::{Command, Stdio},
 };
 
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tempfile::{self, NamedTempFile};
@@ -502,9 +503,13 @@ impl AFLPlusPlus {
     }
 
     /// A wrapper to handle collecting a single trace regardless of AFL++ mode.
+    ///
+    /// If a trace database is provided, then it will be used for trace deduplication during
+    /// collection. If not, then the returned trace may be a duplicate of some existing trace, and
+    /// it is the responsibility of the caller to deduplicate the result.
     fn collect_one_trace_from_one_input(
         &self,
-        trace_db: &mut TraceDatabase,
+        trace_db: Option<&mut TraceDatabase>,
         skip_missing_traces: bool,
         scratch_dir: &Path,
         test_input_path: &Path,
@@ -543,16 +548,19 @@ impl AFLPlusPlus {
             }?;
 
             // Register input & trace (if needed).
-            Ok(new_trace.and_then(|trace| {
-                trace_db.register_input(original_test_input_path);
+            Ok(new_trace.and_then(|trace| match trace_db {
+                Some(db) => {
+                    db.register_input(original_test_input_path);
 
-                if !trace_db.has_trace(&trace.uid()) {
-                    trace_db.insert_trace(trace.clone());
+                    if !db.has_trace(&trace.uid()) {
+                        db.insert_trace(trace.clone());
 
-                    Some(trace)
-                } else {
-                    None
+                        Some(trace)
+                    } else {
+                        None
+                    }
                 }
+                None => Some(trace),
             }))
         } else if skip_missing_traces {
             Ok(None)
@@ -730,7 +738,7 @@ impl FuzzerBackend for AFLPlusPlus {
             .first()
             .map(|test_input_path| {
                 self.collect_one_trace_from_one_input(
-                    trace_db,
+                    Some(trace_db),
                     skip_missing_traces,
                     scratch_dir,
                     test_input_path,
@@ -754,19 +762,33 @@ impl FuzzerBackend for AFLPlusPlus {
             .collect();
 
         test_inputs.sort();
-        test_inputs
-            .into_iter()
+        let new_traces: Vec<Trace> = test_inputs
+            .par_iter()
             // Filter out `None` traces, usually corresponding to failures.
             .filter_map(|test_input_path| {
                 self.collect_one_trace_from_one_input(
-                    trace_db,
+                    None,
                     skip_missing_traces,
                     scratch_dir,
-                    &test_input_path,
+                    test_input_path,
                 )
                 .transpose()
             })
-            .collect()
+            .collect::<Result<Vec<Trace>, RosaError>>()?;
+
+        let unique_traces: Vec<Trace> = new_traces
+            .into_iter()
+            .filter_map(|new_trace| {
+                if !trace_db.has_trace(&new_trace.uid()) {
+                    trace_db.insert_trace(new_trace.clone());
+                    Some(new_trace)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        Ok(unique_traces)
     }
 }
 
