@@ -15,6 +15,7 @@ use std::{
 
 use clap::Parser;
 use colored::Colorize;
+use itertools::Itertools;
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 
 use rosa::{
@@ -269,6 +270,7 @@ fn run(
     );
     let phase_1_traces: Vec<Trace> = phase_1_timed_traces
         .iter()
+        .sorted_by_key(|timed_trace| timed_trace.seconds)
         .map(|timed_trace| timed_trace.trace.clone())
         .collect();
     let clusters = clustering::cluster_traces(
