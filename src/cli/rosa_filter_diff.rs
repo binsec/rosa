@@ -560,9 +560,7 @@ fn run(
 
     traces_and_decisions
         .into_iter()
-        .sorted_by(|(_, timed_decision1), (_, timed_decision2)| {
-            Ord::cmp(&timed_decision1.seconds, &timed_decision2.seconds)
-        })
+        .sorted_by_key(|(_, timed_decision)| timed_decision.seconds)
         .try_for_each(|(trace, timed_decision)| {
             // Re-evaluate decisions that were flagged as backdoors to remove false positives.
             let timed_decision = if timed_decision.decision.is_backdoor {
