@@ -385,6 +385,18 @@ fn run(
         let phase_one_traces = trace::load_traces(corpus_dir)?;
         // Save the traces in the output directory.
         trace::save_traces(&phase_one_traces, &config.traces_dir())?;
+
+        // We should start by clustering the inputs (no more time is allocated to phase 1).
+        clusters = clustering::cluster_traces(
+            &phase_one_traces,
+            config.cluster_formation_criterion,
+            config.cluster_formation_distance_metric.clone(),
+            config.cluster_formation_edge_tolerance,
+            config.cluster_formation_syscall_tolerance,
+        );
+        // Save clusters to output dir for later inspection.
+        clustering::save_clusters(&clusters, &config.clusters_dir())?;
+
         // Save the trace decisions and log the traces in the database.
         phase_one_traces.into_iter().try_for_each(|trace| {
             trace_db.insert_trace(trace.clone());
@@ -407,6 +419,8 @@ fn run(
             };
             decision.save(&config.decisions_dir())
         })?;
+
+        config.set_current_phase(RosaPhase::DetectingBackdoors)?;
     }
 
     println_info!("Starting up fuzzers...");
@@ -659,11 +673,6 @@ fn run(
                     })?;
             }
         }
-
-        // Update coverage.
-        let current_traces: Vec<Trace> = trace_db.traces().clone();
-        let (edge_coverage, syscall_coverage) = trace::get_coverage(&current_traces);
-        config.set_current_coverage(edge_coverage, syscall_coverage)?;
 
         // Update stats every second.
         if Instant::now().duration_since(last_log_time).as_secs() >= 1 {
