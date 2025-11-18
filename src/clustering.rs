@@ -459,3 +459,139 @@ pub fn save_clusters(clusters: &[Cluster], output_dir: &Path) -> Result<(), Rosa
         cluster.save(&cluster_file)
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::distance_metric::hamming::Hamming;
+
+    #[test]
+    fn same_cluster_syscall_diffs() {
+        let phase_one_traces = vec![
+            Trace {
+                name: "trace_1".to_string(),
+                test_input: Vec::new(),
+                edges: vec![1, 0, 1, 0],
+                syscalls: vec![1, 0, 1],
+            },
+            Trace {
+                name: "trace_2".to_string(),
+                test_input: Vec::new(),
+                edges: vec![1, 1, 1, 0],
+                syscalls: vec![1, 1, 0],
+            },
+            Trace {
+                name: "trace_3".to_string(),
+                test_input: Vec::new(),
+                edges: vec![0, 1, 1, 0],
+                syscalls: vec![0, 1, 1],
+            },
+            Trace {
+                name: "trace_4".to_string(),
+                test_input: Vec::new(),
+                edges: vec![1, 0, 0, 0],
+                syscalls: vec![1, 1, 1],
+            },
+        ];
+
+        let clusters = cluster_traces(
+            &phase_one_traces,
+            Criterion::EdgesOnly,
+            Box::new(Hamming),
+            0,
+            0,
+        );
+
+        assert_eq!(clusters.len(), 4);
+        assert_eq!(clusters[0].traces.len(), 1);
+        assert_eq!(clusters[0].traces[0].name, "trace_1".to_string());
+        assert_eq!(clusters[1].traces.len(), 1);
+        assert_eq!(clusters[1].traces[0].name, "trace_2".to_string());
+        assert_eq!(clusters[2].traces.len(), 1);
+        assert_eq!(clusters[2].traces[0].name, "trace_3".to_string());
+        assert_eq!(clusters[3].traces.len(), 1);
+        assert_eq!(clusters[3].traces[0].name, "trace_4".to_string());
+
+        let new_trace = Trace {
+            name: "trace_5".to_string(),
+            test_input: Vec::new(),
+            edges: vec![1, 1, 1, 1],
+            syscalls: vec![1, 1, 1],
+        };
+
+        let most_similar_cluster = get_most_similar_cluster(
+            &new_trace,
+            &clusters,
+            Criterion::EdgesAndSyscalls,
+            Box::new(Hamming),
+        )
+        .unwrap();
+        assert_eq!(most_similar_cluster.traces.len(), 1);
+        assert_eq!(most_similar_cluster.traces[0].name, "trace_2".to_string());
+    }
+
+    #[test]
+    fn same_cluster_edge_diffs() {
+        let phase_one_traces = vec![
+            Trace {
+                name: "trace_1".to_string(),
+                test_input: Vec::new(),
+                edges: vec![1, 0, 1, 0],
+                syscalls: vec![1, 0, 1],
+            },
+            Trace {
+                name: "trace_2".to_string(),
+                test_input: Vec::new(),
+                edges: vec![1, 1, 0, 0],
+                syscalls: vec![1, 1, 0],
+            },
+            Trace {
+                name: "trace_3".to_string(),
+                test_input: Vec::new(),
+                edges: vec![0, 1, 1, 0],
+                syscalls: vec![1, 1, 1],
+            },
+            Trace {
+                name: "trace_4".to_string(),
+                test_input: Vec::new(),
+                edges: vec![1, 0, 0, 0],
+                syscalls: vec![1, 1, 1],
+            },
+        ];
+
+        let clusters = cluster_traces(
+            &phase_one_traces,
+            Criterion::EdgesOnly,
+            Box::new(Hamming),
+            0,
+            0,
+        );
+
+        assert_eq!(clusters.len(), 4);
+        assert_eq!(clusters[0].traces.len(), 1);
+        assert_eq!(clusters[0].traces[0].name, "trace_1".to_string());
+        assert_eq!(clusters[1].traces.len(), 1);
+        assert_eq!(clusters[1].traces[0].name, "trace_2".to_string());
+        assert_eq!(clusters[2].traces.len(), 1);
+        assert_eq!(clusters[2].traces[0].name, "trace_3".to_string());
+        assert_eq!(clusters[3].traces.len(), 1);
+        assert_eq!(clusters[3].traces[0].name, "trace_4".to_string());
+
+        let new_trace = Trace {
+            name: "trace_5".to_string(),
+            test_input: Vec::new(),
+            edges: vec![1, 1, 1, 1],
+            syscalls: vec![1, 1, 1],
+        };
+
+        let most_similar_cluster = get_most_similar_cluster(
+            &new_trace,
+            &clusters,
+            Criterion::EdgesAndSyscalls,
+            Box::new(Hamming),
+        )
+        .unwrap();
+        assert_eq!(most_similar_cluster.traces.len(), 1);
+        assert_eq!(most_similar_cluster.traces[0].name, "trace_3".to_string());
+    }
+}
