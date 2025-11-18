@@ -145,10 +145,10 @@ impl Config {
     }
     /// The default cluster selection criterion.
     pub fn default_cluster_selection_criterion() -> Criterion {
-        // By default, we select clusters by CFG edges and system calls. This is because of how we
-        // define input families in the original paper. The system calls are used here as a tie
-        // breaker, in case the CFG edge vectors are identical.
-        Criterion::EdgesAndSyscalls
+        // By default, we select clusters by system calls. This is because of how we define input
+        // families in the original paper. The system calls are used as an underapproximation of
+        // the CFG edges, to avoid very strict comparisons.
+        Criterion::SyscallsOnly
     }
     /// The default cluster selection distance metric.
     pub fn default_cluster_selection_distance_metric() -> Box<dyn DistanceMetric> {
