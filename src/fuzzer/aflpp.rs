@@ -310,6 +310,9 @@ impl AFLPlusPlus {
 
         let strace_args = [
             vec![
+                // TODO make this value a parameter of the configuration?
+                "5s".to_string(),
+                "strace".to_string(),
                 "-e".to_string(),
                 "abbrev=all".to_string(),
                 "-e".to_string(),
@@ -338,7 +341,9 @@ impl AFLPlusPlus {
         ]
         .concat();
 
-        let mut strace_cmd = Command::new("strace");
+        // Run `strace` under `timeout`, to ensure that we do not block even if the input results
+        // in a timeout.
+        let mut strace_cmd = Command::new("timeout");
         match self.input {
             // If the input is read from `stdin`, then simply pass the file to the
             // `stdin` of the process.
