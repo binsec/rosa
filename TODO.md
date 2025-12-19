@@ -6,3 +6,5 @@
 - [ ] Parallelize `rosa-simulate`
 - [ ] Remove magic word `"***BACKDOOR TRIGGERED***"` and make it a default value that can be
   overridden via CLI option
+- [ ] If using a phase-one corpus, check that it contains at least one valid trace and emit an error
+  message otherwise
