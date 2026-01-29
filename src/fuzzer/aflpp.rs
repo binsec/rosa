@@ -327,10 +327,16 @@ impl AFLPlusPlus {
             // trouble is, `AFL_PRELOAD` does not mean anything to `strace`.
             // So, we replace it by `LD_PRELOAD`, which will actually change
             // things for `strace`.
+            //
+            // Note that an environment-defined value for `AFL_PRELOAD` takes priority over a
+            // config-defined one. This is done on purpose, to be able to override the
+            // config-defined value in some cases.
             config::replace_env_var_placeholders(&self.env())
                 .into_iter()
                 .map(|(key, value)| {
-                    if key == "AFL_PRELOAD" {
+                    if let Ok(value) = env::var("AFL_PRELOAD") {
+                        format!("--env=LD_PRELOAD={}", value)
+                    } else if key == "AFL_PRELOAD" {
                         format!("--env=LD_PRELOAD={}", value)
                     } else {
                         format!("--env={}={}", key, value)
