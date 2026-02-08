@@ -1,0 +1,19 @@
+[package]
+name = "rosa-cli"
+version = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+rosa = { path = "../rosa" }
+itertools = { workspace = true }
+serde = { workspace = true }
+clap = { version = "4.4.18", features = ["derive"] }
+colored = "3.0.0"
+crossterm = "0.28.1"
+ctrlc = "3.4.2"
+libc = "0.2.153"
+ratatui = "0.29.0"
+rayon = "1.9.0"
+regex = "1.11.1"
+tempfile = "3.17.1"
+toml = "0.8.10"

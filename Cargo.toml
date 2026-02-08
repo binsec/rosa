@@ -1,57 +1,11 @@
-[package]
-name = "rosa"
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
 version = "0.6.0-alpha24.dev"
 edition = "2024"
 
-[dependencies]
-clap = { version = "4.4.18", features = ["derive"] }
-colored = "3.0.0"
-crossterm = "0.28.1"
-ctrlc = "3.4.2"
-dyn-clone = "1.0.17"
+[workspace.dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
 itertools = "0.14.0"
-libc = "0.2.153"
-ratatui = "0.29.0"
-rayon = "1.9.0"
-regex = "1.11.1"
-serde = { version = "1.0.196", features = ["derive"] }
-tempfile = "3.17.1"
-toml = "0.8.10"
-typetag = "0.2.19"
-
-
-[[bin]]
-name = "rosa"
-path = "src/cli/rosa.rs"
-
-[[bin]]
-name = "rosa-evaluate"
-path = "src/cli/rosa_evaluate.rs"
-
-[[bin]]
-name = "rosa-explain"
-path = "src/cli/rosa_explain.rs"
-
-[[bin]]
-name = "rosa-filter-diff"
-path = "src/cli/rosa_filter_diff.rs"
-
-[[bin]]
-name = "rosa-generate-config"
-path = "src/cli/rosa_generate_config.rs"
-
-[[bin]]
-name = "rosa-showmap"
-path = "src/cli/rosa_showmap.rs"
-
-[[bin]]
-name = "rosa-simulate"
-path = "src/cli/rosa_simulate.rs"
-
-[[bin]]
-name = "rosa-trace"
-path = "src/cli/rosa_trace.rs"
-
-[[bin]]
-name = "rosa-trace-dist"
-path = "src/cli/rosa_trace_dist.rs"

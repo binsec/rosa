@@ -2,8 +2,5 @@
 *.log*
 /out/
 /config.*
-
-
-# Added by cargo
-
 /target
+/crates/*/target
