@@ -21,6 +21,7 @@ use crate::fuzzer::{FuzzerBackend, FuzzerStatus, aflpp::AFLPlusPlus};
 /// This refers to an actual fuzzer, such as AFL++.
 pub enum FuzzerBackendKind {
     /// The [AFL++ fuzzer](https://github.com/AFLplusplus/AFLplusplus).
+    #[serde(rename = "afl++")]
     AFLPlusPlus(AFLPlusPlus),
 }
 
