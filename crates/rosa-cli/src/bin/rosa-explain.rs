@@ -34,7 +34,7 @@ struct Cli {
 
     /// The UID of the trace to explain.
     #[arg(long_help, value_name = "TRACE UID", help = "The UID of the trace")]
-    trace_uid: String,
+    trace_id: String,
 
     /// The component of the trace to explain.
     #[arg(
@@ -51,51 +51,51 @@ struct Cli {
 /// Run the explanation tool.
 ///
 /// Display the differences between the trace and its corresponding cluster.
-fn run(output_dir: &Path, trace_uid: &str, component: Component) -> Result<(), RosaError> {
+fn run(output_dir: &Path, trace_id: &str, component: Component) -> Result<(), RosaError> {
     let config = Config::load(&output_dir.join("config").with_extension("toml"))?;
     let timed_decision = load_decision_from_file(
         &output_dir
             .join("decisions")
-            .join(trace_uid)
+            .join(trace_id)
             .with_extension("toml"),
     )?;
     let decision = timed_decision.decision;
     let trace = rosa_cli::trace::load_trace_from_file(
-        &decision.trace_uid,
-        &output_dir.join("traces").join(trace_uid),
+        &decision.trace_id,
+        &output_dir.join("traces").join(trace_id),
         &output_dir
             .join("traces")
-            .join(trace_uid)
+            .join(trace_id)
             .with_extension("trace"),
     )?;
 
     let cluster_file_content = fs::read_to_string(
         output_dir
             .join("clusters")
-            .join(&decision.cluster_uid)
+            .join(&decision.cluster_id)
             .with_extension("txt"),
     )
     .map_err(|err| {
         error!(
             "could not read cluster '{}' in {}: {}.",
-            &decision.cluster_uid,
+            &decision.cluster_id,
             output_dir.display(),
             err
         )
     })?;
-    let cluster_trace_uids: Vec<&str> = cluster_file_content
+    let cluster_trace_ids: Vec<&str> = cluster_file_content
         .split('\n')
         .filter(|line| !line.trim().is_empty())
         .collect();
-    let cluster: Vec<Trace> = cluster_trace_uids
+    let cluster: Vec<Trace> = cluster_trace_ids
         .iter()
-        .map(|trace_uid| {
+        .map(|trace_id| {
             rosa_cli::trace::load_trace_from_file(
-                trace_uid,
-                &output_dir.join("traces").join(trace_uid),
+                trace_id,
+                &output_dir.join("traces").join(trace_id),
                 &output_dir
                     .join("traces")
-                    .join(trace_uid)
+                    .join(trace_id)
                     .with_extension("trace"),
             )
         })
@@ -159,11 +159,11 @@ fn run(output_dir: &Path, trace_uid: &str, component: Component) -> Result<(), R
         })
         .collect();
 
-    println_info!("Explaining trace {}:", &trace_uid);
+    println_info!("Explaining trace {}:", &trace_id);
     println_info!("  Trace indicates a backdoor: {}", &decision.is_backdoor);
     println_info!("  Detection reason: {}", &decision.reason);
     println_info!("  Oracle criterion: {}", &config.oracle_criterion);
-    println_info!("  Most similar cluster: {}", &decision.cluster_uid);
+    println_info!("  Most similar cluster: {}", &decision.cluster_id);
 
     println_info!("");
 
@@ -203,7 +203,7 @@ fn main() -> ExitCode {
 
     let cli = Cli::parse();
 
-    match run(&cli.output_dir, &cli.trace_uid, cli.component) {
+    match run(&cli.output_dir, &cli.trace_id, cli.component) {
         Ok(_) => ExitCode::SUCCESS,
         Err(err) => {
             println_error!(err);

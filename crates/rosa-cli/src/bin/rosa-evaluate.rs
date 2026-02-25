@@ -76,12 +76,12 @@ struct Cli {
     #[arg(
         long_help,
         short = 'u',
-        long = "trace-uid",
+        long = "trace-id",
         value_name = "TRACE_UID",
         action = ArgAction::Append,
         help = "Selected trace UID"
     )]
-    trace_uids: Vec<String>,
+    trace_ids: Vec<String>,
 
     /// Do not deduplicate findings. Every finding will be treated as unique.
     #[arg(
@@ -137,13 +137,13 @@ impl fmt::Display for SampleKind {
 #[derive(Clone, Debug)]
 struct Sample {
     /// The unique ID of the sample.
-    uid: String,
+    id: String,
     /// The amount of seconds passed since the beginning of the detection campaign.
     seconds: u64,
     /// The kind of the sample.
     kind: SampleKind,
     /// The unique ID of the discriminant.
-    discriminant_uid: String,
+    discriminant_id: String,
 }
 
 /// Check a ROSA decision.
@@ -156,7 +156,7 @@ fn check_decision(
     env: &HashMap<String, String>,
     test_input_path: &Path,
     timed_decision: &TimedDecision,
-    discriminant_uid: String,
+    discriminant_id: String,
     show_output: bool,
 ) -> Result<Sample, RosaError> {
     let test_input_file = File::open(test_input_path).map_err(|err| {
@@ -210,10 +210,10 @@ fn check_decision(
     };
 
     Ok(Sample {
-        uid: timed_decision.decision.trace_uid.clone(),
+        id: timed_decision.decision.trace_id.clone(),
         seconds: timed_decision.seconds,
         kind,
-        discriminant_uid,
+        discriminant_id,
     })
 }
 
@@ -223,7 +223,7 @@ fn run(
     output_dir: &Path,
     target_program_cmd: Option<String>,
     target_program_env: Option<String>,
-    trace_uids: &[String],
+    trace_ids: &[String],
     show_summary: bool,
     show_output: bool,
     deduplicate: bool,
@@ -241,9 +241,9 @@ fn run(
     println_info!("Loading traces...");
     let all_traces = rosa_cli::trace::load_traces_from_dir(&root_dir.join(config.traces_dir()))?;
 
-    let selected_trace_uids: Vec<String> = match trace_uids.len() {
-        0 => all_traces.iter().map(|trace| trace.uid()).collect(),
-        _ => Vec::from(trace_uids),
+    let selected_trace_ids: Vec<String> = match trace_ids.len() {
+        0 => all_traces.iter().map(|trace| trace.id()).collect(),
+        _ => Vec::from(trace_ids),
     };
 
     let selected_cmd: Vec<String> = match target_program_cmd {
@@ -264,13 +264,13 @@ fn run(
         None => config.main_fuzzer()?.backend.env().clone(),
     };
 
-    let timed_decisions: Vec<TimedDecision> = selected_trace_uids
+    let timed_decisions: Vec<TimedDecision> = selected_trace_ids
         .iter()
-        .map(|trace_uid| {
+        .map(|trace_id| {
             rosa_cli::oracle::load_decision_from_file(
                 &output_dir
                     .join("decisions")
-                    .join(trace_uid)
+                    .join(trace_id)
                     .with_extension("toml"),
             )
         })
@@ -305,12 +305,12 @@ fn run(
                 &selected_env,
                 &output_dir
                     .join("traces")
-                    .join(&timed_decision.decision.trace_uid),
+                    .join(&timed_decision.decision.trace_id),
                 timed_decision,
-                timed_decision.decision.discriminants.fingerprint(
-                    config.oracle_criterion,
-                    &timed_decision.decision.cluster_uid,
-                ),
+                timed_decision
+                    .decision
+                    .discriminants
+                    .fingerprint(config.oracle_criterion, &timed_decision.decision.cluster_id),
                 show_output,
             )
         })
@@ -328,7 +328,7 @@ fn run(
                 // Only deduplicate (true/false) _positives_, as that is what ROSA does to
                 // deduplicate while running.
                 SampleKind::TruePositive | SampleKind::FalsePositive => known_traces
-                    .insert(sample.clone().discriminant_uid)
+                    .insert(sample.clone().discriminant_id)
                     .then_some(sample),
                 // All other kinds of inputs are left in the same state.
                 _ => Some(sample),
@@ -349,7 +349,7 @@ fn run(
     let header = if show_summary {
         "true_positives,false_positives,true_negatives,false_negatives,seconds_to_first_backdoor"
     } else {
-        "trace_uid,result,seconds"
+        "trace_id,result,seconds"
     };
 
     let body = if show_summary {
@@ -376,7 +376,7 @@ fn run(
     } else {
         samples
             .iter()
-            .map(|sample| format!("{},{},{}", sample.uid, sample.kind, sample.seconds))
+            .map(|sample| format!("{},{},{}", sample.id, sample.kind, sample.seconds))
             .collect::<Vec<String>>()
             .join("\n")
     };
@@ -395,7 +395,7 @@ fn main() -> ExitCode {
         &cli.output_dir,
         cli.target_program_cmd,
         cli.target_program_env,
-        &cli.trace_uids,
+        &cli.trace_ids,
         cli.show_summary,
         cli.show_output,
         cli.deduplicate,

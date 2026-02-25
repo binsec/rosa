@@ -292,7 +292,7 @@ pub fn load_traces_from_dir(traces_dir: &Path) -> Result<Vec<Trace>, RosaError> 
 /// ```
 pub fn save_traces_to_dir(traces: &[Trace], output_dir: &Path) -> Result<(), RosaError> {
     traces.iter().try_for_each(|trace| {
-        let base_path = output_dir.join(trace.uid());
+        let base_path = output_dir.join(trace.id());
         save_test_input_to_file(trace, &base_path)
             .and_then(|()| save_trace_dump_to_file(trace, &base_path.with_extension("trace")))
     })

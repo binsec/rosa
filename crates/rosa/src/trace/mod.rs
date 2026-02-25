@@ -204,8 +204,8 @@ impl Trace {
         )
     }
 
-    /// Get the unique ID of the trace in terms of edges and syscalls in base 64.
-    pub fn uid(&self) -> String {
+    /// Get the ID of the trace in terms of edges and syscalls in base 64.
+    pub fn id(&self) -> String {
         let mut s = DefaultHasher::new();
         self.hash(&mut s);
 

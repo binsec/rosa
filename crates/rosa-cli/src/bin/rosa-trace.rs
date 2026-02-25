@@ -90,7 +90,7 @@ fn run(config_file: &Path, input_file: &Path, output_file: Option<&Path>) -> Res
         .ok_or(error!("could not load any traces."))?;
     main_fuzzer.backend.teardown(scratch_dir.path())?;
 
-    let default_file = PathBuf::from(".").join(trace.uid()).with_extension("trace");
+    let default_file = PathBuf::from(".").join(trace.id()).with_extension("trace");
     let output_file = output_file.unwrap_or(&default_file);
     rosa_cli::trace::save_trace_dump_to_file(&trace, output_file)?;
     println_info!("Done! Trace saved in '{}'.", output_file.display());

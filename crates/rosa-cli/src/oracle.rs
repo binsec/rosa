@@ -78,7 +78,7 @@ pub fn save_decision_to_file(
     let decision_toml =
         toml::to_string(&timed_decision).expect("failed to serialize decision TOML.");
     let decision_file = output_dir
-        .join(&timed_decision.decision.trace_uid)
+        .join(&timed_decision.decision.trace_id)
         .with_extension("toml");
 
     fs::write(&decision_file, decision_toml).map_err(|err| {

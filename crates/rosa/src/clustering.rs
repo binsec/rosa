@@ -10,7 +10,7 @@ use crate::{criterion::Criterion, distance_metric::DistanceMetric, trace::Trace}
 #[derive(Clone, Debug)]
 pub struct Cluster {
     /// The unique ID of the cluster.
-    pub uid: String,
+    pub id: String,
     /// The traces contained in the cluster.
     pub traces: Vec<Trace>,
     /// The minimum internal edge distance (in terms of similarity) between the traces.
@@ -43,7 +43,7 @@ pub struct Cluster {
 /// // we'll only use edges to make the example simpler.
 /// let clusters = vec![
 ///     Cluster {
-///         uid: "cluster_1".to_string(),
+///         id: "cluster_1".to_string(),
 ///         traces: vec![
 ///             Trace {
 ///                 name: "trace_1".to_string(),
@@ -64,7 +64,7 @@ pub struct Cluster {
 ///         max_syscall_distance: 0,
 ///     },
 ///     Cluster {
-///         uid: "cluster_2".to_string(),
+///         id: "cluster_2".to_string(),
 ///         traces: vec![
 ///             Trace {
 ///                 name: "trace_3".to_string(),
@@ -100,8 +100,8 @@ pub struct Cluster {
 ///         &clusters,
 ///         Criterion::EdgesOnly,
 ///         Hamming,
-///     ).expect("failed to get most similar cluster").uid,
-///     clusters[0].uid,
+///     ).expect("failed to get most similar cluster").id,
+///     clusters[0].id,
 /// );
 /// ```
 pub fn get_most_similar_cluster<'a, DM>(
@@ -251,7 +251,7 @@ where
             .iter()
             .enumerate()
             .map(|(index, trace)| Cluster {
-                uid: format!("cluster_{:0>6}", index),
+                id: format!("cluster_{:0>6}", index),
                 traces: vec![trace.clone()],
                 min_edge_distance: edge_tolerance,
                 max_edge_distance: edge_tolerance,
@@ -303,7 +303,7 @@ where
                             cluster_matches.then_some(
                                 clusters
                                     .iter()
-                                    .position(|c| c.uid == most_similar_cluster.uid)
+                                    .position(|c| c.id == most_similar_cluster.id)
                                     .expect("failed to get index of matching cluster."),
                             ),
                             max_edge_distance,
@@ -346,7 +346,7 @@ where
                     // Either no cluster was found (because none exist) or the one that was found
                     // didn't match; either way, we have to create a new cluster for the trace.
                     clusters.push(Cluster {
-                        uid: format!("cluster_{:0>6}", clusters.len()),
+                        id: format!("cluster_{:0>6}", clusters.len()),
                         traces: vec![trace.clone()],
                         min_edge_distance: edge_tolerance,
                         max_edge_distance: edge_tolerance,

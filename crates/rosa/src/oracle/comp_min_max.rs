@@ -138,9 +138,9 @@ where
             .collect();
 
         Decision {
-            trace_uid: trace.uid(),
+            trace_id: trace.id(),
             trace_name: trace.name.clone(),
-            cluster_uid: cluster.uid.clone(),
+            cluster_id: cluster.id.clone(),
             is_backdoor,
             reason,
             discriminants: Discriminants {

@@ -210,7 +210,7 @@ fn run(
         .par_iter()
         .map(|trace: &Trace| {
             rosa_cli::oracle::load_decision_from_file(
-                &old_decisions_dir.join(trace.uid()).with_extension("toml"),
+                &old_decisions_dir.join(trace.id()).with_extension("toml"),
             )
             .map(|timed_decision| TimedTrace {
                 trace: trace.clone(),
@@ -229,9 +229,9 @@ fn run(
             phase_one_traces.clone().into_iter().try_for_each(|trace| {
                 let decision = TimedDecision {
                     decision: Decision {
-                        trace_uid: trace.uid(),
+                        trace_id: trace.id(),
                         trace_name: trace.name.clone(),
-                        cluster_uid: "<none>".to_string(),
+                        cluster_id: "<none>".to_string(),
                         is_backdoor: false,
                         reason: DecisionReason::Seed,
                         discriminants: Discriminants {
@@ -287,9 +287,9 @@ fn run(
         .try_for_each(|timed_trace| {
             let timed_decision = TimedDecision {
                 decision: Decision {
-                    trace_uid: timed_trace.trace.uid(),
+                    trace_id: timed_trace.trace.id(),
                     trace_name: timed_trace.trace.name.clone(),
-                    cluster_uid: "<none>".to_string(),
+                    cluster_id: "<none>".to_string(),
                     is_backdoor: false,
                     reason: DecisionReason::Seed,
                     discriminants: Discriminants {
@@ -339,10 +339,10 @@ fn run(
                 // Essentially, if the backdoor was detected for the same reason as a
                 // pre-existing backdoor, we should avoid listing them as two different
                 // backdoors.
-                let fingerprint = timed_decision.decision.discriminants.fingerprint(
-                    config.oracle_criterion,
-                    &timed_decision.decision.cluster_uid,
-                );
+                let fingerprint = timed_decision
+                    .decision
+                    .discriminants
+                    .fingerprint(config.oracle_criterion, &timed_decision.decision.cluster_id);
 
                 // Attempt to create a directory for this category of backdoor.
                 let backdoor_dir = config.backdoors_dir().join(fingerprint);
@@ -358,7 +358,7 @@ fn run(
                 // Save backdoor.
                 rosa_cli::trace::save_test_input_to_file(
                     &timed_trace.trace,
-                    &backdoor_dir.join(timed_trace.trace.uid()),
+                    &backdoor_dir.join(timed_trace.trace.id()),
                 )?;
             }
 

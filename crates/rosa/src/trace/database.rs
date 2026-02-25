@@ -59,13 +59,13 @@ impl TraceDatabase {
     }
 
     /// Check whether or not a trace exists in the database.
-    pub fn has_trace(&self, uid: &str) -> bool {
-        self.traces.contains_key(uid)
+    pub fn has_trace(&self, id: &str) -> bool {
+        self.traces.contains_key(id)
     }
 
     /// Insert a new trace to the database.
     pub fn insert_trace(&mut self, trace: Trace) {
-        self.traces.insert(trace.uid(), trace);
+        self.traces.insert(trace.id(), trace);
     }
 }
 

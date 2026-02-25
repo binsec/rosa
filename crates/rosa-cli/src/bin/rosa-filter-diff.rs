@@ -187,7 +187,7 @@ fn reevaluate_decision(
         .then_some(())
         .ok_or(error!("rosa-trace failed."))?;
     let base_trace =
-        rosa_cli::trace::load_trace_from_file(&trace.uid(), &input_file_path, &trace_file_path)?;
+        rosa_cli::trace::load_trace_from_file(&trace.id(), &input_file_path, &trace_file_path)?;
 
     let diff_decision = match mode {
         DiffMode::InputOnly => {
@@ -287,7 +287,7 @@ fn reevaluate_decision(
                 &config
                     .output_dir
                     .join("clusters")
-                    .join(&timed_decision.decision.cluster_uid)
+                    .join(&timed_decision.decision.cluster_id)
                     .with_extension("txt"),
                 &config.output_dir.join("traces"),
             )?;
@@ -320,7 +320,7 @@ fn reevaluate_decision(
                         .ok_or(error!("rosa-trace failed."))?;
 
                     rosa_cli::trace::load_trace_from_file(
-                        &trace.uid(),
+                        &trace.id(),
                         &input_file_path,
                         &trace_file_path,
                     )
@@ -399,9 +399,9 @@ fn reevaluate_decision(
         // version.
         Ok(TimedDecision {
             decision: Decision {
-                trace_uid: timed_decision.decision.trace_uid.clone(),
+                trace_id: timed_decision.decision.trace_id.clone(),
                 trace_name: timed_decision.decision.trace_name.clone(),
-                cluster_uid: timed_decision.decision.cluster_uid.clone(),
+                cluster_id: timed_decision.decision.cluster_id.clone(),
                 is_backdoor: false,
                 reason: DecisionReason::DiffFiltering,
                 discriminants: Discriminants {
@@ -548,7 +548,7 @@ fn run(
         .into_iter()
         .map(|trace| {
             rosa_cli::oracle::load_decision_from_file(
-                &old_decisions_dir.join(trace.uid()).with_extension("toml"),
+                &old_decisions_dir.join(trace.id()).with_extension("toml"),
             )
             .map(|timed_decision| (trace, timed_decision))
         })
@@ -568,10 +568,10 @@ fn run(
         .try_for_each(|(trace, timed_decision)| {
             // Re-evaluate decisions that were flagged as backdoors to remove false positives.
             let timed_decision = if timed_decision.decision.is_backdoor {
-                let fingerprint = timed_decision.decision.discriminants.fingerprint(
-                    config.oracle_criterion,
-                    &timed_decision.decision.cluster_uid,
-                );
+                let fingerprint = timed_decision
+                    .decision
+                    .discriminants
+                    .fingerprint(config.oracle_criterion, &timed_decision.decision.cluster_id);
                 // If we've already covered this fingerprint, then apply the same decision without
                 // reevaluating.
                 if let Some(is_backdoor) = findings_map.get(&fingerprint) {
@@ -585,7 +585,7 @@ fn run(
                     // and store the result in the findings map, to apply it to other findings with
                     // the same fingerprint.
                     if verbose {
-                        println_verbose!("Reevaluating decision for {}...", &trace.uid());
+                        println_verbose!("Reevaluating decision for {}...", &trace.id());
                     }
                     let new_decision = reevaluate_decision(
                         &trace,
@@ -621,10 +621,10 @@ fn run(
                 // Essentially, if the backdoor was detected for the same reason as a
                 // pre-existing backdoor, we should avoid listing them as two different
                 // backdoors.
-                let fingerprint = timed_decision.decision.discriminants.fingerprint(
-                    config.oracle_criterion,
-                    &timed_decision.decision.cluster_uid,
-                );
+                let fingerprint = timed_decision
+                    .decision
+                    .discriminants
+                    .fingerprint(config.oracle_criterion, &timed_decision.decision.cluster_id);
 
                 // Attempt to create a directory for this category of backdoor.
                 let backdoor_dir = config.backdoors_dir().join(fingerprint);
@@ -638,7 +638,7 @@ fn run(
                 .map_err(|err| error!("could not create '{}': {}", &backdoor_dir.display(), err))?;
 
                 // Save backdoor.
-                rosa_cli::trace::save_test_input_to_file(&trace, &backdoor_dir.join(trace.uid()))?;
+                rosa_cli::trace::save_test_input_to_file(&trace, &backdoor_dir.join(trace.id()))?;
             }
 
             Ok(())

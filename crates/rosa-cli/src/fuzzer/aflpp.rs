@@ -569,7 +569,7 @@ impl AFLPlusPlus {
                 Some(db) => {
                     db.register_input(original_test_input_path);
 
-                    if !db.has_trace(&trace.uid()) {
+                    if !db.has_trace(&trace.id()) {
                         db.insert_trace(trace.clone());
 
                         Some(trace)
@@ -795,7 +795,7 @@ impl FuzzerBackend for AFLPlusPlus {
         let unique_traces: Vec<Trace> = new_traces
             .into_iter()
             .filter_map(|new_trace| {
-                if !trace_db.has_trace(&new_trace.uid()) {
+                if !trace_db.has_trace(&new_trace.id()) {
                     trace_db.insert_trace(new_trace.clone());
                     Some(new_trace)
                 } else {

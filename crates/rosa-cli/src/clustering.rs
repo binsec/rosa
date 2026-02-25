@@ -11,7 +11,7 @@ use crate::trace::load_trace_from_file;
 /// Note that the min/max edge/syscall distances are all set to zero and may not be accurate.
 /// If they are needed, they should be recomputed from scratch after loading.
 pub fn load_cluster_from_file(file: &Path, traces_dir: &Path) -> Result<Cluster, RosaError> {
-    let uid = file
+    let id = file
         .with_extension("")
         .file_name()
         .expect("failed to get name of cluster file.")
@@ -22,11 +22,11 @@ pub fn load_cluster_from_file(file: &Path, traces_dir: &Path) -> Result<Cluster,
         .map_err(|err| error!("could not read cluster file '{}': {}.", file.display(), err))?
         .split('\n')
         .filter(|line| !line.is_empty())
-        .map(|trace_uid| {
+        .map(|trace_id| {
             load_trace_from_file(
-                trace_uid,
-                &traces_dir.join(trace_uid),
-                &traces_dir.join(trace_uid).with_extension("trace"),
+                trace_id,
+                &traces_dir.join(trace_id),
+                &traces_dir.join(trace_id).with_extension("trace"),
             )
         })
         .collect::<Result<Vec<Trace>, RosaError>>()?;
@@ -35,7 +35,7 @@ pub fn load_cluster_from_file(file: &Path, traces_dir: &Path) -> Result<Cluster,
     assert!(!traces.is_empty());
 
     Ok(Cluster {
-        uid,
+        id,
         traces,
         min_edge_distance: 0,
         max_edge_distance: 0,
@@ -49,8 +49,8 @@ pub fn load_cluster_from_file(file: &Path, traces_dir: &Path) -> Result<Cluster,
 /// The cluster is saved in a very simple textual form, with the UIDs of its traces, each on a
 /// separate line.
 pub fn save_cluster_to_file(cluster: &Cluster, file: &Path) -> Result<(), RosaError> {
-    let trace_uids: Vec<String> = cluster.traces.iter().map(|trace| trace.uid()).collect();
-    fs::write(file, format!("{}\n", trace_uids.join("\n"))).map_err(|err| {
+    let trace_ids: Vec<String> = cluster.traces.iter().map(|trace| trace.id()).collect();
+    fs::write(file, format!("{}\n", trace_ids.join("\n"))).map_err(|err| {
         error!(
             "could not save cluster to file {}: {}.",
             file.display(),
@@ -76,7 +76,7 @@ pub fn save_cluster_to_file(cluster: &Cluster, file: &Path) -> Result<(), RosaEr
 /// // Dummy clusters to demonstrate function use.
 /// let clusters = vec![
 ///     Cluster {
-///         uid: "cluster_1".to_string(),
+///         id: "cluster_1".to_string(),
 ///         traces: vec![
 ///             Trace {
 ///                 name: "trace_1".to_string(),
@@ -104,7 +104,7 @@ pub fn save_cluster_to_file(cluster: &Cluster, file: &Path) -> Result<(), RosaEr
 /// ```
 pub fn save_clusters_to_dir(clusters: &[Cluster], output_dir: &Path) -> Result<(), RosaError> {
     clusters.iter().try_for_each(|cluster| {
-        let cluster_file = output_dir.join(&cluster.uid).with_extension("txt");
+        let cluster_file = output_dir.join(&cluster.id).with_extension("txt");
         save_cluster_to_file(cluster, &cluster_file)
     })
 }
