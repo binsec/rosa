@@ -4,3 +4,4 @@
 /config.*
 /target
 /crates/*/target
+/crates/target
