@@ -1,6 +1,6 @@
 --- a/include/forkserver.h
 +++ b/include/forkserver.h
-@@ -34,6 +34,7 @@
+@@ -35,6 +35,7 @@
  #include <unistd.h>
  
  #include "types.h"
@@ -8,7 +8,7 @@
  
  #ifdef __linux__
  /**
-@@ -107,6 +108,8 @@ typedef struct afl_forkserver {
+@@ -108,6 +109,8 @@ typedef struct afl_forkserver {
  
    u8 *trace_bits;                       /* SHM with instrumentation bitmap  */
  
@@ -126,7 +126,7 @@
  u8  *afl_shm_init(sharedmem_t *, size_t, unsigned char non_instrumented_mode,
 --- a/src/afl-forkserver.c
 +++ b/src/afl-forkserver.c
-@@ -203,6 +203,12 @@ static list_t fsrv_list = {.element_prealloc_count = 0};
+@@ -204,6 +204,12 @@ static list_t fsrv_list = {.element_prealloc_count = 0};
  
  static void fsrv_exec_child(afl_forkserver_t *fsrv, char **argv) {
  
@@ -139,7 +139,7 @@
    if (fsrv->qemu_mode || fsrv->cs_mode) {
  
      setenv("AFL_DISABLE_LLVM_INSTRUMENTATION", "1", 0);
-@@ -994,6 +1000,12 @@ void afl_fsrv_start(afl_forkserver_t *fsrv, char **argv,
+@@ -1016,6 +1022,12 @@ void afl_fsrv_start(afl_forkserver_t *fsrv, char **argv,
  
        unsetenv(CMPLOG_SHM_ENV_VAR);  // we do not want that in non-cmplog fsrv
  
@@ -152,7 +152,7 @@
      }
  
      /* Umpf. On OpenBSD, the default fd limit for root users is set to
-@@ -2034,12 +2046,22 @@ fsrv_run_result_t __attribute__((hot)) afl_fsrv_run_target(
+@@ -2187,6 +2199,11 @@ fsrv_run_result_t __attribute__((hot)) afl_fsrv_run_target(
      if (likely(!fsrv->nyx_mode)) {
  
        memset(fsrv->trace_bits, 0, fsrv->map_size);
@@ -164,8 +164,9 @@
        MEM_BARRIER();
  
      }
- 
+@@ -2194,6 +2211,11 @@ fsrv_run_result_t __attribute__((hot)) afl_fsrv_run_target(
  #else
+     /* Clear shared memory for clean execution */
      memset(fsrv->trace_bits, 0, fsrv->map_size);
 +    if (fsrv->runtime_trace != NULL) {
 +      /* Reset the runtime trace components. */
@@ -275,7 +276,7 @@
  
 --- a/src/afl-fuzz-init.c
 +++ b/src/afl-fuzz-init.c
-@@ -913,6 +913,8 @@ void perform_dry_run(afl_state_t *afl) {
+@@ -914,6 +914,8 @@ void perform_dry_run(afl_state_t *afl) {
  
      u8  res;
      s32 fd;
@@ -284,7 +285,7 @@
  
      if (unlikely(!q->len)) {
  
-@@ -938,6 +940,40 @@ void perform_dry_run(afl_state_t *afl) {
+@@ -939,6 +941,40 @@ void perform_dry_run(afl_state_t *afl) {
  
      res = calibrate_case(afl, q, use_mem, 0, 1);
  
@@ -325,7 +326,7 @@
      /* For AFLFast schedules we update the queue entry */
      if (unlikely(afl->schedule >= FAST && afl->schedule <= RARE) &&
          likely(q->exec_cksum)) {
-@@ -2051,6 +2087,14 @@ static void handle_existing_out_dir(afl_state_t *afl) {
+@@ -2059,6 +2095,14 @@ static void handle_existing_out_dir(afl_state_t *afl) {
    if (delete_files(fn, case_prefix)) { goto dir_cleanup_failed; }
    ck_free(fn);
  
@@ -340,7 +341,7 @@
    /* All right, let's do <afl->out_dir>/crashes/id:* and
     * <afl->out_dir>/hangs/id:*. */
  
-@@ -2348,6 +2392,12 @@ void setup_dirs_fds(afl_state_t *afl) {
+@@ -2390,6 +2434,12 @@ void setup_dirs_fds(afl_state_t *afl) {
    if (mkdir(tmp, afl->dir_perm)) { PFATAL("Unable to create '%s'", tmp); }
    ck_free(tmp);
  
@@ -355,7 +356,7 @@
    if (afl->sync_id) {
 --- a/src/afl-fuzz.c
 +++ b/src/afl-fuzz.c
-@@ -1547,6 +1547,17 @@ int main(int argc, char **argv_orig, char **envp) {
+@@ -1622,6 +1622,17 @@ int main(int argc, char **argv_orig, char **envp) {
  
    }
  
@@ -373,9 +374,9 @@
    if (afl->sync_id && strcmp(afl->sync_id, "addseeds") == 0) {
  
      FATAL("-M/-S name 'addseeds' is a reserved name, choose something else");
-@@ -2564,6 +2575,13 @@ int main(int argc, char **argv_orig, char **envp) {
-       afl_shm_init(&afl->shm, afl->fsrv.map_size, afl->non_instrumented_mode,
-                    afl->perm, afl->chown_needed ? afl->fsrv.gid : -1);
+@@ -2687,6 +2698,13 @@ int main(int argc, char **argv_orig, char **envp) {
+ 
+   #endif
  
 +  if (afl->shm.runtime_trace_mode) {
 +
@@ -384,10 +385,10 @@
 +
 +  }
 +
-   if (!afl->non_instrumented_mode && !afl->fsrv.qemu_mode &&
-       !afl->unicorn_mode && !afl->fsrv.frida_mode && !afl->fsrv.cs_mode &&
+   if (!afl->non_instrumented_mode && !afl->unicorn_mode &&
+       !afl->fsrv.frida_mode && !afl->fsrv.cs_mode &&
        !afl->afl_env.afl_skip_bin_check) {
-@@ -2592,6 +2610,14 @@ int main(int argc, char **argv_orig, char **envp) {
+@@ -2716,6 +2734,14 @@ int main(int argc, char **argv_orig, char **envp) {
        afl->fsrv.trace_bits =
            afl_shm_init(&afl->shm, new_map_size, afl->non_instrumented_mode,
                         afl->perm, afl->chown_needed ? afl->fsrv.gid : -1);
@@ -400,8 +401,8 @@
 +      }
 +
        setenv("AFL_NO_AUTODICT", "1", 1);  // loaded already
-       afl_fsrv_start(&afl->fsrv, afl->argv, &afl->stop_soon,
-                      afl->afl_env.afl_debug_child);
+ 
+   #ifdef __AFL_CODE_COVERAGE
 --- a/src/afl-sharedmem.c
 +++ b/src/afl-sharedmem.c
 @@ -37,6 +37,7 @@

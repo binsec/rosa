@@ -16,7 +16,7 @@ ENV LLVM_CONFIG=llvm-config-21
 # Install AFL++ dependencies.
 RUN apt-get update && apt-get install -y build-essential python3-dev automake cmake git flex \
     bison libglib2.0-dev libpixman-1-dev python3-setuptools cargo libgtk-3-dev lld llvm llvm-dev \
-    clang ninja-build cpio libcapstone-dev wget curl python3-pip
+    clang ninja-build cpio libcapstone-dev wget curl python3-pip meson
 RUN apt-get update && apt-get install -y \
     gcc-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-plugin-dev \
     libstdc++-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-dev
@@ -46,7 +46,7 @@ RUN patch -p1 < /root/rosa/fuzzers/aflpp/patches/aflpp-qemuafl-build.patch
 # Build AFL++ (and QEMU-AFL).
 RUN make -j$(nproc)
 WORKDIR /root/rosa/fuzzers/aflpp/aflpp/qemu_mode
-RUN ./build_qemu_support.sh
+RUN CPU_TARGET=mipsel ./build_qemu_support.sh
 
 # Build the examples.
 WORKDIR /root/rosa/examples
