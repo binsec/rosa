@@ -9,7 +9,7 @@ use crate::{criterion::Criterion, distance_metric::DistanceMetric, trace::Trace}
 /// A trace cluster, containing similar traces.
 #[derive(Clone, Debug)]
 pub struct Cluster {
-    /// The unique ID of the cluster.
+    /// The ID of the cluster.
     pub id: String,
     /// The traces contained in the cluster.
     pub traces: Vec<Trace>,

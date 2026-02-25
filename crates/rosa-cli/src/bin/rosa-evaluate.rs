@@ -136,13 +136,13 @@ impl fmt::Display for SampleKind {
 /// A sample from ROSA's findings.
 #[derive(Clone, Debug)]
 struct Sample {
-    /// The unique ID of the sample.
+    /// The ID of the sample.
     id: String,
     /// The amount of seconds passed since the beginning of the detection campaign.
     seconds: u64,
     /// The kind of the sample.
     kind: SampleKind,
-    /// The unique ID of the discriminant.
+    /// The ID of the discriminant.
     discriminant_id: String,
 }
 

@@ -23,7 +23,7 @@ pub enum Component {
 ///
 /// A runtime trace is composed of an associated test input (the test input that produced it)
 /// and a trace dump, containing the components of the runtime trace (edges and syscalls). In
-/// order to make dealing with traces easier, we assign a unique ID to each of them.
+/// order to make dealing with traces easier, we assign an ID to each of them.
 ///
 /// # Examples
 /// ```
