@@ -14,7 +14,7 @@ use crate::trace::Trace;
 /// considering if we should keep a given test input-trace pair.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TraceDatabase {
-    /// A map of trace UIDs to traces.
+    /// A map of trace IDs to traces.
     traces: HashMap<String, Trace>,
     /// A set of known input files (and by extension, known traces).
     known_inputs: HashSet<PathBuf>,

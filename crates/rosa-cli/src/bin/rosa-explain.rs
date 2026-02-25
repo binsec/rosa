@@ -32,8 +32,8 @@ struct Cli {
     #[arg(long_help, value_name = "DIR", help = "The ROSA output directory")]
     output_dir: PathBuf,
 
-    /// The UID of the trace to explain.
-    #[arg(long_help, value_name = "TRACE UID", help = "The UID of the trace")]
+    /// The ID of the trace to explain.
+    #[arg(long_help, value_name = "TRACE ID", help = "The ID of the trace")]
     trace_id: String,
 
     /// The component of the trace to explain.

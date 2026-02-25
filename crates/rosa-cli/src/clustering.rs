@@ -46,7 +46,7 @@ pub fn load_cluster_from_file(file: &Path, traces_dir: &Path) -> Result<Cluster,
 
 /// Save the cluster to a file.
 ///
-/// The cluster is saved in a very simple textual form, with the UIDs of its traces, each on a
+/// The cluster is saved in a very simple textual form, with the IDs of its traces, each on a
 /// separate line.
 pub fn save_cluster_to_file(cluster: &Cluster, file: &Path) -> Result<(), RosaError> {
     let trace_ids: Vec<String> = cluster.traces.iter().map(|trace| trace.id()).collect();
@@ -62,8 +62,8 @@ pub fn save_cluster_to_file(cluster: &Cluster, file: &Path) -> Result<(), RosaEr
 /// Save clusters to file.
 ///
 /// This function provides a way to dump clusters into `.txt` files in order to understand which
-/// trace is in which cluster. Each cluster file is a simple `.txt` file, containing the UIDs of
-/// all the traces within the cluster, with one UID per line.
+/// trace is in which cluster. Each cluster file is a simple `.txt` file, containing the IDs of
+/// all the traces within the cluster, with one ID per line.
 ///
 /// # Examples
 /// ```

@@ -77,9 +77,9 @@ struct Cli {
         long_help,
         short = 'u',
         long = "trace-id",
-        value_name = "TRACE_UID",
+        value_name = "TRACE_ID",
         action = ArgAction::Append,
-        help = "Selected trace UID"
+        help = "Selected trace ID"
     )]
     trace_ids: Vec<String>,
 

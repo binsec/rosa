@@ -285,7 +285,7 @@ fn run(
     })
     .expect("could not set Ctrl-C handler.");
 
-    // Set up a hashmap to keep track of known traces via their UIDs.
+    // Set up a hashmap to keep track of known traces via their IDs.
     let mut trace_db = TraceDatabase::new();
 
     // Set up the fuzzer processes.

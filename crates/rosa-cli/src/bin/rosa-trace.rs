@@ -33,7 +33,7 @@ struct Cli {
 
     /// The output trace file.
     ///
-    /// If a name is not provided, the trace's UID will be used.
+    /// If a name is not provided, the trace's ID will be used.
     #[arg(long_help, short, long, help = "Output trace file")]
     output: Option<PathBuf>,
 }
