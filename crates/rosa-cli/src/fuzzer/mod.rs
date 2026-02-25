@@ -8,7 +8,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use rosa::{
+use rosa_core::{
     error::RosaError,
     trace::{Trace, database::TraceDatabase},
 };

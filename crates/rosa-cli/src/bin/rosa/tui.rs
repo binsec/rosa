@@ -14,11 +14,13 @@ use ratatui::{
     widgets::{Block, Paragraph, Wrap},
 };
 
-use rosa::{criterion::Criterion, error, error::RosaError, fail, oracle::comp_min_max::CompMinMax};
 use rosa_cli::{
     config::{Config, RosaPhase},
     fuzzer::{FuzzerBackend, FuzzerStatus},
     oracle::OracleKind,
+};
+use rosa_core::{
+    criterion::Criterion, error, error::RosaError, fail, oracle::comp_min_max::CompMinMax,
 };
 
 pub struct RosaTui {

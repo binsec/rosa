@@ -19,18 +19,18 @@ use std::{
 use clap::Parser;
 use colored::Colorize;
 
-use rosa::{
-    clustering, error,
-    error::RosaError,
-    oracle::{Decision, DecisionReason, Discriminants, Oracle, TimedDecision},
-    trace::{self, Trace, database::TraceDatabase},
-};
 use rosa_cli::{
     config::{Config, RosaPhase, phase_one::PhaseOne},
     error_message,
     fuzzer::{FuzzerBackend, FuzzerStatus, instance::FuzzerInstance},
     info_message, println_error, println_info, println_verbose, println_warning, rosa_message,
     verbose_message, warning_message,
+};
+use rosa_core::{
+    clustering, error,
+    error::RosaError,
+    oracle::{Decision, DecisionReason, Discriminants, Oracle, TimedDecision},
+    trace::{self, Trace, database::TraceDatabase},
 };
 
 mod tui;

@@ -18,19 +18,19 @@ use colored::Colorize;
 use itertools::Itertools;
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 
-use rosa::{
+use rosa_cli::{
+    config::{Config, phase_one::PhaseOne},
+    error_message, info_message, println_error, println_info, rosa_message,
+};
+use rosa_core::{
     clustering, error,
     error::RosaError,
     fail,
     oracle::{Decision, DecisionReason, Discriminants, Oracle, TimedDecision},
     trace::Trace,
 };
-use rosa_cli::{
-    config::{Config, phase_one::PhaseOne},
-    error_message, info_message, println_error, println_info, rosa_message,
-};
 
-/// A "timed" variant of [rosa::trace::Trace].
+/// A "timed" variant of [rosa_core::trace::Trace].
 #[derive(Debug, Clone)]
 struct TimedTrace {
     /// The trace itself.

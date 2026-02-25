@@ -9,11 +9,11 @@ use std::{
 use clap::Parser;
 use colored::Colorize;
 
-use rosa::{error, error::RosaError, fail, trace::database::TraceDatabase};
 use rosa_cli::{
     config::Config, error_message, fuzzer::FuzzerBackend, info_message, println_error,
     println_info, rosa_message,
 };
+use rosa_core::{error, error::RosaError, fail, trace::database::TraceDatabase};
 
 #[derive(Parser)]
 #[command(

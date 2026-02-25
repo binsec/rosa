@@ -53,7 +53,7 @@ impl Trace {
     ///
     /// # Examples
     /// ```
-    /// use rosa::trace::Trace;
+    /// use rosa_core::trace::Trace;
     ///
     /// let trace = Trace::from(
     ///     "my_trace",
@@ -108,7 +108,7 @@ impl Trace {
     ///
     /// # Examples
     /// ```
-    /// use rosa::trace::Trace;
+    /// use rosa_core::trace::Trace;
     ///
     /// // Dummy trace to test with.
     /// let trace = Trace {
@@ -144,7 +144,7 @@ impl Trace {
     ///
     /// # Examples
     /// ```
-    /// use rosa::trace::Trace;
+    /// use rosa_core::trace::Trace;
     ///
     /// // Dummy trace to test with.
     /// let trace = Trace {
@@ -178,7 +178,7 @@ impl Trace {
     ///
     /// # Examples
     /// ```
-    /// use rosa::trace::Trace;
+    /// use rosa_core::trace::Trace;
     ///
     /// // Dummy trace to test with.
     /// let trace = Trace {
@@ -217,7 +217,7 @@ impl Trace {
 ///
 /// # Examples
 /// ```
-/// use rosa::trace::{self, Trace};
+/// use rosa_core::trace::{self, Trace};
 ///
 /// let traces = vec![
 ///     Trace {

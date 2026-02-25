@@ -16,7 +16,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tempfile::{self, NamedTempFile};
 
-use rosa::{
+use rosa_core::{
     error,
     error::RosaError,
     fail,

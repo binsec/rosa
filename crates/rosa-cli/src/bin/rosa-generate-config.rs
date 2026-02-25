@@ -11,7 +11,6 @@ use std::{
 
 use colored::Colorize;
 
-use rosa::{error, error::RosaError};
 use rosa_cli::{
     config::{Config, phase_one::PhaseOne},
     error_message,
@@ -21,6 +20,7 @@ use rosa_cli::{
     },
     info_message, print_info, println_error, println_info, rosa_message,
 };
+use rosa_core::{error, error::RosaError};
 
 /// Generate a configuration for a fuzzer.
 ///

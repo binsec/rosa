@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use rosa::distance_metric::{DistanceMetric, hamming::Hamming};
+use rosa_core::distance_metric::{DistanceMetric, hamming::Hamming};
 
 /// [DistanceMetric]s used in the configuration of the ROSA CLI.
 #[derive(Clone, Serialize, Deserialize)]

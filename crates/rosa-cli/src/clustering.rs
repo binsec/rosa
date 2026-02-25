@@ -2,7 +2,7 @@
 
 use std::{fs, path::Path};
 
-use rosa::{clustering::Cluster, error, error::RosaError, trace::Trace};
+use rosa_core::{clustering::Cluster, error, error::RosaError, trace::Trace};
 
 use crate::trace::load_trace_from_file;
 
@@ -68,7 +68,7 @@ pub fn save_cluster_to_file(cluster: &Cluster, file: &Path) -> Result<(), RosaEr
 /// # Examples
 /// ```
 /// use std::path::Path;
-/// use rosa::{
+/// use rosa_core::{
 ///     clustering::Cluster,
 ///     trace::Trace,
 /// };

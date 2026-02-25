@@ -11,11 +11,11 @@ use std::{
 use clap::Parser;
 use colored::Colorize;
 
-use rosa::{distance_metric::DistanceMetric, error, error::RosaError};
 use rosa_cli::{
     distance_metric::DistanceMetricKind, error_message, info_message, println_error, println_info,
     rosa_message, trace::load_trace_from_file,
 };
+use rosa_core::{distance_metric::DistanceMetric, error, error::RosaError};
 
 #[derive(Parser)]
 #[command(

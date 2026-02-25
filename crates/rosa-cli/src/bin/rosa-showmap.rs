@@ -8,8 +8,8 @@ use std::{
 use clap::Parser;
 use colored::Colorize;
 
-use rosa::error::RosaError;
 use rosa_cli::{error_message, println_error, rosa_message, trace::Component};
+use rosa_core::error::RosaError;
 
 #[derive(Parser)]
 #[command(

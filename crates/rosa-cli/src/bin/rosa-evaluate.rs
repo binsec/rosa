@@ -17,13 +17,13 @@ use clap::{ArgAction, Parser};
 use colored::Colorize;
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 
-use rosa::{error, error::RosaError, oracle::TimedDecision};
 use rosa_cli::{
     config::{self, Config},
     error_message,
     fuzzer::FuzzerBackend,
     info_message, println_error, println_info, rosa_message,
 };
+use rosa_core::{error, error::RosaError, oracle::TimedDecision};
 
 #[derive(Parser)]
 #[command(

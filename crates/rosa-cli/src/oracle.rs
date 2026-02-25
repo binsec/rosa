@@ -4,7 +4,7 @@ use std::{fs, path::Path};
 
 use serde::{Deserialize, Serialize};
 
-use rosa::{
+use rosa_core::{
     clustering::Cluster,
     criterion::Criterion,
     distance_metric::DistanceMetric,
@@ -20,7 +20,7 @@ use crate::distance_metric::DistanceMetricKind;
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum OracleKind {
-    /// The [Hamming](rosa::distance_metric::hamming::Hamming) distance metric.
+    /// The [Hamming](rosa_core::distance_metric::hamming::Hamming) distance metric.
     CompMinMax(CompMinMax),
 }
 

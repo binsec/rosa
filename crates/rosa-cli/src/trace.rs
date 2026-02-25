@@ -8,7 +8,7 @@ use std::{
 
 use clap::ValueEnum;
 
-use rosa::{error, error::RosaError, fail, trace::Trace};
+use rosa_core::{error, error::RosaError, fail, trace::Trace};
 
 /// The trace component to analyze.
 #[derive(Clone, ValueEnum)]
@@ -129,7 +129,7 @@ pub fn load_trace_from_file(
 /// # Examples
 /// ```
 /// use std::path::Path;
-/// use rosa::trace::Trace;
+/// use rosa_core::trace::Trace;
 ///
 /// let my_trace = Trace {
 ///     name: "my_trace".to_string(),
@@ -162,7 +162,7 @@ pub fn save_test_input_to_file(trace: &Trace, output_file: &Path) -> Result<(), 
 /// # Examples
 /// ```
 /// use std::path::Path;
-/// use rosa::trace::Trace;
+/// use rosa_core::trace::Trace;
 ///
 /// let my_trace = Trace {
 ///     name: "my_trace".to_string(),
@@ -277,7 +277,7 @@ pub fn load_traces_from_dir(traces_dir: &Path) -> Result<Vec<Trace>, RosaError> 
 /// # Examples
 /// ```
 /// use std::path::Path;
-/// use rosa::trace::Trace;
+/// use rosa_core::trace::Trace;
 ///
 /// let my_traces = vec![
 ///     Trace {

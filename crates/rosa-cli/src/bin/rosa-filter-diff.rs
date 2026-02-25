@@ -14,16 +14,16 @@ use clap::Parser;
 use colored::Colorize;
 use itertools::Itertools;
 
-use rosa::{
+use rosa_cli::{
+    config::Config, error_message, info_message, println_error, println_info, println_verbose,
+    rosa_message, verbose_message,
+};
+use rosa_core::{
     error,
     error::RosaError,
     fail,
     oracle::{Decision, DecisionReason, Discriminants, Oracle, TimedDecision},
     trace::Trace,
-};
-use rosa_cli::{
-    config::Config, error_message, info_message, println_error, println_info, println_verbose,
-    rosa_message, verbose_message,
 };
 
 #[derive(Parser)]

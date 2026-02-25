@@ -7,7 +7,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use rosa::{
+use rosa_core::{
     error::RosaError,
     trace::{Trace, database::TraceDatabase},
 };

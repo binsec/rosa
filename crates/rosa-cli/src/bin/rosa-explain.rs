@@ -14,11 +14,11 @@ use std::{
 use clap::Parser;
 use colored::Colorize;
 
-use rosa::{error, error::RosaError, trace::Trace};
 use rosa_cli::{
     config::Config, error_message, info_message, oracle::load_decision_from_file, println_error,
     println_info, rosa_message, trace::Component,
 };
+use rosa_core::{error, error::RosaError, trace::Trace};
 
 #[derive(Parser)]
 #[command(

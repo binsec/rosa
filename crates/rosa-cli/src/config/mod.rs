@@ -14,7 +14,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use rosa::{
+use rosa_core::{
     criterion::Criterion, distance_metric::hamming::Hamming, error, error::RosaError, fail,
     oracle::comp_min_max::CompMinMax,
 };
@@ -90,27 +90,27 @@ pub struct Config {
     pub phase_one: PhaseOne,
 
     /// The criterion to use during cluster formation.
-    /// See [rosa::clustering::cluster_traces].
+    /// See [rosa_core::clustering::cluster_traces].
     #[serde(default = "Config::default_cluster_formation_criterion")]
     pub cluster_formation_criterion: Criterion,
     /// The distance metric to use during cluster formation.
-    /// See [rosa::clustering::cluster_traces].
+    /// See [rosa_core::clustering::cluster_traces].
     #[serde(default = "Config::default_cluster_formation_distance_metric")]
     pub cluster_formation_distance_metric: DistanceMetricKind,
     /// The edge tolerance to use during cluster formation.
-    /// See [rosa::clustering::cluster_traces].
+    /// See [rosa_core::clustering::cluster_traces].
     #[serde(default = "Config::default_cluster_formation_edge_tolerance")]
     pub cluster_formation_edge_tolerance: u64,
     /// The syscall tolerance to use during cluster formation.
-    /// See [rosa::clustering::cluster_traces].
+    /// See [rosa_core::clustering::cluster_traces].
     #[serde(default = "Config::default_cluster_formation_syscall_tolerance")]
     pub cluster_formation_syscall_tolerance: u64,
     /// The criterion to use during cluster selection.
-    /// See [rosa::clustering::get_most_similar_cluster].
+    /// See [rosa_core::clustering::get_most_similar_cluster].
     #[serde(default = "Config::default_cluster_selection_criterion")]
     pub cluster_selection_criterion: Criterion,
     /// The distance metric to use during cluster selection.
-    /// See [rosa::clustering::get_most_similar_cluster].
+    /// See [rosa_core::clustering::get_most_similar_cluster].
     #[serde(default = "Config::default_cluster_selection_distance_metric")]
     pub cluster_selection_distance_metric: DistanceMetricKind,
     /// The oracle to use.

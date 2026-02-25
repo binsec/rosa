@@ -31,7 +31,7 @@ pub struct Cluster {
 ///
 /// # Examples
 /// ```
-/// use rosa::{
+/// use rosa_core::{
 ///     clustering::{self, Cluster},
 ///     criterion::Criterion,
 ///     distance_metric::hamming::Hamming,
@@ -188,7 +188,7 @@ where
 ///
 /// # Examples
 /// ```
-/// use rosa::{
+/// use rosa_core::{
 ///     clustering,
 ///     criterion::Criterion,
 ///     distance_metric::hamming::Hamming,

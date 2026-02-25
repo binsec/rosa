@@ -6,7 +6,7 @@ use std::{
     process::{Child, Command, Stdio},
 };
 
-use rosa::{error, error::RosaError, fail};
+use rosa_core::{error, error::RosaError, fail};
 
 use crate::{
     config,
