@@ -46,7 +46,7 @@ RUN patch -p1 < /root/rosa/fuzzers/aflpp/patches/aflpp-qemuafl-build.patch
 # Build AFL++ (and QEMU-AFL).
 RUN make -j$(nproc)
 WORKDIR /root/rosa/fuzzers/aflpp/aflpp/qemu_mode
-RUN CPU_TARGET=mipsel ./build_qemu_support.sh
+RUN ./build_qemu_support.sh
 
 # Build the examples.
 WORKDIR /root/rosa/examples
