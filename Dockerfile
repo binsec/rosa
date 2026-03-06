@@ -57,7 +57,7 @@ RUN ln -s /root/rosa/examples/sudo/target/backdoored/build/bin/sudo /usr/bin/bac
 # Build the ROSA toolchain.
 WORKDIR /root/rosa
 RUN cargo build --release
-RUN cargo install --path .
+RUN cargo install --path ./crates/rosa-cli
 RUN cargo clean
 
 RUN mdbook build /root/rosa/doc
