@@ -11,6 +11,9 @@ state-of-the-art fuzzer ([AFL++](https://github.com/AFLplusplus/AFLplusplus)) co
 [metamorphic oracle](https://en.wikipedia.org/wiki/Metamorphic_testing) to detect many different
 types of backdoors in different types of binary programs.
 
+A presentation of ROSA (including a live demo) was given at FOSDEM'26:
+<https://mirrors.dotsrc.org/fosdem/2026/ub5132/BHNWLN-rosa-backdoor-detector.mp4>
+
 ## Installation
 
 ### Docker
