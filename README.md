@@ -143,6 +143,10 @@ Please read [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## Citing this repo
 
+NOTE: the latest version (v2) of the paper is available at
+<https://binsec.github.io/assets/publications/papers/2025-icse.pdf> with minor corrections to the
+representative input selection algorithm (Section IV-A and Section IV-C).
+
 When citing the associated [ICSE'25 paper](https://doi.org/10.1109/ICSE55347.2025.00183), use the
 following snippet:
 
