@@ -42,5 +42,6 @@ machine.[^detection_time] When detection happens, you will see the _backdoors_ c
 
 You can stop the backdoor detection at any time by hitting `Ctrl-C`.
 
-[^detection_time]: On a Dell laptop with a 20-core 12th Gen Intel(R) Core(TM) i7-12800H CPU and 64 GiB of RAM,
-    inside the ROSA Docker container, the detection takes more or less 10 minutes.
+[^detection_time]: On a Dell laptop with a 20-core 12th Gen Intel(R) Core(TM) i7-12800H CPU and 64
+    GiB of RAM, inside the ROSA Docker container, the detection takes more or less 10
+    minutes.

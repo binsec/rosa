@@ -82,18 +82,19 @@ This box shows a summary of the current ROSA configuration:
   to start for some reason, such as an erroneous configuration).
 - `WARNING`: any warnings that ROSA can produce may appear at the bottom of the box.
 
-[^trace]: _Trace_ refers to the runtime traces produced by the fuzzer and collected by ROSA. These runtime
-    traces record the _edges_[^edge] visited and _system calls_ produced during the execution of the
-    corresponding test input in the target program.
+[^trace]: _Trace_ refers to the runtime traces produced by the fuzzer and collected by ROSA. These
+    runtime traces record the _edges_[^edge] visited and _system calls_ produced during the
+    execution of the corresponding test input in the target program.
 
 [^oracle]: The [test oracle](https://en.wikipedia.org/wiki/Test_oracle) used by ROSA is a novel
-    [metamorphic](https://en.wikipedia.org/wiki/Metamorphic_testing) oracle crafted specifically for
-    backdoor detection. For more information, see [_How ROSA works_](./internals.md).
+    [metamorphic](https://en.wikipedia.org/wiki/Metamorphic_testing) oracle crafted
+    specifically for backdoor detection. For more information, see
+    [_How ROSA works_](./internals.md).
 
-[^edge]: _Edge_ refers to a [Control-Flow Graph](https://en.wikipedia.org/wiki/Control-flow_graph) edge
-    (between two [basic blocks](https://en.wikipedia.org/wiki/Basic_block)). Here, the CFG is
-    abstracted by the fuzzer, essentially producing an approximation of the actual CFG.
+[^edge]: _Edge_ refers to a [Control-Flow Graph](https://en.wikipedia.org/wiki/Control-flow_graph)
+    edge (between two [basic blocks](https://en.wikipedia.org/wiki/Basic_block)). Here, the CFG
+    is abstracted by the fuzzer, essentially producing an approximation of the actual CFG.
 
-[^criterion]: Since the runtime traces contain two components (edges and system calls), four ways of analyzing
-    them (_criteria_) are available: `edges-only`, `syscalls-only`, `edges-or-syscalls`,
-    `edges-and-syscalls`.
+[^criterion]: Since the runtime traces contain two components (edges and system calls), four ways of
+    analyzing them (_criteria_) are available: `edges-only`, `syscalls-only`,
+    `edges-or-syscalls`, `edges-and-syscalls`.

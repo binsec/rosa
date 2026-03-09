@@ -75,11 +75,13 @@ In reality, `rosa` is simply a frontend for a backdoor detection library:
   [_Extending the ROSA oracle_](./extensions/oracle.md));
 - `trace.rs` contains definitions and tooling to collect and handle input-trace pairs.
 
-[^edge-approximation]: For a detailed explanation of how AFL++ (and AFL) approximate CFG edge coverage, see
+[^edge-approximation]: For a detailed explanation of how AFL++ (and AFL) approximate CFG edge
+    coverage, see
     [the AFL whitepaper](https://lcamtuf.coredump.cx/afl/technical_details.txt).
 
-[^instrumentation-inconsistencies]: At least for AFL++, we have observed experimentally that instrumentation may be
-    non-deterministic even under QEMU, at least when external libraries are also instrumented, which
-    is necessary to cover the maximum amount of system calls. Note that one can use the
-    `--collect-from-all-fuzzers` switch with `rosa` to force input-trace pair collection from all
-    fuzzer instances.
+[^instrumentation-inconsistencies]: At least for AFL++, we have observed experimentally that
+    instrumentation may be non-deterministic even under QEMU, at
+    least when external libraries are also instrumented, which is
+    necessary to cover the maximum amount of system calls. Note that
+    one can use the `--collect-from-all-fuzzers` switch with `rosa`
+    to force input-trace pair collection from all fuzzer instances.

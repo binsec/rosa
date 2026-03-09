@@ -54,7 +54,7 @@ This configuration follows a recommended preset; some targets need further custo
 regarding fuzzer configuration), which we will explore further in
 [_Configuration guide_](./configuration_guide.md).
 
-[^seed_corpus]: This is standard practice in fuzzing: a seed corpus allows a fuzzer to start with some known
-    good inputs to a target program, and to mutate them to create new interesting inputs. You can
-    find more information on
+[^seed_corpus]: This is standard practice in fuzzing: a seed corpus allows a fuzzer to start with
+    some known good inputs to a target program, and to mutate them to create new
+    interesting inputs. You can find more information on
     [the Wikipedia page about fuzzing](https://en.wikipedia.org/wiki/Fuzzing#Reuse_of_existing_input_seeds).
