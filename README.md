@@ -149,8 +149,8 @@ following snippet:
 ```bibtex
 @inproceedings{kokkonis-2025-rosa,
     author = {Kokkonis, Dimitri and Marcozzi, Michaël and Decoux, Emilien and Zacchiroli, Stefano},
-    booktitle = {2025 IEEE/ACM 47th International Conference on Software Engineering (ICSE)}, 
-    title = {ROSA: Finding Backdoors with Fuzzing}, 
+    booktitle = {2025 IEEE/ACM 47th International Conference on Software Engineering (ICSE)},
+    title = {{ROSA: Finding Backdoors with Fuzzing}},
     year = {2025},
     volume = {},
     number = {},
