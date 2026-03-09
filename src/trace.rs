@@ -603,7 +603,7 @@ pub fn get_coverage(traces: &[Trace]) -> (f64, f64) {
                 .edges
                 .iter()
                 .zip(acc)
-                .map(|(trace_edge, acc_edge)| (trace_edge | acc_edge))
+                .map(|(trace_edge, acc_edge)| trace_edge | acc_edge)
                 .collect()
         })
         .into_iter()
