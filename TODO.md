@@ -8,3 +8,5 @@
   overridden via CLI option
 - [ ] If using a phase-one corpus, check that it contains at least one valid trace and emit an error
   message otherwise
+- [ ] Display a warning if traces seem incorrect (e.g., empty syscall component because of lack of
+  instrumentation on the QEMU side, in QEMU mode)
