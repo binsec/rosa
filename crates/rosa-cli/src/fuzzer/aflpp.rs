@@ -501,21 +501,26 @@ impl AFLPlusPlus {
             .join(test_input_file_name.to_string())
             .with_extension(&trace_dump_extension);
 
-        if trace_dump_path.exists() {
-            let new_trace = load_trace_from_file(
-                &format!("{}_{}", self.name(), test_input_file_name),
-                test_input_path,
-                &trace_dump_path,
-            )?;
+        let new_trace = load_trace_from_file(
+            &format!("{}_{}", self.name(), test_input_file_name),
+            test_input_path,
+            &trace_dump_path,
+        );
 
-            Ok(Some(new_trace))
-        } else if skip_missing_traces {
-            Ok(None)
-        } else {
-            fail!(
-                "missing trace dump file for test input '{}'.",
-                test_input_file_name
-            )
+        // Choose whether to ignore trace loading errors based on `skip_missing_traces`.
+        match new_trace {
+            Err(err) => {
+                if skip_missing_traces {
+                    Ok(None)
+                } else {
+                    fail!(
+                        "failed to read trace dump file '{}': {}",
+                        trace_dump_path.display(),
+                        err
+                    )
+                }
+            }
+            Ok(trace) => Ok(Some(trace)),
         }
     }
 
