@@ -253,12 +253,12 @@
 +       *
 +       * <size_t edges_length><size_t syscalls_length><u8[] edges><u8[] syscalls>
 +       */
-+      ck_write(fd, &afl->shm.map_size, sizeof(size_t), trace_dump_fn);
++      ck_write(fd, &afl->fsrv.real_map_size, sizeof(size_t), trace_dump_fn);
 +      ck_write(fd, &runtime_trace_max_syscalls, sizeof(size_t), trace_dump_fn);
 +      ck_write(
 +        fd,
 +        afl->fsrv.runtime_trace->edges,
-+        sizeof(u8) * afl->shm.map_size,
++        sizeof(u8) * afl->fsrv.real_map_size,
 +        trace_dump_fn
 +      );
 +      ck_write(
@@ -305,12 +305,12 @@
 +       *
 +       * <size_t edges_length><size_t syscalls_length><u8[] edges><u8[] syscalls>
 +       */
-+      ck_write(fd, &afl->shm.map_size, sizeof(size_t), trace_dump_fn);
++      ck_write(fd, &afl->fsrv.real_map_size, sizeof(size_t), trace_dump_fn);
 +      ck_write(fd, &runtime_trace_max_syscalls, sizeof(size_t), trace_dump_fn);
 +      ck_write(
 +        fd,
 +        afl->fsrv.runtime_trace->edges,
-+        sizeof(u8) * afl->shm.map_size,
++        sizeof(u8) * afl->fsrv.real_map_size,
 +        trace_dump_fn
 +      );
 +      ck_write(
