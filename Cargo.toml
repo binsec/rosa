@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/rosa-core", "crates/rosa-cli"]
 
 [workspace.package]
-version = "0.6.0-alpha25.dev"
+version = "0.6.0-alpha25"
 edition = "2024"
 
 [workspace.dependencies]
