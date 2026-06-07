@@ -317,7 +317,7 @@ fn run(
         .collect::<Result<Vec<Sample>, RosaError>>()?;
 
     // Sort by decision time.
-    samples.sort_by(|sample1, sample2| sample1.seconds.cmp(&sample2.seconds));
+    samples.sort_by_key(|sample| sample.seconds);
 
     let samples = if deduplicate {
         let mut known_traces = HashSet::new();
