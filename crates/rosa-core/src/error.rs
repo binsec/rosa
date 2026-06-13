@@ -3,7 +3,7 @@
 use std::{error, fmt};
 
 /// A ROSA error.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RosaError {
     /// The line where the error was produced.
     pub line: u32,

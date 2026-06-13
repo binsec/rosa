@@ -19,6 +19,7 @@ use rosa_cli::{
     rosa_message, verbose_message,
 };
 use rosa_core::{
+    clustering::Cluster,
     error,
     error::RosaError,
     fail,
@@ -283,7 +284,7 @@ fn reevaluate_decision(
             // original decision.
 
             // Load the cluster to use with the base program.
-            let mut cluster = rosa_cli::clustering::load_cluster_from_file(
+            let cluster = rosa_cli::clustering::load_cluster_from_file(
                 &config
                     .output_dir
                     .join("clusters")
@@ -292,9 +293,9 @@ fn reevaluate_decision(
                 &config.output_dir.join("traces"),
             )?;
             // We need to remap the cluster's traces through the base program.
-            cluster.traces = cluster
-                .traces
-                .into_iter()
+            let remapped_traces: Vec<Trace> = cluster
+                .traces()
+                .iter()
                 .map(|trace| {
                     let input_file_path = temp_dir_path.join("input");
                     let mut input_file = File::create(&input_file_path)
@@ -326,12 +327,7 @@ fn reevaluate_decision(
                     )
                 })
                 .collect::<Result<Vec<Trace>, RosaError>>()?;
-
-            // TODO treat the case where this is not true (essentially, we have to compute these anew).
-            cluster.min_edge_distance = config.cluster_formation_edge_tolerance;
-            cluster.max_edge_distance = config.cluster_formation_edge_tolerance;
-            cluster.min_syscall_distance = config.cluster_formation_syscall_tolerance;
-            cluster.max_syscall_distance = config.cluster_formation_syscall_tolerance;
+            let cluster = Cluster::build(&cluster.id(), &remapped_traces)?;
 
             // Run the oracle on the new trace and the cluster.
             let base_decision = config.oracle.decide(
@@ -339,7 +335,7 @@ fn reevaluate_decision(
                 &cluster,
                 config.oracle_criterion,
                 config.oracle_distance_metric.clone(),
-            );
+            )?;
 
             DiffDecision {
                 is_backdoor: (timed_decision.decision.discriminants.cluster_syscalls

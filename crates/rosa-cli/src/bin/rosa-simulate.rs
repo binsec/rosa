@@ -277,7 +277,7 @@ fn run(
         config.cluster_formation_distance_metric.clone(),
         config.cluster_formation_edge_tolerance,
         config.cluster_formation_syscall_tolerance,
-    );
+    )?;
     // Save clusters.
     rosa_cli::clustering::save_clusters_to_dir(&clusters, &config.clusters_dir())?;
 
@@ -327,7 +327,7 @@ fn run(
                     most_similar_cluster,
                     config.oracle_criterion,
                     config.oracle_distance_metric.clone(),
-                ),
+                )?,
                 seconds: timed_trace.seconds,
             };
 

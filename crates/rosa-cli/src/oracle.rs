@@ -36,7 +36,7 @@ where
         cluster: &Cluster,
         criterion: Criterion,
         distance_metric: DM,
-    ) -> Decision {
+    ) -> Result<Decision, RosaError> {
         match self {
             Self::CompMinMax(comp_min_max) => {
                 comp_min_max.decide(trace, cluster, criterion, distance_metric)

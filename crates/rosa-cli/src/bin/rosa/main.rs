@@ -392,7 +392,7 @@ fn run(
             config.cluster_formation_distance_metric.clone(),
             config.cluster_formation_edge_tolerance,
             config.cluster_formation_syscall_tolerance,
-        );
+        )?;
         // Save clusters to output dir for later inspection.
         rosa_cli::clustering::save_clusters_to_dir(&clusters, &config.clusters_dir())?;
 
@@ -553,7 +553,7 @@ fn run(
                 config.cluster_formation_distance_metric.clone(),
                 config.cluster_formation_edge_tolerance,
                 config.cluster_formation_syscall_tolerance,
-            );
+            )?;
             // Save clusters to output dir for later inspection.
             with_cleanup!(
                 rosa_cli::clustering::save_clusters_to_dir(&clusters, &config.clusters_dir()),
@@ -616,16 +616,14 @@ fn run(
                         )
                     })
                     // Perform oracle inference.
-                    .map(|(trace, cluster)| {
+                    .try_for_each(|(trace, cluster)| {
                         let decision = config.oracle.decide(
                             trace,
                             cluster,
                             config.oracle_criterion,
                             config.oracle_distance_metric.clone(),
-                        );
-                        (trace, decision)
-                    })
-                    .try_for_each(|(trace, decision)| {
+                        )?;
+
                         if decision.is_backdoor {
                             nb_total_backdoors += 1;
 
@@ -762,16 +760,14 @@ fn run(
                 )
             })
             // Perform oracle inference.
-            .map(|(trace, cluster)| {
+            .try_for_each(|(trace, cluster)| {
                 let decision = config.oracle.decide(
                     trace,
                     cluster,
                     config.oracle_criterion,
                     config.oracle_distance_metric.clone(),
-                );
-                (trace, decision)
-            })
-            .try_for_each(|(trace, decision)| {
+                )?;
+
                 if decision.is_backdoor {
                     nb_total_backdoors += 1;
 

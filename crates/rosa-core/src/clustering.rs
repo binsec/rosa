@@ -2,25 +2,267 @@
 //!
 //! This module describes trace clusters and provides clustering/cluster similarity algorithms.
 
-use std::cmp;
+use std::{cmp, slice};
 
-use crate::{criterion::Criterion, distance_metric::DistanceMetric, trace::Trace};
+use itertools::Itertools;
+
+use crate::{
+    criterion::Criterion, distance_metric::DistanceMetric, error::RosaError, trace::Trace,
+};
 
 /// A trace cluster, containing similar traces.
 #[derive(Clone, Debug)]
 pub struct Cluster {
-    /// The ID of the cluster.
-    pub id: String,
+    /// The name of the cluster.
+    name: String,
     /// The traces contained in the cluster.
-    pub traces: Vec<Trace>,
-    /// The minimum internal edge distance (in terms of similarity) between the traces.
-    pub min_edge_distance: u64,
-    /// The maximum internal edge distance (in terms of similarity) between the traces.
-    pub max_edge_distance: u64,
-    /// The minimum internal syscall distance (in terms of similarity) between the traces.
-    pub min_syscall_distance: u64,
-    /// The maximum internal syscall distance (in terms of similarity) between the traces.
-    pub max_syscall_distance: u64,
+    traces: Vec<Trace>,
+}
+
+impl Cluster {
+    /// Build a new cluster given a set of traces.
+    ///
+    /// If the traces are not uniform (i.e., having edge and syscall vectors of the same size),
+    /// then an [Err] is returned.
+    pub fn build(name: &str, traces: &[Trace]) -> Result<Self, RosaError> {
+        // TODO: somehow package this in [Trace]?
+        // Ensure that all traces have the same size.
+        if let Some(first_trace) = traces.first() {
+            let first_trace_edge_size = first_trace.edges.len();
+            let first_trace_syscall_size = first_trace.syscalls.len();
+
+            traces.iter().try_for_each(|trace| {
+                let trace_edge_size = trace.edges.len();
+                let trace_syscall_size = trace.syscalls.len();
+
+                // Check that the trace is not (partially) empty.
+                (trace_edge_size > 0).then_some(()).ok_or(error!(
+                    "cluster {}: trace {} is malformed: no edges.",
+                    name,
+                    trace.id()
+                ))?;
+                (trace_syscall_size > 0).then_some(()).ok_or(error!(
+                    "cluster {}: trace {} is malformed: no syscalls.",
+                    name,
+                    trace.id()
+                ))?;
+
+                // Check that the size is the same.
+                (trace_edge_size == first_trace_edge_size)
+                    .then_some(())
+                    .ok_or(error!(
+                        "cluster {}: trace {} has edge size {}, but trace {} has edge size {}.",
+                        name,
+                        trace.id(),
+                        trace_edge_size,
+                        first_trace.id(),
+                        first_trace_edge_size
+                    ))?;
+                (trace_syscall_size == first_trace_syscall_size)
+                    .then_some(())
+                    .ok_or(error!(
+                        "cluster {}: trace {} has syscall size {}, but trace {} has syscall size {}.",
+                        name,
+                        trace.id(),
+                        trace_syscall_size,
+                        first_trace.id(),
+                        first_trace_syscall_size
+                    ))
+            })?;
+        }
+
+        Ok(Self {
+            name: name.to_string(),
+            traces: traces.to_vec(),
+        })
+    }
+
+    /// Get the ID of the cluster.
+    pub fn id(&self) -> String {
+        self.name.clone()
+    }
+
+    /// Get the traces of the cluster.
+    pub fn traces(&self) -> &[Trace] {
+        &self.traces
+    }
+
+    /// Get a mutable reference to the traces of the cluster.
+    pub fn mut_traces(&mut self) -> &mut Vec<Trace> {
+        self.traces.as_mut()
+    }
+
+    /// Get the edge distances of all combinations of traces in the cluster.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rosa_core::{
+    ///     clustering::Cluster,
+    ///     trace::Trace,
+    ///     distance_metric::hamming::Hamming,
+    /// };
+    ///
+    /// let cluster = Cluster::build(
+    ///     "my_cluster",
+    ///     &[
+    ///         Trace {
+    ///             name: "trace_1".to_string(),
+    ///             test_input: vec![],
+    ///             edges: vec![0, 1, 1, 0],
+    ///             syscalls: vec![1, 0, 0, 0],
+    ///         },
+    ///         Trace {
+    ///             name: "trace_2".to_string(),
+    ///             test_input: vec![],
+    ///             edges: vec![0, 1, 1, 1],
+    ///             syscalls: vec![1, 0, 1, 0],
+    ///         },
+    ///         Trace {
+    ///             name: "trace_2".to_string(),
+    ///             test_input: vec![],
+    ///             edges: vec![0, 0, 0, 1],
+    ///             syscalls: vec![0, 0, 1, 0],
+    ///         },
+    ///     ]
+    /// ).unwrap();
+    ///
+    /// assert_eq!(
+    ///     cluster.edge_distances(&Hamming),
+    ///     vec![1, 3, 2],
+    /// );
+    /// ```
+    ///
+    /// # Safety
+    ///
+    /// [Itertools.combinations] is used to get all unique **pairs** of traces. If the number of
+    /// traces is below 2, then this method returns an empty vector. Otherwise, the
+    /// [Itertools.combinations] iterator returns a vector element for each pair, where the vector
+    /// is expected to contain two elements. This method asserts this via `.expect()`.
+    pub fn edge_distances(&self, distance_metric: &impl DistanceMetric) -> Vec<u64> {
+        self.traces
+            .iter()
+            .combinations(2)
+            .map(|traces| {
+                // See method documentation. This should be guaranteed to give us 2 elements, since
+                // the trace vector size is at least 2.
+                let trace1 = traces
+                    .first()
+                    .expect("combination should contain a first trace");
+                let trace2 = traces
+                    .last()
+                    .expect("combination should contain a second trace");
+
+                distance_metric.distance(&trace1.edges, &trace2.edges)
+            })
+            .collect()
+    }
+
+    /// Get the syscall distances of all combinations of traces in the cluster.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rosa_core::{
+    ///     clustering::Cluster,
+    ///     trace::Trace,
+    ///     distance_metric::hamming::Hamming,
+    /// };
+    ///
+    /// let cluster = Cluster::build(
+    ///     "my_cluster",
+    ///     &[
+    ///         Trace {
+    ///             name: "trace_1".to_string(),
+    ///             test_input: vec![],
+    ///             edges: vec![0, 1, 1, 0],
+    ///             syscalls: vec![1, 0, 0, 0],
+    ///         },
+    ///         Trace {
+    ///             name: "trace_2".to_string(),
+    ///             test_input: vec![],
+    ///             edges: vec![0, 1, 1, 1],
+    ///             syscalls: vec![1, 0, 1, 0],
+    ///         },
+    ///         Trace {
+    ///             name: "trace_2".to_string(),
+    ///             test_input: vec![],
+    ///             edges: vec![0, 0, 0, 1],
+    ///             syscalls: vec![0, 0, 1, 0],
+    ///         },
+    ///     ]
+    /// ).unwrap();
+    ///
+    /// assert_eq!(
+    ///     cluster.syscall_distances(&Hamming),
+    ///     vec![1, 2, 1],
+    /// );
+    /// ```
+    ///
+    /// # Safety
+    ///
+    /// [Itertools.combinations] is used to get all unique **pairs** of traces. If the number of
+    /// traces is below 2, then this method returns an empty vector. Otherwise, the
+    /// [Itertools.combinations] iterator returns a vector element for each pair, where the vector
+    /// is expected to contain two elements. This method asserts this via `.expect()`.
+    pub fn syscall_distances(&self, distance_metric: &impl DistanceMetric) -> Vec<u64> {
+        self.traces
+            .iter()
+            .combinations(2)
+            .map(|traces| {
+                // This should be guaranteed to give us 2 elements, since the trace vector size
+                // is at least 2.
+                let trace1 = traces
+                    .first()
+                    .expect("combination should contain a first trace");
+                let trace2 = traces
+                    .last()
+                    .expect("combination should contain a second trace");
+
+                distance_metric.distance(&trace1.syscalls, &trace2.syscalls)
+            })
+            .collect()
+    }
+
+    /// Get the minimum edge-wise distance between traces of the cluster.
+    ///
+    /// If there are less than 2 traces in the cluster, the minimum distance is defined to be 0.
+    pub fn min_edge_distance(&self, distance_metric: &impl DistanceMetric) -> u64 {
+        self.edge_distances(distance_metric)
+            .into_iter()
+            .min()
+            .unwrap_or(0)
+    }
+
+    /// Get the maximum edge-wise distance between traces of the cluster.
+    ///
+    /// If there are less than 2 traces in the cluster, the maximum distance is defined to be 0.
+    pub fn max_edge_distance(&self, distance_metric: &impl DistanceMetric) -> u64 {
+        self.edge_distances(distance_metric)
+            .into_iter()
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// Get the minimum syscall-wise distance between traces of the cluster.
+    ///
+    /// If there are less than 2 traces in the cluster, the minimum distance is defined to be 0.
+    pub fn min_syscall_distance(&self, distance_metric: &impl DistanceMetric) -> u64 {
+        self.syscall_distances(distance_metric)
+            .into_iter()
+            .min()
+            .unwrap_or(0)
+    }
+
+    /// Get the maximum syscall-wise distance between traces of the cluster.
+    ///
+    /// If there are less than 2 traces in the cluster, the maximum distance is defined to be 0.
+    pub fn max_syscall_distance(&self, distance_metric: &impl DistanceMetric) -> u64 {
+        self.syscall_distances(distance_metric)
+            .into_iter()
+            .max()
+            .unwrap_or(0)
+    }
 }
 
 /// Get the most similar cluster to a trace, given a collection of clusters.
@@ -39,51 +281,42 @@ pub struct Cluster {
 /// };
 ///
 /// // Dummy clusters to demonstrate function use.
-/// // Test inputs are not taken into account when choosing the most similar cluster. In fact,
-/// // we'll only use edges to make the example simpler.
+/// // Test inputs are not taken into account when choosing the most similar cluster.
 /// let clusters = vec![
-///     Cluster {
-///         id: "cluster_1".to_string(),
-///         traces: vec![
+///     Cluster::build(
+///         "cluster_1",
+///         &[
 ///             Trace {
 ///                 name: "trace_1".to_string(),
 ///                 test_input: vec![],
 ///                 edges: vec![0, 1, 1, 0],
-///                 syscalls: vec![],
+///                 syscalls: vec![0, 1],
 ///             },
 ///             Trace {
 ///                 name: "trace_2".to_string(),
 ///                 test_input: vec![],
 ///                 edges: vec![0, 1, 0, 0],
-///                 syscalls: vec![],
+///                 syscalls: vec![1, 0],
 ///             },
 ///         ],
-///         min_edge_distance: 1,
-///         max_edge_distance: 1,
-///         min_syscall_distance: 0,
-///         max_syscall_distance: 0,
-///     },
-///     Cluster {
-///         id: "cluster_2".to_string(),
-///         traces: vec![
+///     ).unwrap(),
+///     Cluster::build(
+///         "cluster_2",
+///         &[
 ///             Trace {
 ///                 name: "trace_3".to_string(),
 ///                 test_input: vec![],
 ///                 edges: vec![0, 0, 1, 1],
-///                 syscalls: vec![],
+///                 syscalls: vec![0, 1],
 ///             },
 ///             Trace {
 ///                 name: "trace_4".to_string(),
 ///                 test_input: vec![],
 ///                 edges: vec![0, 0, 0, 1],
-///                 syscalls: vec![],
+///                 syscalls: vec![1, 0],
 ///             },
 ///         ],
-///         min_edge_distance: 1,
-///         max_edge_distance: 1,
-///         min_syscall_distance: 0,
-///         max_syscall_distance: 0,
-///     },
+///     ).unwrap(),
 /// ];
 ///
 /// // Dummy trace for which to get the most similar cluster. It's identical to `trace_2` in
@@ -100,8 +333,8 @@ pub struct Cluster {
 ///         &clusters,
 ///         Criterion::EdgesOnly,
 ///         Hamming,
-///     ).expect("failed to get most similar cluster").id,
-///     clusters[0].id,
+///     ).expect("failed to get most similar cluster").id(),
+///     clusters[0].id(),
 /// );
 /// ```
 pub fn get_most_similar_cluster<'a, DM>(
@@ -197,40 +430,39 @@ where
 ///
 /// // A dummy collection of traces to demonstrate the function.
 /// // Test input is not taken into account during clustering so it doesn't matter here.
-/// // In fact, to simplify the example, only the edges will be taken into account.
 /// let traces = vec![
 ///     Trace {
 ///         name: "trace_1".to_string(),
 ///         test_input: vec![],
 ///         edges: vec![0, 1, 0, 1],
-///         syscalls: vec![],
+///         syscalls: vec![0, 1],
 ///     },
 ///     Trace {
 ///         name: "trace_2".to_string(),
 ///         test_input: vec![],
 ///         edges: vec![0, 1, 0, 0],
-///         syscalls: vec![],
+///         syscalls: vec![1, 0],
 ///     },
 /// ];
 ///
 /// // With zero edge tolerance, the two different traces will be put into two different clusters.
 /// let strict_clusters = clustering::cluster_traces(
 ///     &traces, Criterion::EdgesOnly, Hamming, 0, 0
-/// );
+/// ).unwrap();
 /// assert_eq!(strict_clusters.len(), 2);
-/// assert_eq!(strict_clusters[0].traces.len(), 1);
-/// assert_eq!(strict_clusters[1].traces.len(), 1);
-/// assert_eq!(strict_clusters[0].traces[0].name, "trace_1".to_string());
-/// assert_eq!(strict_clusters[1].traces[0].name, "trace_2".to_string());
+/// assert_eq!(strict_clusters[0].traces().len(), 1);
+/// assert_eq!(strict_clusters[1].traces().len(), 1);
+/// assert_eq!(strict_clusters[0].traces()[0].name, "trace_1".to_string());
+/// assert_eq!(strict_clusters[1].traces()[0].name, "trace_2".to_string());
 ///
 /// // With some tolerance, both traces will be grouped into the same cluster.
 /// let relaxed_clusters = clustering::cluster_traces(
 ///     &traces, Criterion::EdgesOnly, Hamming, 1, 0
-/// );
+/// ).unwrap();
 /// assert_eq!(relaxed_clusters.len(), 1);
-/// assert_eq!(relaxed_clusters[0].traces.len(), 2);
-/// assert_eq!(relaxed_clusters[0].traces[0].name, "trace_1".to_string());
-/// assert_eq!(relaxed_clusters[0].traces[1].name, "trace_2".to_string());
+/// assert_eq!(relaxed_clusters[0].traces().len(), 2);
+/// assert_eq!(relaxed_clusters[0].traces()[0].name, "trace_1".to_string());
+/// assert_eq!(relaxed_clusters[0].traces()[1].name, "trace_2".to_string());
 /// ```
 pub fn cluster_traces<DM>(
     traces: &[Trace],
@@ -238,43 +470,43 @@ pub fn cluster_traces<DM>(
     distance_metric: DM,
     edge_tolerance: u64,
     syscall_tolerance: u64,
-) -> Vec<Cluster>
+) -> Result<Vec<Cluster>, RosaError>
 where
     DM: DistanceMetric + Clone,
 {
-    match (edge_tolerance, syscall_tolerance, criterion) {
+    if edge_tolerance == 0
+        && syscall_tolerance == 0
+        && (criterion == Criterion::EdgesAndSyscalls || criterion == Criterion::EdgesOnly)
+    {
         // If both tolerances are 0, and we care about edges, we will never be able to put two
         // traces in the same cluster. This is because we only keep traces that have unique edge
         // vectors. It's worth it to simply create the corresponding clusters here, as it's much
         // faster.
-        (0, 0, Criterion::EdgesAndSyscalls) | (0, 0, Criterion::EdgesOnly) => traces
+        traces
             .iter()
             .enumerate()
-            .map(|(index, trace)| Cluster {
-                id: format!("cluster_{:0>6}", index),
-                traces: vec![trace.clone()],
-                min_edge_distance: edge_tolerance,
-                max_edge_distance: edge_tolerance,
-                min_syscall_distance: syscall_tolerance,
-                max_syscall_distance: syscall_tolerance,
+            .map(|(index, trace)| {
+                Cluster::build(&format!("cluster_{:0>6}", index), slice::from_ref(trace))
             })
-            .collect(),
+            .collect()
+    } else {
         // In the general case, we cannot optimize, so we have to go through the full clustering
         // algorithm.
-        _ => traces.iter().fold(Vec::new(), |mut clusters, trace| {
+        traces.iter().try_fold(Vec::new(), |clusters, trace| {
             let result =
                 get_most_similar_cluster(trace, &clusters, criterion, distance_metric.clone()).map(
                     |most_similar_cluster| {
                         let max_edge_distance = most_similar_cluster
-                    .traces
-                    .iter()
-                    .map(|cluster_trace| {
-                        distance_metric.distance(&trace.edges, &cluster_trace.edges)
-                    })
-                    .max()
-                    .expect(
-                        "failed to get max edge distance between trace and most similar cluster.",
-                    );
+                            .traces
+                            .iter()
+                            .map(|cluster_trace| {
+                                distance_metric.distance(&trace.edges, &cluster_trace.edges)
+                            })
+                            .max()
+                            .expect(
+                                "failed to get max edge distance between trace and most similar\
+                                cluster.",
+                            );
                         let max_syscall_distance = most_similar_cluster
                             .traces
                             .iter()
@@ -287,10 +519,16 @@ where
                                 cluster.",
                             );
 
-                        let edge_criterion =
-                            max_edge_distance <= most_similar_cluster.min_edge_distance;
-                        let syscall_criterion =
-                            max_syscall_distance <= most_similar_cluster.min_syscall_distance;
+                        let edge_criterion = max_edge_distance
+                            <= cmp::max(
+                                most_similar_cluster.min_edge_distance(&distance_metric),
+                                edge_tolerance,
+                            );
+                        let syscall_criterion = max_syscall_distance
+                            <= cmp::max(
+                                most_similar_cluster.min_syscall_distance(&distance_metric),
+                                syscall_tolerance,
+                            );
 
                         let cluster_matches = match criterion {
                             Criterion::EdgesOnly => edge_criterion,
@@ -299,65 +537,40 @@ where
                             Criterion::EdgesAndSyscalls => edge_criterion && syscall_criterion,
                         };
 
-                        (
-                            cluster_matches.then_some(
-                                clusters
-                                    .iter()
-                                    .position(|c| c.id == most_similar_cluster.id)
-                                    .expect("failed to get index of matching cluster."),
-                            ),
-                            max_edge_distance,
-                            max_syscall_distance,
-                        )
+                        cluster_matches.then_some(most_similar_cluster)
                     },
                 );
 
             match result {
-                Some((
-                    Some(cluster_index),
-                    trace_max_edge_distance,
-                    trace_max_syscall_distance,
-                )) => {
-                    // A cluster was found that fulfills the criteria needed to integrate the trace.
-                    let matching_cluster = &mut clusters[cluster_index];
+                // A cluster was found that fulfills the criteria needed to integrate the trace.
+                Some(Some(most_similar_cluster)) => clusters
+                    .clone()
+                    .into_iter()
+                    .map(|cluster| {
+                        if cluster.id() == most_similar_cluster.id() {
+                            // Note that this will check whether the inserted trace has the same
+                            // shape (i.e., edge & syscall size) as the other traces.
+                            Cluster::build(
+                                &most_similar_cluster.id(),
+                                &[most_similar_cluster.traces(), slice::from_ref(trace)].concat(),
+                            )
+                        } else {
+                            Ok(cluster.clone())
+                        }
+                    })
+                    .collect(),
+                // Either no cluster was found (because none exist) or the one that was found didn't
+                // match; either way, we have to create a new cluster for the trace.
+                Some(None) | None => {
+                    let new_cluster = Cluster::build(
+                        &format!("cluster_{:0>6}", clusters.len()),
+                        slice::from_ref(trace),
+                    )?;
 
-                    matching_cluster.traces.push(trace.clone());
-
-                    // Make sure to update the minimum/maximum distances of the cluster.
-                    matching_cluster.min_edge_distance = cmp::min(
-                        matching_cluster.min_edge_distance,
-                        // Make sure to not go lower than the specified tolerance.
-                        cmp::max(trace_max_edge_distance, edge_tolerance),
-                    );
-                    matching_cluster.max_edge_distance =
-                        cmp::max(matching_cluster.max_edge_distance, trace_max_edge_distance);
-
-                    matching_cluster.min_syscall_distance = cmp::min(
-                        matching_cluster.min_syscall_distance,
-                        // Make sure to not go lower than the specified tolerance.
-                        cmp::max(trace_max_syscall_distance, syscall_tolerance),
-                    );
-                    matching_cluster.max_syscall_distance = cmp::max(
-                        matching_cluster.max_syscall_distance,
-                        trace_max_syscall_distance,
-                    );
-                }
-                Some((None, _, _)) | None => {
-                    // Either no cluster was found (because none exist) or the one that was found
-                    // didn't match; either way, we have to create a new cluster for the trace.
-                    clusters.push(Cluster {
-                        id: format!("cluster_{:0>6}", clusters.len()),
-                        traces: vec![trace.clone()],
-                        min_edge_distance: edge_tolerance,
-                        max_edge_distance: edge_tolerance,
-                        min_syscall_distance: syscall_tolerance,
-                        max_syscall_distance: syscall_tolerance,
-                    });
+                    Ok([clusters.clone(), vec![new_cluster]].concat())
                 }
             }
-
-            clusters
-        }),
+        })
     }
 }
 
@@ -395,7 +608,8 @@ mod tests {
             },
         ];
 
-        let clusters = cluster_traces(&phase_one_traces, Criterion::EdgesOnly, Hamming, 0, 0);
+        let clusters =
+            cluster_traces(&phase_one_traces, Criterion::EdgesOnly, Hamming, 0, 0).unwrap();
 
         assert_eq!(clusters.len(), 4);
         assert_eq!(clusters[0].traces.len(), 1);
@@ -450,7 +664,8 @@ mod tests {
             },
         ];
 
-        let clusters = cluster_traces(&phase_one_traces, Criterion::EdgesOnly, Hamming, 0, 0);
+        let clusters =
+            cluster_traces(&phase_one_traces, Criterion::EdgesOnly, Hamming, 0, 0).unwrap();
 
         assert_eq!(clusters.len(), 4);
         assert_eq!(clusters[0].traces.len(), 1);

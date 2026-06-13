@@ -82,6 +82,7 @@ impl Trace {
         syscalls: &[usize],
         syscalls_len: usize,
     ) -> Self {
+        // TODO: consider renaming to `build`, and do sanity checks, e.g. for empty components, out of bounds errors and so on.
         let mut edges_vector = vec![0; edges_len];
         let mut syscalls_vector = vec![0; syscalls_len];
 

@@ -34,14 +34,7 @@ pub fn load_cluster_from_file(file: &Path, traces_dir: &Path) -> Result<Cluster,
     // We should always have at least one trace per cluster.
     assert!(!traces.is_empty());
 
-    Ok(Cluster {
-        id,
-        traces,
-        min_edge_distance: 0,
-        max_edge_distance: 0,
-        min_syscall_distance: 0,
-        max_syscall_distance: 0,
-    })
+    Cluster::build(&id, &traces)
 }
 
 /// Save the cluster to a file.
@@ -49,7 +42,7 @@ pub fn load_cluster_from_file(file: &Path, traces_dir: &Path) -> Result<Cluster,
 /// The cluster is saved in a very simple textual form, with the IDs of its traces, each on a
 /// separate line.
 pub fn save_cluster_to_file(cluster: &Cluster, file: &Path) -> Result<(), RosaError> {
-    let trace_ids: Vec<String> = cluster.traces.iter().map(|trace| trace.id()).collect();
+    let trace_ids: Vec<String> = cluster.traces().iter().map(|trace| trace.id()).collect();
     fs::write(file, format!("{}\n", trace_ids.join("\n"))).map_err(|err| {
         error!(
             "could not save cluster to file {}: {}.",
@@ -66,6 +59,7 @@ pub fn save_cluster_to_file(cluster: &Cluster, file: &Path) -> Result<(), RosaEr
 /// all the traces within the cluster, with one ID per line.
 ///
 /// # Examples
+///
 /// ```
 /// use std::path::Path;
 /// use rosa_core::{
@@ -75,27 +69,23 @@ pub fn save_cluster_to_file(cluster: &Cluster, file: &Path) -> Result<(), RosaEr
 ///
 /// // Dummy clusters to demonstrate function use.
 /// let clusters = vec![
-///     Cluster {
-///         id: "cluster_1".to_string(),
-///         traces: vec![
+///     Cluster::build(
+///         "cluster_1",
+///         &[
 ///             Trace {
 ///                 name: "trace_1".to_string(),
 ///                 test_input: vec![],
-///                 edges: vec![],
-///                 syscalls: vec![],
+///                 edges: vec![0, 1],
+///                 syscalls: vec![1, 0],
 ///             },
 ///             Trace {
 ///                 name: "trace_2".to_string(),
 ///                 test_input: vec![],
-///                 edges: vec![],
-///                 syscalls: vec![],
+///                 edges: vec![1, 0],
+///                 syscalls: vec![0, 1],
 ///             },
 ///         ],
-///         min_edge_distance: 1,
-///         max_edge_distance: 1,
-///         min_syscall_distance: 0,
-///         max_syscall_distance: 0,
-///     },
+///     ).unwrap(),
 /// ];
 ///
 /// let _ = rosa_cli::clustering::save_clusters_to_dir(
@@ -104,7 +94,7 @@ pub fn save_cluster_to_file(cluster: &Cluster, file: &Path) -> Result<(), RosaEr
 /// ```
 pub fn save_clusters_to_dir(clusters: &[Cluster], output_dir: &Path) -> Result<(), RosaError> {
     clusters.iter().try_for_each(|cluster| {
-        let cluster_file = output_dir.join(&cluster.id).with_extension("txt");
+        let cluster_file = output_dir.join(cluster.id()).with_extension("txt");
         save_cluster_to_file(cluster, &cluster_file)
     })
 }

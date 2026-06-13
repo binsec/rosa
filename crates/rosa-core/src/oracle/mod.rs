@@ -14,7 +14,8 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    clustering::Cluster, criterion::Criterion, distance_metric::DistanceMetric, trace::Trace,
+    clustering::Cluster, criterion::Criterion, distance_metric::DistanceMetric, error::RosaError,
+    trace::Trace,
 };
 
 pub mod comp_min_max;
@@ -45,11 +46,11 @@ where
         cluster: &Cluster,
         criterion: Criterion,
         distance_metric: DM,
-    ) -> Decision;
+    ) -> Result<Decision, RosaError>;
 }
 
 /// The reason for an oracle decision.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum DecisionReason {
     /// The decision was made because the trace was a seed trace (i.e. it originated from the seed
     /// phase).
@@ -70,7 +71,7 @@ pub enum DecisionReason {
 }
 
 /// The edges and syscalls that lead to an oracle decision.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Discriminants {
     /// The edges that exist in the trace but not the cluster.
     pub trace_edges: Vec<usize>,
@@ -117,7 +118,7 @@ impl Discriminants {
 }
 
 /// The decision made by an oracle.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Decision {
     /// The ID of the trace for which the decision was made.
     pub trace_id: String,

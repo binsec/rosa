@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::RosaError;
 
 /// A criterion to describe which component(s) of the runtime trace are taken into account.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub enum Criterion {
     /// Only the edge component of the runtime trace is taken into account.
     #[serde(rename = "edges-only")]
