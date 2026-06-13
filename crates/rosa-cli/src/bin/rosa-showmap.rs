@@ -39,7 +39,7 @@ struct Cli {
 fn run(file: &Path, component: Component) -> Result<(), RosaError> {
     rosa_cli::trace::load_trace_from_file("_dummy", file, file).map(|trace| {
         let edges_output: Vec<String> = trace
-            .edges
+            .edges()
             .iter()
             .enumerate()
             .filter_map(|(index, edge)| match edge {
@@ -49,7 +49,7 @@ fn run(file: &Path, component: Component) -> Result<(), RosaError> {
             .collect();
 
         let syscalls_output: Vec<String> = trace
-            .syscalls
+            .syscalls()
             .iter()
             .enumerate()
             .filter_map(|(index, syscall)| match syscall {

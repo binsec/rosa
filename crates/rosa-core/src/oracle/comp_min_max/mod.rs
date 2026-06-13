@@ -37,39 +37,21 @@ where
         criterion: Criterion,
         distance_metric: DM,
     ) -> Result<Decision, RosaError> {
-        let trace_edge_size = trace.edges.len();
-        let trace_syscall_size = trace.syscalls.len();
+        // Check that the trace has the same shape as the cluster.
+        let trace_shape = trace.shape();
+        let cluster_shape = cluster
+            .shape()
+            .ok_or(error!("cluster {} is empty.", cluster.id()))?;
 
-        // Check that the trace is not (partially) empty.
-        (trace_edge_size > 0)
-            .then_some(())
-            .ok_or(error!("trace {} is malformed: no edges.", trace.id()))?;
-        (trace_syscall_size > 0)
-            .then_some(())
-            .ok_or(error!("trace {} is malformed: no syscalls.", trace.id()))?;
-
-        // Check that the trace has the same length as all traces of the cluster.
-        cluster.traces().iter().try_for_each(|cluster_trace| {
-            let cluster_trace_edge_size = cluster_trace.edges.len();
-            let cluster_trace_syscall_size = cluster_trace.syscalls.len();
-
-            (cluster_trace_edge_size == trace_edge_size).then_some(()).ok_or(error!(
-                "trace {} of cluster {} has edge size {}, but candidate trace {} has edge size {}.",
-                cluster_trace.id(), cluster.id(), cluster_trace_edge_size,
-                trace.id(), trace_edge_size
-            ))?;
-            (cluster_trace_syscall_size == trace_syscall_size)
-                .then_some(())
-                .ok_or(error!(
-                    "trace {} of cluster {} has syscall size {}, \
-                        but candidate trace {} has syscall size {}.",
-                    cluster_trace.id(),
-                    cluster.id(),
-                    cluster_trace_syscall_size,
-                    trace.id(),
-                    trace_syscall_size
-                ))
-        })?;
+        (trace_shape == cluster_shape).then_some(()).ok_or(error!(
+            "oracle: trace {} has shape ({}, {}), but cluster {} has shape ({}, {}).",
+            trace.id(),
+            trace_shape.0,
+            trace_shape.1,
+            cluster.id(),
+            cluster_shape.0,
+            cluster_shape.1
+        ))?;
 
         /// Get the minimum edge distance between a trace and a cluster.
         fn get_min_edge_distance<DM: DistanceMetric>(
@@ -80,7 +62,7 @@ where
             cluster
                 .traces()
                 .iter()
-                .map(|cluster_trace| distance_metric.distance(&trace.edges, &cluster_trace.edges))
+                .map(|cluster_trace| distance_metric.distance(trace.edges(), cluster_trace.edges()))
                 .min()
                 .ok_or(error!(
                     "minimum edge distance for trace {} and cluster {} not found: cluster empty.",
@@ -98,7 +80,7 @@ where
             cluster
                 .traces()
                 .iter()
-                .map(|cluster_trace| distance_metric.distance(&trace.syscalls, &cluster_trace.syscalls))
+                .map(|cluster_trace| distance_metric.distance(trace.syscalls(), cluster_trace.syscalls()))
                 .min()
                 .ok_or(error!(
                     "minimum syscall distance for trace {} and cluster {} not found: cluster empty.",
@@ -160,7 +142,7 @@ where
         };
 
         let (trace_edge_hits, trace_edge_misses): (Vec<usize>, Vec<usize>) =
-            trace.edges.iter().enumerate().fold(
+            trace.edges().iter().enumerate().fold(
                 (Vec::new(), Vec::new()),
                 |(trace_edge_hits, trace_edge_misses), (index, edge)| {
                     if *edge == 0u8 {
@@ -171,7 +153,7 @@ where
                 },
             );
         let (trace_syscall_hits, trace_syscall_misses): (Vec<usize>, Vec<usize>) =
-            trace.syscalls.iter().enumerate().fold(
+            trace.syscalls().iter().enumerate().fold(
                 (Vec::new(), Vec::new()),
                 |(trace_syscall_hits, trace_syscall_misses), (index, syscall)| {
                     if *syscall == 0u8 {
@@ -194,7 +176,7 @@ where
             .filter(|index| {
                 cluster.traces().iter().all(|cluster_trace| {
                     cluster_trace
-                        .edges
+                        .edges()
                         .get(*index)
                         .map(|value| *value == 0)
                         .unwrap_or(true)
@@ -207,7 +189,7 @@ where
             .filter(|index| {
                 cluster.traces().iter().any(|cluster_trace| {
                     cluster_trace
-                        .edges
+                        .edges()
                         .get(*index)
                         .map(|value| *value == 1)
                         .unwrap_or(false)
@@ -221,7 +203,7 @@ where
             .filter(|index| {
                 cluster.traces().iter().all(|cluster_trace| {
                     cluster_trace
-                        .syscalls
+                        .syscalls()
                         .get(*index)
                         .map(|value| *value == 0)
                         .unwrap_or(true)
@@ -234,7 +216,7 @@ where
             .filter(|index| {
                 cluster.traces().iter().any(|cluster_trace| {
                     cluster_trace
-                        .syscalls
+                        .syscalls()
                         .get(*index)
                         .map(|value| *value == 1)
                         .unwrap_or(false)
@@ -244,7 +226,7 @@ where
 
         Ok(Decision {
             trace_id: trace.id(),
-            trace_name: trace.name.clone(),
+            trace_name: trace.name().to_string(),
             cluster_id: cluster.id().clone(),
             is_backdoor,
             reason,

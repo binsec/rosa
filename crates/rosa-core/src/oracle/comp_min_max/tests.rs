@@ -3,53 +3,15 @@ use super::*;
 use crate::distance_metric::hamming::Hamming;
 
 #[test]
-fn empty_trace() {
-    let trace = Trace::from("my_trace", &[], &[], 0, &[], 0);
-    let cluster = Cluster::build(
-        "my_cluster",
-        &[Trace::from(
-            "cluster_trace",
-            &[],
-            &[0, 1, 2],
-            3,
-            &[0, 1, 2],
-            3,
-        )],
-    )
-    .unwrap();
-
-    assert_eq!(
-        CompMinMax
-            .decide(&trace, &cluster, Criterion::SyscallsOnly, Hamming)
-            .expect_err("oracle should fail")
-            .message,
-        format!("trace {} is malformed: no edges.", trace.id())
-    );
-
-    let trace = Trace::from("my_trace", &[], &[0], 1, &[], 0);
-    assert_eq!(
-        CompMinMax
-            .decide(&trace, &cluster, Criterion::SyscallsOnly, Hamming)
-            .expect_err("oracle should fail")
-            .message,
-        format!("trace {} is malformed: no syscalls.", trace.id())
-    );
-}
-
-#[test]
 fn empty_cluster() {
-    let trace = Trace::from("my_trace", &[], &[0, 1, 2], 3, &[0, 1, 2], 3);
+    let trace = Trace::build("my_trace", &[], &[0, 1, 2], 3, &[0, 1, 2], 3).unwrap();
     let cluster = Cluster::build("my_cluster", &[]).unwrap();
     assert_eq!(
         CompMinMax
             .decide(&trace, &cluster, Criterion::EdgesOnly, Hamming)
             .expect_err("oracle should fail")
             .message,
-        format!(
-            "minimum edge distance for trace {} and cluster {} not found: cluster empty.",
-            trace.id(),
-            cluster.id()
-        )
+        format!("cluster {} is empty.", cluster.id())
     );
 
     assert_eq!(
@@ -57,19 +19,15 @@ fn empty_cluster() {
             .decide(&trace, &cluster, Criterion::SyscallsOnly, Hamming)
             .expect_err("oracle should fail")
             .message,
-        format!(
-            "minimum syscall distance for trace {} and cluster {} not found: cluster empty.",
-            trace.id(),
-            cluster.id()
-        )
+        format!("cluster {} is empty.", cluster.id())
     );
 }
 
 #[test]
 fn mismatched_trace_and_cluster_sizes() {
-    let trace = Trace::from("my_trace", &[], &[0], 3, &[0], 3);
-    let cluster_trace_1 = Trace::from("cluster_trace_1", &[], &[0], 2, &[0], 3);
-    let cluster_trace_2 = Trace::from("cluster_trace_2", &[], &[0], 2, &[0], 3);
+    let trace = Trace::build("my_trace", &[], &[0], 3, &[0], 3).unwrap();
+    let cluster_trace_1 = Trace::build("cluster_trace_1", &[], &[0], 2, &[0], 3).unwrap();
+    let cluster_trace_2 = Trace::build("cluster_trace_2", &[], &[0], 2, &[0], 3).unwrap();
     let cluster = Cluster::build(
         "my_cluster",
         &[cluster_trace_1.clone(), cluster_trace_2.clone()],
@@ -82,17 +40,18 @@ fn mismatched_trace_and_cluster_sizes() {
             .expect_err("oracle should fail")
             .message,
         format!(
-            "trace {} of cluster {} has edge size {}, but candidate trace {} has edge size {}.",
-            cluster_trace_2.id(),
-            cluster.id(),
-            cluster_trace_2.edges.len(),
+            "oracle: trace {} has shape ({}, {}), but cluster {} has shape ({}, {}).",
             trace.id(),
-            trace.edges.len()
+            trace.shape().0,
+            trace.shape().1,
+            cluster.id(),
+            cluster.shape().unwrap().0,
+            cluster.shape().unwrap().1,
         )
     );
 
-    let cluster_trace_1 = Trace::from("cluster_trace_1", &[], &[0], 3, &[0], 2);
-    let cluster_trace_2 = Trace::from("cluster_trace_2", &[], &[0], 3, &[0], 2);
+    let cluster_trace_1 = Trace::build("cluster_trace_1", &[], &[0], 3, &[0], 2).unwrap();
+    let cluster_trace_2 = Trace::build("cluster_trace_2", &[], &[0], 3, &[0], 2).unwrap();
     let cluster = Cluster::build(
         "my_cluster",
         &[cluster_trace_1.clone(), cluster_trace_2.clone()],
@@ -104,13 +63,13 @@ fn mismatched_trace_and_cluster_sizes() {
             .expect_err("oracle should fail")
             .message,
         format!(
-            "trace {} of cluster {} has syscall size {}, \
-                but candidate trace {} has syscall size {}.",
-            cluster_trace_2.id(),
-            cluster.id(),
-            cluster_trace_2.syscalls.len(),
+            "oracle: trace {} has shape ({}, {}), but cluster {} has shape ({}, {}).",
             trace.id(),
-            trace.syscalls.len()
+            trace.shape().0,
+            trace.shape().1,
+            cluster.id(),
+            cluster.shape().unwrap().0,
+            cluster.shape().unwrap().1,
         )
     );
 }
@@ -119,24 +78,26 @@ fn mismatched_trace_and_cluster_sizes() {
 fn standard_rosa_backdoor() {
     // This is a classic backdoor scenario: the trace has system calls that the cluster (which
     // contains a single trace) does not have.
-    let trace = Trace::from(
+    let trace = Trace::build(
         "my_trace",
         &[],
         &[0, 10, 239, 429, 1092, 3, 18],
         u16::MAX as usize,
         &[0, 12, 39, 100, 202],
         400,
-    );
+    )
+    .unwrap();
     let cluster = Cluster::build(
         "my_cluster",
-        &[Trace::from(
+        &[Trace::build(
             "cluster_trace",
             &[],
             &[0, 12, 14, 3, 18, 202, 1010, 1982, 143],
             u16::MAX as usize,
             &[0, 12, 39, 202],
             400,
-        )],
+        )
+        .unwrap()],
     )
     .unwrap();
 
@@ -160,24 +121,26 @@ fn standard_rosa_backdoor() {
 #[test]
 fn standard_rosa_non_backdoor() {
     // This is a classic non-backdoor scenario: the trace has the same system calls as the cluster.
-    let trace = Trace::from(
+    let trace = Trace::build(
         "my_trace",
         &[],
         &[0, 10, 239, 429, 1092, 3, 18],
         u16::MAX as usize,
         &[0, 12, 39, 100],
         400,
-    );
+    )
+    .unwrap();
     let cluster = Cluster::build(
         "my_cluster",
-        &[Trace::from(
+        &[Trace::build(
             "cluster_trace",
             &[],
             &[0, 12, 14, 3, 18, 202, 1010, 1982, 143],
             u16::MAX as usize,
             &[0, 12, 39, 100],
             400,
-        )],
+        )
+        .unwrap()],
     )
     .unwrap();
 
@@ -200,24 +163,26 @@ fn standard_rosa_non_backdoor() {
 
 #[test]
 fn edges_only_backdoor() {
-    let trace = Trace::from(
+    let trace = Trace::build(
         "my_trace",
         &[],
         &[0, 10, 100, 1000],
         u16::MAX as usize,
         &[0, 1, 2, 3],
         400,
-    );
+    )
+    .unwrap();
     let cluster = Cluster::build(
         "my_cluster",
-        &[Trace::from(
+        &[Trace::build(
             "cluster_trace",
             &[],
             &[0, 10, 100, 1001],
             u16::MAX as usize,
             &[0],
             400,
-        )],
+        )
+        .unwrap()],
     )
     .unwrap();
 
@@ -240,24 +205,26 @@ fn edges_only_backdoor() {
 
 #[test]
 fn edges_only_non_backdoor() {
-    let trace = Trace::from(
+    let trace = Trace::build(
         "my_trace",
         &[],
         &[0, 10, 100, 1000],
         u16::MAX as usize,
         &[0, 1, 2, 3],
         400,
-    );
+    )
+    .unwrap();
     let cluster = Cluster::build(
         "my_cluster",
-        &[Trace::from(
+        &[Trace::build(
             "cluster_trace",
             &[],
             &[0, 10, 100, 1000],
             u16::MAX as usize,
             &[0],
             400,
-        )],
+        )
+        .unwrap()],
     )
     .unwrap();
 

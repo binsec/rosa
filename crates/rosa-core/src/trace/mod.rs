@@ -6,6 +6,8 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 
 use itertools::Itertools;
 
+use crate::error::RosaError;
+
 pub mod database;
 
 /// Runtime trace definition.
@@ -18,23 +20,23 @@ pub struct Trace {
     /// The name of the trace.
     ///
     /// This is usually the name given (to the input that produced the trace) by the fuzzer.
-    pub name: String,
+    name: String,
     /// The test input associated with the trace.
-    pub test_input: Vec<u8>,
+    test_input: Vec<u8>,
     /// The edges found in the trace.
     ///
     /// The edges are in the form of an _existential vector_; this means that the vector simply
     /// records the presence (`1`) or absence (`0`) of an edge in the trace. Multiple occurrences
     /// of an edge will still result in the same vector: `1` marks the presence, not the number of
     /// occurrences.
-    pub edges: Vec<u8>,
+    edges: Vec<u8>,
     /// The syscalls found in the trace.
     ///
     /// The syscalls are in the form of an _existential vector_; this means that the vector simply
     /// records the presence (`1`) or absence (`0`) of a syscall in the trace. Multiple occurrences
     /// of a syscall will still result in the same vector: `1` marks the presence, not the number
     /// of occurrences.
-    pub syscalls: Vec<u8>,
+    syscalls: Vec<u8>,
 }
 
 impl Hash for Trace {
@@ -45,60 +47,130 @@ impl Hash for Trace {
 }
 
 impl Trace {
+    /// Create a trace with raw edge and syscall vectors.
+    ///
+    /// The edges and syscalls are expected to be in an *existential vector* format,
+    /// meaning vectors where each element is either a 1 if the corresponding index (edge/syscall
+    /// ID) was hit, 0 otherwise.
+    ///
+    /// Note that this method will return an [Err] if either of the edge or sysscall components is
+    /// empty.
+    ///
+    /// # Examples
+    ///
+    /// TODO
+    pub fn build_with_vectors(
+        name: &str,
+        test_input: &[u8],
+        edges: &[u8],
+        syscalls: &[u8],
+    ) -> Result<Self, RosaError> {
+        (!edges.is_empty())
+            .then_some(())
+            .ok_or(error!("invalid trace: empty edge vector"))?;
+        (!syscalls.is_empty())
+            .then_some(())
+            .ok_or(error!("invalid trace: empty syscall vector"))?;
+
+        Ok(Self {
+            name: name.to_string(),
+            test_input: test_input.to_vec(),
+            edges: edges.to_vec(),
+            syscalls: syscalls.to_vec(),
+        })
+    }
+
     /// Create a trace from existing data.
     ///
-    /// The edges and syscalls are not fed in an *existential vector* format as the trace expects,
+    /// The edges and syscalls are not in an *existential vector* format as the trace expects,
     /// but rather in the form of slices of indices of edge or syscall hits. The rest of the vector
     /// is populated with zeroes.
     ///
+    /// Note that this method will return an [Err] if either of the edge or syscall components is
+    /// empty, or if the covered edges/syscalls are out of bounds of the specified respective sizes.
+    ///
     /// # Examples
+    ///
     /// ```
     /// use rosa_core::trace::Trace;
     ///
-    /// let trace = Trace::from(
+    /// let trace = Trace::build(
     ///     "my_trace",
     ///     &[0x01, 0x02, 0x03, 0x04],
     ///     &[1, 4, 17, 4],
     ///     20,
     ///     &[2, 2, 3, 11],
     ///     14,
-    /// );
+    /// ).unwrap();
     ///
-    /// assert_eq!(
-    ///     trace,
-    ///     Trace {
-    ///         name: "my_trace".to_string(),
-    ///         test_input: vec![0x01, 0x02, 0x03, 0x04],
-    ///         edges: vec![0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
-    ///         syscalls: vec![0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
-    ///     }
-    /// );
+    /// assert_eq!(trace.name(), "my_trace");
+    /// assert_eq!(trace.test_input(), [0x01, 0x02, 0x03, 0x04]);
+    /// assert_eq!(trace.edges(), [0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0]);
+    /// assert_eq!(trace.syscalls(), [0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0]);
     /// ```
-    pub fn from(
+    pub fn build(
         name: &str,
         test_input: &[u8],
         edges: &[usize],
         edges_len: usize,
         syscalls: &[usize],
         syscalls_len: usize,
-    ) -> Self {
-        // TODO: consider renaming to `build`, and do sanity checks, e.g. for empty components, out of bounds errors and so on.
+    ) -> Result<Self, RosaError> {
         let mut edges_vector = vec![0; edges_len];
         let mut syscalls_vector = vec![0; syscalls_len];
 
-        edges.iter().unique().for_each(|index| {
-            edges_vector[*index] = 1;
-        });
-        syscalls.iter().unique().for_each(|index| {
-            syscalls_vector[*index] = 1;
-        });
+        edges.iter().unique().try_for_each(|index| {
+            edges_vector
+                .get_mut(*index)
+                .map(|element| *element = 1)
+                .ok_or(error!(
+                    "edge {} is out of bounds: max edge count is {}",
+                    index, edges_len
+                ))
+        })?;
+        syscalls.iter().unique().try_for_each(|index| {
+            syscalls_vector
+                .get_mut(*index)
+                .map(|element| *element = 1)
+                .ok_or(error!(
+                    "syscall {} is out of bounds: max syscall count is {}",
+                    index, syscalls_len
+                ))
+        })?;
 
-        Trace {
+        Ok(Self {
             name: name.to_string(),
             test_input: test_input.to_vec(),
             edges: edges_vector,
             syscalls: syscalls_vector,
-        }
+        })
+    }
+
+    /// Get the name of the trace.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Get the edge vector of the trace.
+    pub fn edges(&self) -> &[u8] {
+        &self.edges
+    }
+
+    /// Get the syscall vector of the trace.
+    pub fn syscalls(&self) -> &[u8] {
+        &self.syscalls
+    }
+
+    /// Get the test input associated to the trace.
+    pub fn test_input(&self) -> &[u8] {
+        &self.test_input
+    }
+
+    /// Get the shape of the trace.
+    ///
+    /// The shape is the tuple `(edge_len, syscall_len)`.
+    pub fn shape(&self) -> (usize, usize) {
+        (self.edges.len(), self.syscalls.len())
     }
 
     /// Get a printable version of the test input.
@@ -112,12 +184,12 @@ impl Trace {
     /// use rosa_core::trace::Trace;
     ///
     /// // Dummy trace to test with.
-    /// let trace = Trace {
-    ///     name: "my_trace".to_string(),
-    ///     test_input: vec![0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0xde, 0xad, 0xbe, 0xef],
-    ///     edges: vec![],
-    ///     syscalls: vec![],
-    /// };
+    /// let trace = Trace::build_with_vectors(
+    ///     "my_trace",
+    ///     &[0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0xde, 0xad, 0xbe, 0xef],
+    ///     &[0, 1, 1, 0],
+    ///     &[0, 0, 1],
+    /// ).unwrap();
     ///
     /// // Should get "hello \xde\xad\xbe\xef".
     /// assert_eq!(trace.printable_test_input(), "hello \\xde\\xad\\xbe\\xef".to_string());
@@ -148,12 +220,12 @@ impl Trace {
     /// use rosa_core::trace::Trace;
     ///
     /// // Dummy trace to test with.
-    /// let trace = Trace {
-    ///     name: "my_trace".to_string(),
-    ///     test_input: vec![],
-    ///     edges: vec![0, 1, 1, 0],
-    ///     syscalls: vec![],
-    /// };
+    /// let trace = Trace::build_with_vectors(
+    ///     "my_trace",
+    ///     &[],
+    ///     &[0, 1, 1, 0],
+    ///     &[0, 0, 0, 0],
+    /// ).unwrap();
     ///
     /// assert_eq!(trace.edges_as_string(), "2 edges (50.00%)".to_string());
     /// ```
@@ -182,12 +254,12 @@ impl Trace {
     /// use rosa_core::trace::Trace;
     ///
     /// // Dummy trace to test with.
-    /// let trace = Trace {
-    ///     name: "my_trace".to_string(),
-    ///     test_input: vec![],
-    ///     edges: vec![],
-    ///     syscalls: vec![0, 0, 1, 0],
-    /// };
+    /// let trace = Trace::build_with_vectors(
+    ///     "my_trace",
+    ///     &[],
+    ///     &[0, 0, 0, 0],
+    ///     &[0, 0, 1, 0],
+    /// ).unwrap();
     ///
     /// assert_eq!(trace.syscalls_as_string(), "1 syscalls (25.00%)".to_string());
     /// ```
@@ -217,22 +289,23 @@ impl Trace {
 /// Get the coverage of a set of traces in terms of edges and syscalls.
 ///
 /// # Examples
+///
 /// ```
 /// use rosa_core::trace::{self, Trace};
 ///
 /// let traces = vec![
-///     Trace {
-///         name: "trace1".to_string(),
-///         test_input: vec![],
-///         edges: vec![0, 1, 0, 1, 0, 0, 0, 0],
-///         syscalls: vec![1, 1, 0, 0],
-///     },
-///     Trace {
-///         name: "trace2".to_string(),
-///         test_input: vec![],
-///         edges: vec![0, 0, 0, 0, 1, 0, 1, 0],
-///         syscalls: vec![0, 1, 1, 0],
-///     }
+///     Trace::build_with_vectors(
+///         "trace1",
+///         &[],
+///         &[0, 1, 0, 1, 0, 0, 0, 0],
+///         &[1, 1, 0, 0],
+///     ).unwrap(),
+///     Trace::build_with_vectors(
+///         "trace2",
+///         &[],
+///         &[0, 0, 0, 0, 1, 0, 1, 0],
+///         &[0, 1, 1, 0],
+///     ).unwrap(),
 /// ];
 ///
 /// assert_eq!(trace::get_coverage(&traces), (0.5, 0.75));

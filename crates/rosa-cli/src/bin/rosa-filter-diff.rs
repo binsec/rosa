@@ -167,7 +167,7 @@ fn reevaluate_decision(
     let mut input_file = File::create(&input_file_path)
         .map_err(|err| error!("could not create temporary input file: {}.", err))?;
     input_file
-        .write_all(&trace.test_input)
+        .write_all(trace.test_input())
         .map_err(|err| error!("could not write data to temporary input file: {}.", err))?;
 
     let trace_file_path = temp_dir_path.join("input.trace");
@@ -198,7 +198,7 @@ fn reevaluate_decision(
             // trace behaves differently, and so the decision should be marked as suspicious.
 
             let base_syscalls: Vec<usize> = base_trace
-                .syscalls
+                .syscalls()
                 .iter()
                 .enumerate()
                 .filter_map(|(syscall_id, had_syscall)| (*had_syscall == 1).then_some(syscall_id))
@@ -236,7 +236,7 @@ fn reevaluate_decision(
             // If the answer to both of these is "yes", then the input is suspicious.
 
             let base_trace_syscalls: Vec<usize> = base_trace
-                .syscalls
+                .syscalls()
                 .iter()
                 .enumerate()
                 .filter_map(|(syscall_id, had_syscall)| (*had_syscall == 1).then_some(syscall_id))
@@ -300,7 +300,7 @@ fn reevaluate_decision(
                     let input_file_path = temp_dir_path.join("input");
                     let mut input_file = File::create(&input_file_path)
                         .map_err(|err| error!("could not create temporary input file: {}.", err))?;
-                    input_file.write_all(&trace.test_input).map_err(|err| {
+                    input_file.write_all(trace.test_input()).map_err(|err| {
                         error!("could not write data to temporary input file: {}.", err)
                     })?;
 

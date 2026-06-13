@@ -25,48 +25,27 @@ impl Cluster {
     /// If the traces are not uniform (i.e., having edge and syscall vectors of the same size),
     /// then an [Err] is returned.
     pub fn build(name: &str, traces: &[Trace]) -> Result<Self, RosaError> {
-        // TODO: somehow package this in [Trace]?
-        // Ensure that all traces have the same size.
+        // Ensure that all traces have the same shape.
+        //
+        // Note that we do not have to check if they are non-empty, since [Trace::build] checks
+        // that by construction.
         if let Some(first_trace) = traces.first() {
-            let first_trace_edge_size = first_trace.edges.len();
-            let first_trace_syscall_size = first_trace.syscalls.len();
+            let first_trace_shape = first_trace.shape();
 
             traces.iter().try_for_each(|trace| {
-                let trace_edge_size = trace.edges.len();
-                let trace_syscall_size = trace.syscalls.len();
+                let trace_shape = trace.shape();
 
-                // Check that the trace is not (partially) empty.
-                (trace_edge_size > 0).then_some(()).ok_or(error!(
-                    "cluster {}: trace {} is malformed: no edges.",
-                    name,
-                    trace.id()
-                ))?;
-                (trace_syscall_size > 0).then_some(()).ok_or(error!(
-                    "cluster {}: trace {} is malformed: no syscalls.",
-                    name,
-                    trace.id()
-                ))?;
-
-                // Check that the size is the same.
-                (trace_edge_size == first_trace_edge_size)
+                (first_trace_shape == trace_shape)
                     .then_some(())
                     .ok_or(error!(
-                        "cluster {}: trace {} has edge size {}, but trace {} has edge size {}.",
+                        "cluster {}: trace {} has shape ({}, {}), but trace {} has shape ({}, {}).",
                         name,
-                        trace.id(),
-                        trace_edge_size,
                         first_trace.id(),
-                        first_trace_edge_size
-                    ))?;
-                (trace_syscall_size == first_trace_syscall_size)
-                    .then_some(())
-                    .ok_or(error!(
-                        "cluster {}: trace {} has syscall size {}, but trace {} has syscall size {}.",
-                        name,
+                        first_trace_shape.0,
+                        first_trace_shape.1,
                         trace.id(),
-                        trace_syscall_size,
-                        first_trace.id(),
-                        first_trace_syscall_size
+                        trace_shape.0,
+                        trace_shape.1
                     ))
             })?;
         }
@@ -87,9 +66,13 @@ impl Cluster {
         &self.traces
     }
 
-    /// Get a mutable reference to the traces of the cluster.
-    pub fn mut_traces(&mut self) -> &mut Vec<Trace> {
-        self.traces.as_mut()
+    /// Get the shape of the cluster.
+    ///
+    /// The shape is the tuple `(edge_len, syscall_len)`.
+    pub fn shape(&self) -> Option<(usize, usize)> {
+        // Since [Self::build] guarantees that all traces have the same shape by construction, we
+        // can just fetch the shape of the first trace.
+        self.traces.first().map(|trace| trace.shape())
     }
 
     /// Get the edge distances of all combinations of traces in the cluster.
@@ -106,24 +89,24 @@ impl Cluster {
     /// let cluster = Cluster::build(
     ///     "my_cluster",
     ///     &[
-    ///         Trace {
-    ///             name: "trace_1".to_string(),
-    ///             test_input: vec![],
-    ///             edges: vec![0, 1, 1, 0],
-    ///             syscalls: vec![1, 0, 0, 0],
-    ///         },
-    ///         Trace {
-    ///             name: "trace_2".to_string(),
-    ///             test_input: vec![],
-    ///             edges: vec![0, 1, 1, 1],
-    ///             syscalls: vec![1, 0, 1, 0],
-    ///         },
-    ///         Trace {
-    ///             name: "trace_2".to_string(),
-    ///             test_input: vec![],
-    ///             edges: vec![0, 0, 0, 1],
-    ///             syscalls: vec![0, 0, 1, 0],
-    ///         },
+    ///         Trace::build_with_vectors(
+    ///             "trace_1",
+    ///             &[],
+    ///             &[0, 1, 1, 0],
+    ///             &[1, 0, 0, 0],
+    ///         ).unwrap(),
+    ///         Trace::build_with_vectors(
+    ///             "trace_2",
+    ///             &[],
+    ///             &[0, 1, 1, 1],
+    ///             &[1, 0, 1, 0],
+    ///         ).unwrap(),
+    ///         Trace::build_with_vectors(
+    ///             "trace_3",
+    ///             &[],
+    ///             &[0, 0, 0, 1],
+    ///             &[0, 0, 1, 0],
+    ///         ).unwrap(),
     ///     ]
     /// ).unwrap();
     ///
@@ -153,7 +136,7 @@ impl Cluster {
                     .last()
                     .expect("combination should contain a second trace");
 
-                distance_metric.distance(&trace1.edges, &trace2.edges)
+                distance_metric.distance(trace1.edges(), trace2.edges())
             })
             .collect()
     }
@@ -172,24 +155,24 @@ impl Cluster {
     /// let cluster = Cluster::build(
     ///     "my_cluster",
     ///     &[
-    ///         Trace {
-    ///             name: "trace_1".to_string(),
-    ///             test_input: vec![],
-    ///             edges: vec![0, 1, 1, 0],
-    ///             syscalls: vec![1, 0, 0, 0],
-    ///         },
-    ///         Trace {
-    ///             name: "trace_2".to_string(),
-    ///             test_input: vec![],
-    ///             edges: vec![0, 1, 1, 1],
-    ///             syscalls: vec![1, 0, 1, 0],
-    ///         },
-    ///         Trace {
-    ///             name: "trace_2".to_string(),
-    ///             test_input: vec![],
-    ///             edges: vec![0, 0, 0, 1],
-    ///             syscalls: vec![0, 0, 1, 0],
-    ///         },
+    ///         Trace::build_with_vectors(
+    ///             "trace_1",
+    ///             &[],
+    ///             &[0, 1, 1, 0],
+    ///             &[1, 0, 0, 0],
+    ///         ).unwrap(),
+    ///         Trace::build_with_vectors(
+    ///             "trace_2",
+    ///             &[],
+    ///             &[0, 1, 1, 1],
+    ///             &[1, 0, 1, 0],
+    ///         ).unwrap(),
+    ///         Trace::build_with_vectors(
+    ///             "trace_3",
+    ///             &[],
+    ///             &[0, 0, 0, 1],
+    ///             &[0, 0, 1, 0],
+    ///         ).unwrap(),
     ///     ]
     /// ).unwrap();
     ///
@@ -219,7 +202,7 @@ impl Cluster {
                     .last()
                     .expect("combination should contain a second trace");
 
-                distance_metric.distance(&trace1.syscalls, &trace2.syscalls)
+                distance_metric.distance(trace1.syscalls(), trace2.syscalls())
             })
             .collect()
     }
@@ -286,46 +269,47 @@ impl Cluster {
 ///     Cluster::build(
 ///         "cluster_1",
 ///         &[
-///             Trace {
-///                 name: "trace_1".to_string(),
-///                 test_input: vec![],
-///                 edges: vec![0, 1, 1, 0],
-///                 syscalls: vec![0, 1],
-///             },
-///             Trace {
-///                 name: "trace_2".to_string(),
-///                 test_input: vec![],
-///                 edges: vec![0, 1, 0, 0],
-///                 syscalls: vec![1, 0],
-///             },
+///             Trace::build_with_vectors(
+///                 "trace_1",
+///                 &[],
+///                 &[0, 1, 1, 0],
+///                 &[0, 1],
+///             ).unwrap(),
+///             Trace::build_with_vectors(
+///                 "trace_2",
+///                 &[],
+///                 &[0, 1, 0, 0],
+///                 &[1, 0],
+///             ).unwrap(),
 ///         ],
 ///     ).unwrap(),
 ///     Cluster::build(
 ///         "cluster_2",
 ///         &[
-///             Trace {
-///                 name: "trace_3".to_string(),
-///                 test_input: vec![],
-///                 edges: vec![0, 0, 1, 1],
-///                 syscalls: vec![0, 1],
-///             },
-///             Trace {
-///                 name: "trace_4".to_string(),
-///                 test_input: vec![],
-///                 edges: vec![0, 0, 0, 1],
-///                 syscalls: vec![1, 0],
-///             },
+///             Trace::build_with_vectors(
+///                 "trace_3",
+///                 &[],
+///                 &[0, 0, 1, 1],
+///                 &[0, 1],
+///             ).unwrap(),
+///             Trace::build_with_vectors(
+///                 "trace_4",
+///                 &[],
+///                 &[0, 0, 0, 1],
+///                 &[1, 0],
+///             ).unwrap(),
 ///         ],
 ///     ).unwrap(),
 /// ];
 ///
 /// // Dummy trace for which to get the most similar cluster. It's identical to `trace_2` in
 /// // cluster `cluster_1`.
-/// let candidate_trace = Trace {
-///     name: "candidate".to_string(), test_input: vec![],
-///     edges: vec![0, 1, 0, 0],
-///     syscalls: vec![],
-/// };
+/// let candidate_trace = Trace::build_with_vectors(
+///     "candidate",
+///     &[],
+///     &[0, 1, 0, 0],
+///     &[1, 0],
+/// ).unwrap();
 ///
 /// assert_eq!(
 ///     clustering::get_most_similar_cluster(
@@ -358,13 +342,13 @@ where
             let min_edge_distance = cluster
                 .traces
                 .iter()
-                .map(|cluster_trace| distance_metric.distance(&trace.edges, &cluster_trace.edges))
+                .map(|cluster_trace| distance_metric.distance(trace.edges(), cluster_trace.edges()))
                 .min();
             let min_syscall_distance = cluster
                 .traces
                 .iter()
                 .map(|cluster_trace| {
-                    distance_metric.distance(&trace.syscalls, &cluster_trace.syscalls)
+                    distance_metric.distance(trace.syscalls(), cluster_trace.syscalls())
                 })
                 .min();
 
@@ -387,11 +371,11 @@ where
                         .traces
                         .iter()
                         .filter(|cluster_trace| {
-                            distance_metric.distance(&trace.edges, &cluster_trace.edges)
+                            distance_metric.distance(trace.edges(), cluster_trace.edges())
                                 == new_min_edge_distance
                         })
                         .map(|cluster_trace| {
-                            distance_metric.distance(&trace.syscalls, &cluster_trace.syscalls)
+                            distance_metric.distance(trace.syscalls(), cluster_trace.syscalls())
                         })
                         .min()
                         .unwrap_or(u64::MAX);
@@ -431,18 +415,18 @@ where
 /// // A dummy collection of traces to demonstrate the function.
 /// // Test input is not taken into account during clustering so it doesn't matter here.
 /// let traces = vec![
-///     Trace {
-///         name: "trace_1".to_string(),
-///         test_input: vec![],
-///         edges: vec![0, 1, 0, 1],
-///         syscalls: vec![0, 1],
-///     },
-///     Trace {
-///         name: "trace_2".to_string(),
-///         test_input: vec![],
-///         edges: vec![0, 1, 0, 0],
-///         syscalls: vec![1, 0],
-///     },
+///     Trace::build_with_vectors(
+///         "trace_1",
+///         &[],
+///         &[0, 1, 0, 1],
+///         &[0, 1],
+///     ).unwrap(),
+///     Trace::build_with_vectors(
+///         "trace_2",
+///         &[],
+///         &[0, 1, 0, 0],
+///         &[1, 0],
+///     ).unwrap(),
 /// ];
 ///
 /// // With zero edge tolerance, the two different traces will be put into two different clusters.
@@ -452,8 +436,8 @@ where
 /// assert_eq!(strict_clusters.len(), 2);
 /// assert_eq!(strict_clusters[0].traces().len(), 1);
 /// assert_eq!(strict_clusters[1].traces().len(), 1);
-/// assert_eq!(strict_clusters[0].traces()[0].name, "trace_1".to_string());
-/// assert_eq!(strict_clusters[1].traces()[0].name, "trace_2".to_string());
+/// assert_eq!(strict_clusters[0].traces()[0].name(), "trace_1");
+/// assert_eq!(strict_clusters[1].traces()[0].name(), "trace_2");
 ///
 /// // With some tolerance, both traces will be grouped into the same cluster.
 /// let relaxed_clusters = clustering::cluster_traces(
@@ -461,8 +445,8 @@ where
 /// ).unwrap();
 /// assert_eq!(relaxed_clusters.len(), 1);
 /// assert_eq!(relaxed_clusters[0].traces().len(), 2);
-/// assert_eq!(relaxed_clusters[0].traces()[0].name, "trace_1".to_string());
-/// assert_eq!(relaxed_clusters[0].traces()[1].name, "trace_2".to_string());
+/// assert_eq!(relaxed_clusters[0].traces()[0].name(), "trace_1");
+/// assert_eq!(relaxed_clusters[0].traces()[1].name(), "trace_2");
 /// ```
 pub fn cluster_traces<DM>(
     traces: &[Trace],
@@ -500,7 +484,7 @@ where
                             .traces
                             .iter()
                             .map(|cluster_trace| {
-                                distance_metric.distance(&trace.edges, &cluster_trace.edges)
+                                distance_metric.distance(trace.edges(), cluster_trace.edges())
                             })
                             .max()
                             .expect(
@@ -511,7 +495,7 @@ where
                             .traces
                             .iter()
                             .map(|cluster_trace| {
-                                distance_metric.distance(&trace.syscalls, &cluster_trace.syscalls)
+                                distance_metric.distance(trace.syscalls(), cluster_trace.syscalls())
                             })
                             .max()
                             .expect(
@@ -582,30 +566,10 @@ mod tests {
     #[test]
     fn same_cluster_syscall_diffs() {
         let phase_one_traces = vec![
-            Trace {
-                name: "trace_1".to_string(),
-                test_input: Vec::new(),
-                edges: vec![1, 0, 1, 0],
-                syscalls: vec![1, 0, 1],
-            },
-            Trace {
-                name: "trace_2".to_string(),
-                test_input: Vec::new(),
-                edges: vec![1, 1, 1, 0],
-                syscalls: vec![1, 1, 0],
-            },
-            Trace {
-                name: "trace_3".to_string(),
-                test_input: Vec::new(),
-                edges: vec![0, 1, 1, 0],
-                syscalls: vec![0, 1, 1],
-            },
-            Trace {
-                name: "trace_4".to_string(),
-                test_input: Vec::new(),
-                edges: vec![1, 0, 0, 0],
-                syscalls: vec![1, 1, 1],
-            },
+            Trace::build("trace_1", &[], &[0, 2], 4, &[0, 2], 3).unwrap(),
+            Trace::build("trace_2", &[], &[0, 1, 2], 4, &[0, 1], 3).unwrap(),
+            Trace::build("trace_3", &[], &[1, 2], 4, &[1, 2], 3).unwrap(),
+            Trace::build("trace_4", &[], &[0], 4, &[0, 1, 2], 3).unwrap(),
         ];
 
         let clusters =
@@ -613,55 +577,30 @@ mod tests {
 
         assert_eq!(clusters.len(), 4);
         assert_eq!(clusters[0].traces.len(), 1);
-        assert_eq!(clusters[0].traces[0].name, "trace_1".to_string());
+        assert_eq!(clusters[0].traces[0].name(), "trace_1".to_string());
         assert_eq!(clusters[1].traces.len(), 1);
-        assert_eq!(clusters[1].traces[0].name, "trace_2".to_string());
+        assert_eq!(clusters[1].traces[0].name(), "trace_2".to_string());
         assert_eq!(clusters[2].traces.len(), 1);
-        assert_eq!(clusters[2].traces[0].name, "trace_3".to_string());
+        assert_eq!(clusters[2].traces[0].name(), "trace_3".to_string());
         assert_eq!(clusters[3].traces.len(), 1);
-        assert_eq!(clusters[3].traces[0].name, "trace_4".to_string());
+        assert_eq!(clusters[3].traces[0].name(), "trace_4".to_string());
 
-        let new_trace = Trace {
-            name: "trace_5".to_string(),
-            test_input: Vec::new(),
-            edges: vec![1, 1, 1, 1],
-            syscalls: vec![1, 1, 1],
-        };
+        let new_trace = Trace::build("trace_5", &[], &[0, 1, 2, 3], 4, &[0, 1, 2], 3).unwrap();
 
         let most_similar_cluster =
             get_most_similar_cluster(&new_trace, &clusters, Criterion::EdgesAndSyscalls, Hamming)
                 .unwrap();
         assert_eq!(most_similar_cluster.traces.len(), 1);
-        assert_eq!(most_similar_cluster.traces[0].name, "trace_2".to_string());
+        assert_eq!(most_similar_cluster.traces[0].name(), "trace_2".to_string());
     }
 
     #[test]
     fn same_cluster_edge_diffs() {
         let phase_one_traces = vec![
-            Trace {
-                name: "trace_1".to_string(),
-                test_input: Vec::new(),
-                edges: vec![1, 0, 1, 0],
-                syscalls: vec![1, 0, 1],
-            },
-            Trace {
-                name: "trace_2".to_string(),
-                test_input: Vec::new(),
-                edges: vec![1, 1, 0, 0],
-                syscalls: vec![1, 1, 0],
-            },
-            Trace {
-                name: "trace_3".to_string(),
-                test_input: Vec::new(),
-                edges: vec![0, 1, 1, 0],
-                syscalls: vec![1, 1, 1],
-            },
-            Trace {
-                name: "trace_4".to_string(),
-                test_input: Vec::new(),
-                edges: vec![1, 0, 0, 0],
-                syscalls: vec![1, 1, 1],
-            },
+            Trace::build("trace_1", &[], &[0, 2], 4, &[0, 2], 3).unwrap(),
+            Trace::build("trace_2", &[], &[0, 1], 4, &[0, 1], 3).unwrap(),
+            Trace::build("trace_3", &[], &[1, 2], 4, &[0, 1, 2], 3).unwrap(),
+            Trace::build("trace_4", &[], &[0], 4, &[0, 1, 2], 3).unwrap(),
         ];
 
         let clusters =
@@ -669,25 +608,20 @@ mod tests {
 
         assert_eq!(clusters.len(), 4);
         assert_eq!(clusters[0].traces.len(), 1);
-        assert_eq!(clusters[0].traces[0].name, "trace_1".to_string());
+        assert_eq!(clusters[0].traces[0].name(), "trace_1".to_string());
         assert_eq!(clusters[1].traces.len(), 1);
-        assert_eq!(clusters[1].traces[0].name, "trace_2".to_string());
+        assert_eq!(clusters[1].traces[0].name(), "trace_2".to_string());
         assert_eq!(clusters[2].traces.len(), 1);
-        assert_eq!(clusters[2].traces[0].name, "trace_3".to_string());
+        assert_eq!(clusters[2].traces[0].name(), "trace_3".to_string());
         assert_eq!(clusters[3].traces.len(), 1);
-        assert_eq!(clusters[3].traces[0].name, "trace_4".to_string());
+        assert_eq!(clusters[3].traces[0].name(), "trace_4".to_string());
 
-        let new_trace = Trace {
-            name: "trace_5".to_string(),
-            test_input: Vec::new(),
-            edges: vec![1, 1, 1, 1],
-            syscalls: vec![1, 1, 1],
-        };
+        let new_trace = Trace::build("trace_5", &[], &[0, 1, 2, 3], 4, &[0, 1, 2], 3).unwrap();
 
         let most_similar_cluster =
             get_most_similar_cluster(&new_trace, &clusters, Criterion::EdgesAndSyscalls, Hamming)
                 .unwrap();
         assert_eq!(most_similar_cluster.traces.len(), 1);
-        assert_eq!(most_similar_cluster.traces[0].name, "trace_3".to_string());
+        assert_eq!(most_similar_cluster.traces[0].name(), "trace_3".to_string());
     }
 }

@@ -102,7 +102,7 @@ fn run(output_dir: &Path, trace_id: &str, component: Component) -> Result<(), Ro
         .collect::<Result<Vec<Trace>, RosaError>>()?;
 
     let trace_unique_edges: Vec<usize> = trace
-        .edges
+        .edges()
         .iter()
         .enumerate()
         .filter_map(|(index, edge)| match edge {
@@ -112,11 +112,11 @@ fn run(output_dir: &Path, trace_id: &str, component: Component) -> Result<(), Ro
         .filter(|index| {
             cluster
                 .iter()
-                .all(|cluster_trace| cluster_trace.edges[*index] == 0)
+                .all(|cluster_trace| cluster_trace.edges()[*index] == 0)
         })
         .collect();
     let trace_unique_syscalls: Vec<usize> = trace
-        .syscalls
+        .syscalls()
         .iter()
         .enumerate()
         .filter_map(|(index, syscall)| match syscall {
@@ -126,12 +126,12 @@ fn run(output_dir: &Path, trace_id: &str, component: Component) -> Result<(), Ro
         .filter(|index| {
             cluster
                 .iter()
-                .all(|cluster_trace| cluster_trace.syscalls[*index] == 0)
+                .all(|cluster_trace| cluster_trace.syscalls()[*index] == 0)
         })
         .collect();
 
     let cluster_unique_edges: Vec<usize> = trace
-        .edges
+        .edges()
         .iter()
         .enumerate()
         .filter_map(|(index, edge)| match edge {
@@ -141,11 +141,11 @@ fn run(output_dir: &Path, trace_id: &str, component: Component) -> Result<(), Ro
         .filter(|index| {
             cluster
                 .iter()
-                .any(|cluster_trace| cluster_trace.edges[*index] != 0)
+                .any(|cluster_trace| cluster_trace.edges()[*index] != 0)
         })
         .collect();
     let cluster_unique_syscalls: Vec<usize> = trace
-        .syscalls
+        .syscalls()
         .iter()
         .enumerate()
         .filter_map(|(index, syscall)| match syscall {
@@ -155,7 +155,7 @@ fn run(output_dir: &Path, trace_id: &str, component: Component) -> Result<(), Ro
         .filter(|index| {
             cluster
                 .iter()
-                .any(|cluster_trace| cluster_trace.syscalls[*index] != 0)
+                .any(|cluster_trace| cluster_trace.syscalls()[*index] != 0)
         })
         .collect();
 

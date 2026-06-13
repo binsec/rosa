@@ -72,18 +72,18 @@ pub fn save_cluster_to_file(cluster: &Cluster, file: &Path) -> Result<(), RosaEr
 ///     Cluster::build(
 ///         "cluster_1",
 ///         &[
-///             Trace {
-///                 name: "trace_1".to_string(),
-///                 test_input: vec![],
-///                 edges: vec![0, 1],
-///                 syscalls: vec![1, 0],
-///             },
-///             Trace {
-///                 name: "trace_2".to_string(),
-///                 test_input: vec![],
-///                 edges: vec![1, 0],
-///                 syscalls: vec![0, 1],
-///             },
+///             Trace::build_with_vectors(
+///                 "trace_1",
+///                 &[],
+///                 &[0, 1],
+///                 &[1, 0],
+///             ).unwrap(),
+///             Trace::build_with_vectors(
+///                 "trace_2",
+///                 &[],
+///                 &[1, 0],
+///                 &[0, 1],
+///             ).unwrap(),
 ///         ],
 ///     ).unwrap(),
 /// ];

@@ -116,12 +116,7 @@ pub fn load_trace_from_file(
         )
     })?;
 
-    Ok(Trace {
-        name: name.to_string(),
-        test_input,
-        edges,
-        syscalls,
-    })
+    Trace::build_with_vectors(name, &test_input, &edges, &syscalls)
 }
 
 /// Save the test input of a trace to a file.
@@ -131,17 +126,17 @@ pub fn load_trace_from_file(
 /// use std::path::Path;
 /// use rosa_core::trace::Trace;
 ///
-/// let my_trace = Trace {
-///     name: "my_trace".to_string(),
-///     test_input: vec![0x01, 0x02, 0x03, 0x04],
-///     edges: vec![],
-///     syscalls: vec![],
-/// };
+/// let my_trace = Trace::build_with_vectors(
+///     "my_trace",
+///     &[0x01, 0x02, 0x03, 0x04],
+///     &[0, 1, 1, 0],
+///     &[1, 1, 0],
+/// ).unwrap();
 ///
 /// let _ = rosa_cli::trace::save_test_input_to_file(&my_trace, &Path::new("/path/to/my_trace"));
 /// ```
 pub fn save_test_input_to_file(trace: &Trace, output_file: &Path) -> Result<(), RosaError> {
-    fs::write(output_file, &trace.test_input).map_err(|err| {
+    fs::write(output_file, trace.test_input()).map_err(|err| {
         error!(
             "could not write trace test input to {}: {}.",
             output_file.display(),
@@ -164,12 +159,12 @@ pub fn save_test_input_to_file(trace: &Trace, output_file: &Path) -> Result<(), 
 /// use std::path::Path;
 /// use rosa_core::trace::Trace;
 ///
-/// let my_trace = Trace {
-///     name: "my_trace".to_string(),
-///     test_input: vec![],
-///     edges: vec![1, 0, 1, 0],
-///     syscalls: vec![0, 1, 0, 1],
-/// };
+/// let my_trace = Trace::build_with_vectors(
+///     "my_trace",
+///     &[],
+///     &[1, 0, 1, 0],
+///     &[0, 1, 0, 1],
+/// ).unwrap();
 ///
 /// let _ = rosa_cli::trace::save_trace_dump_to_file(
 ///     &my_trace, &Path::new("/path/to/my_trace.trace")
@@ -178,20 +173,20 @@ pub fn save_test_input_to_file(trace: &Trace, output_file: &Path) -> Result<(), 
 pub fn save_trace_dump_to_file(trace: &Trace, output_file: &Path) -> Result<(), RosaError> {
     let mut output = vec![];
     let edges_length: u64 = trace
-        .edges
+        .edges()
         .len()
         .try_into()
         .expect("failed to convert edges length to u64.");
     let syscalls_length: u64 = trace
-        .syscalls
+        .syscalls()
         .len()
         .try_into()
         .expect("failed to convert syscalls length to u64.");
 
     output.extend(edges_length.to_le_bytes().to_vec());
     output.extend(syscalls_length.to_le_bytes().to_vec());
-    output.extend(&trace.edges);
-    output.extend(&trace.syscalls);
+    output.extend(trace.edges());
+    output.extend(trace.syscalls());
 
     // Write the result to a file.
     fs::write(output_file, &output).map_err(|err| {
@@ -280,12 +275,8 @@ pub fn load_traces_from_dir(traces_dir: &Path) -> Result<Vec<Trace>, RosaError> 
 /// use rosa_core::trace::Trace;
 ///
 /// let my_traces = vec![
-///     Trace {
-///         name: "trace1".to_string(), test_input: vec![0x01], edges: vec![], syscalls: vec![]
-///     },
-///     Trace {
-///         name: "trace2".to_string(), test_input: vec![0x02], edges: vec![], syscalls: vec![]
-///     },
+///     Trace::build_with_vectors("trace_1", &[0x01], &[0, 1], &[1, 0]).unwrap(),
+///     Trace::build_with_vectors("trace_2", &[0x02], &[1, 0], &[0, 1]).unwrap(),
 /// ];
 ///
 /// let _ = rosa_cli::trace::save_traces_to_dir(&my_traces, &Path::new("/path/to/traces_dir/"));

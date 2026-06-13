@@ -452,21 +452,24 @@ impl AFLPlusPlus {
             .parse::<usize>()
             .expect("failed to parse max edge count.");
 
-        Ok(Some(Trace::from(
-            &format!(
-                "{}__{}",
-                self.name(),
-                original_test_input_path
-                    .file_name()
-                    .expect("failed to get file name for test input.")
-                    .to_string_lossy()
-            ),
-            test_input,
-            &edges,
-            max_edges,
-            &syscalls,
-            MAX_SYSCALLS,
-        )))
+        Ok(Some(
+            Trace::build(
+                &format!(
+                    "{}__{}",
+                    self.name(),
+                    original_test_input_path
+                        .file_name()
+                        .expect("failed to get file name for test input.")
+                        .to_string_lossy()
+                ),
+                test_input,
+                &edges,
+                max_edges,
+                &syscalls,
+                MAX_SYSCALLS,
+            )
+            .unwrap(),
+        ))
     }
 
     /// Collect one trace in AFL++ QEMU mode (binary on-the-fly instrumentation).

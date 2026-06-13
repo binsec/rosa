@@ -73,8 +73,8 @@ fn run(
         toml::from_str(&format!("kind = \"{}\"", distance_metric))
             .map_err(|err| error!("unknown distance metric '{}': {}.", distance_metric, err))?;
 
-    let edge_wise_dist = distance_metric.distance(&trace_1.edges, &trace_2.edges);
-    let syscall_wise_dist = distance_metric.distance(&trace_1.syscalls, &trace_2.syscalls);
+    let edge_wise_dist = distance_metric.distance(trace_1.edges(), trace_2.edges());
+    let syscall_wise_dist = distance_metric.distance(trace_1.syscalls(), trace_2.syscalls());
 
     println_info!(
         "Distances ({}) between '{}' and '{}' (edge-wise, syscall-wise):",
@@ -88,9 +88,9 @@ fn run(
         println_info!("");
         println_info!("Edges differing:");
         trace_1
-            .edges
-            .into_iter()
-            .zip(trace_2.edges)
+            .edges()
+            .iter()
+            .zip(trace_2.edges())
             .enumerate()
             .for_each(|(index, (edge1, edge2))| {
                 if edge1 != edge2 {
@@ -101,9 +101,9 @@ fn run(
         println_info!("");
         println_info!("Syscalls differing:");
         trace_1
-            .syscalls
-            .into_iter()
-            .zip(trace_2.syscalls)
+            .syscalls()
+            .iter()
+            .zip(trace_2.syscalls())
             .enumerate()
             .for_each(|(index, (edge1, edge2))| {
                 if edge1 != edge2 {

@@ -403,7 +403,7 @@ fn run(
             let decision = TimedDecision {
                 decision: Decision {
                     trace_id: trace.id(),
-                    trace_name: trace.name.clone(),
+                    trace_name: trace.name().to_string(),
                     cluster_id: "<none>".to_string(),
                     is_backdoor: false,
                     reason: DecisionReason::Seed,
@@ -580,7 +580,7 @@ fn run(
                         let decision = TimedDecision {
                             decision: Decision {
                                 trace_id: trace.id(),
-                                trace_name: trace.name.clone(),
+                                trace_name: trace.name().to_string(),
                                 cluster_id: "<none>".to_string(),
                                 is_backdoor: false,
                                 reason: DecisionReason::Seed,
