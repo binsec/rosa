@@ -58,7 +58,21 @@ impl Trace {
     ///
     /// # Examples
     ///
-    /// TODO
+    /// ```
+    /// use rosa_core::trace::Trace;
+    ///
+    /// let trace = Trace::build_with_vectors(
+    ///     "my_trace",
+    ///     &[0x01, 0x02, 0x03, 0x04],
+    ///     &[0, 1, 1, 0, 1, 0],
+    ///     &[1, 1, 1, 0],
+    /// ).unwrap();
+    ///
+    /// assert_eq!(trace.name(), "my_trace");
+    /// assert_eq!(trace.test_input(), [0x01, 0x02, 0x03, 0x04]);
+    /// assert_eq!(trace.edges(), [0, 1, 1, 0, 1, 0]);
+    /// assert_eq!(trace.syscalls(), [1, 1, 1, 0]);
+    /// ```
     pub fn build_with_vectors(
         name: &str,
         test_input: &[u8],
@@ -180,6 +194,7 @@ impl Trace {
     /// to be easier to read.
     ///
     /// # Examples
+    ///
     /// ```
     /// use rosa_core::trace::Trace;
     ///
@@ -216,6 +231,7 @@ impl Trace {
     /// correspond to (i.e. how many `1`s compared to the vector's length).
     ///
     /// # Examples
+    ///
     /// ```
     /// use rosa_core::trace::Trace;
     ///
@@ -250,6 +266,7 @@ impl Trace {
     /// correspond to (i.e. how many `1`s compared to the vector's length).
     ///
     /// # Examples
+    ///
     /// ```
     /// use rosa_core::trace::Trace;
     ///
