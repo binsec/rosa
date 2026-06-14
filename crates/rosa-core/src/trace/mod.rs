@@ -72,6 +72,20 @@ impl Trace {
     /// assert_eq!(trace.test_input(), [0x01, 0x02, 0x03, 0x04]);
     /// assert_eq!(trace.edges(), [0, 1, 1, 0, 1, 0]);
     /// assert_eq!(trace.syscalls(), [1, 1, 1, 0]);
+    ///
+    /// // The edge and syscall components must both be non-empty.
+    /// assert_eq!(
+    ///     Trace::build_with_vectors("err", &[], &[], &[]).unwrap_err().message,
+    ///     format!("invalid trace: empty edge vector."),
+    /// );
+    /// assert_eq!(
+    ///     Trace::build_with_vectors("err", &[], &[], &[0]).unwrap_err().message,
+    ///     format!("invalid trace: empty edge vector."),
+    /// );
+    /// assert_eq!(
+    ///     Trace::build_with_vectors("err", &[], &[0], &[]).unwrap_err().message,
+    ///     format!("invalid trace: empty syscall vector."),
+    /// );
     /// ```
     pub fn build_with_vectors(
         name: &str,
@@ -81,10 +95,10 @@ impl Trace {
     ) -> Result<Self, RosaError> {
         (!edges.is_empty())
             .then_some(())
-            .ok_or(error!("invalid trace: empty edge vector"))?;
+            .ok_or(error!("invalid trace: empty edge vector."))?;
         (!syscalls.is_empty())
             .then_some(())
-            .ok_or(error!("invalid trace: empty syscall vector"))?;
+            .ok_or(error!("invalid trace: empty syscall vector."))?;
 
         Ok(Self {
             name: name.to_string(),
@@ -121,6 +135,41 @@ impl Trace {
     /// assert_eq!(trace.test_input(), [0x01, 0x02, 0x03, 0x04]);
     /// assert_eq!(trace.edges(), [0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0]);
     /// assert_eq!(trace.syscalls(), [0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0]);
+    ///
+    /// // Empty edge or syscall ID vectors means no edge or syscall was hit.
+    /// let empty = Trace::build("nohits", &[], &[], 4, &[], 3).unwrap();
+    /// assert_eq!(empty.edges(), [0, 0, 0, 0]);
+    /// assert_eq!(empty.syscalls(), [0, 0, 0]);
+    ///
+    /// // Only unique IDs are kept, duplicates are filtered out.
+    /// let empty = Trace::build("duplicates", &[], &[1, 1, 1], 4, &[2, 2, 2, 2], 3).unwrap();
+    /// assert_eq!(empty.edges(), [0, 1, 0, 0]);
+    /// assert_eq!(empty.syscalls(), [0, 0, 1]);
+    ///
+    /// // Edge and syscall size must be at least 1 (i.e., the vectors cannot be empty).
+    /// assert_eq!(
+    ///     Trace::build("err", &[], &[], 0, &[], 0).unwrap_err().message,
+    ///     format!("invalid trace: empty edge vector."),
+    /// );
+    /// assert_eq!(
+    ///     Trace::build("err", &[], &[], 0, &[], 1).unwrap_err().message,
+    ///     format!("invalid trace: empty edge vector."),
+    /// );
+    /// assert_eq!(
+    ///     Trace::build("err", &[], &[], 1, &[], 0).unwrap_err().message,
+    ///     format!("invalid trace: empty syscall vector."),
+    /// );
+    ///
+    /// // Edge/syscall ID vector elements must be within the bounds of the specified edge/syscall
+    /// // sizes.
+    /// assert_eq!(
+    ///     Trace::build("err", &[], &[0, 11], 10, &[1, 3], 10).unwrap_err().message,
+    ///     "edge ID 11 is out of bounds: max edge ID is 9 (size 10).".to_string(),
+    /// );
+    /// assert_eq!(
+    ///     Trace::build("err", &[], &[0, 9], 10, &[1, 10], 10).unwrap_err().message,
+    ///     "syscall ID 10 is out of bounds: max syscall ID is 9 (size 10).".to_string(),
+    /// );
     /// ```
     pub fn build(
         name: &str,
@@ -130,6 +179,13 @@ impl Trace {
         syscalls: &[usize],
         syscalls_len: usize,
     ) -> Result<Self, RosaError> {
+        (edges_len > 0)
+            .then_some(())
+            .ok_or(error!("invalid trace: empty edge vector."))?;
+        (syscalls_len > 0)
+            .then_some(())
+            .ok_or(error!("invalid trace: empty syscall vector."))?;
+
         let mut edges_vector = vec![0; edges_len];
         let mut syscalls_vector = vec![0; syscalls_len];
 
@@ -138,8 +194,10 @@ impl Trace {
                 .get_mut(*index)
                 .map(|element| *element = 1)
                 .ok_or(error!(
-                    "edge {} is out of bounds: max edge count is {}",
-                    index, edges_len
+                    "edge ID {} is out of bounds: max edge ID is {} (size {}).",
+                    index,
+                    edges_len - 1,
+                    edges_len
                 ))
         })?;
         syscalls.iter().unique().try_for_each(|index| {
@@ -147,8 +205,10 @@ impl Trace {
                 .get_mut(*index)
                 .map(|element| *element = 1)
                 .ok_or(error!(
-                    "syscall {} is out of bounds: max syscall count is {}",
-                    index, syscalls_len
+                    "syscall ID {} is out of bounds: max syscall ID is {} (size {}).",
+                    index,
+                    syscalls_len - 1,
+                    syscalls_len
                 ))
         })?;
 
