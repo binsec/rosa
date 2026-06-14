@@ -127,14 +127,11 @@ impl Cluster {
             .iter()
             .combinations(2)
             .map(|traces| {
-                // See method documentation. This should be guaranteed to give us 2 elements, since
-                // the trace vector size is at least 2.
-                let trace1 = traces
-                    .first()
-                    .expect("combination should contain a first trace");
-                let trace2 = traces
-                    .last()
-                    .expect("combination should contain a second trace");
+                // See method documentation. `Itertools::combinations(2)` should be guaranteed to
+                // give us a `Vec<>` with 2 elements.
+                let [trace1, trace2] = traces.as_slice() else {
+                    unreachable!("Itertools::combinations(2) should yield Vec<> of size 2");
+                };
 
                 distance_metric.distance(trace1.edges(), trace2.edges())
             })
@@ -193,14 +190,11 @@ impl Cluster {
             .iter()
             .combinations(2)
             .map(|traces| {
-                // This should be guaranteed to give us 2 elements, since the trace vector size
-                // is at least 2.
-                let trace1 = traces
-                    .first()
-                    .expect("combination should contain a first trace");
-                let trace2 = traces
-                    .last()
-                    .expect("combination should contain a second trace");
+                // See method documentation. `Itertools::combinations(2)` should be guaranteed to
+                // give us a `Vec<>` with 2 elements.
+                let [trace1, trace2] = traces.as_slice() else {
+                    unreachable!("Itertools::combinations(2) should yield Vec<> of size 2");
+                };
 
                 distance_metric.distance(trace1.syscalls(), trace2.syscalls())
             })
