@@ -34,6 +34,51 @@ impl TraceDatabase {
         self.traces.clone().into_values().collect()
     }
 
+    /// Register a new input file.
+    ///
+    /// This should be done once an input file has been evaluated, whether is has been accepted
+    /// (and added to the database) or not.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tempfile::{self, NamedTempFile};
+    /// use rosa_core::trace::{
+    ///     database::TraceDatabase,
+    ///     Trace,
+    /// };
+    ///
+    /// let mut database = TraceDatabase::new();
+    ///
+    /// // Assume there is a trace "trace_1", associated with an input with the following path.
+    /// let trace_1_input_path = NamedTempFile::new().unwrap().into_temp_path();
+    /// database.register_input(&trace_1_input_path);
+    /// assert!(database.is_known_input(&trace_1_input_path));
+    ///
+    /// // Inputs are used to quickly ignore parsing traces which we have already picked up, but
+    /// // inserting the traces will not auto-register inputs. For instance, if we make the mistake
+    /// // of inserting a trace without registering its input, the database will not know about its
+    /// // input next time it sees it.
+    /// let trace_2_input_path = NamedTempFile::new().unwrap().into_temp_path();
+    /// let trace_2 = Trace::build(
+    ///     "trace_2",
+    ///     &[],
+    ///     &[1, 2, 3, 4],
+    ///     u16::MAX as usize,
+    ///     &[0, 59, 99, 335],
+    ///     400,
+    /// ).unwrap();
+    /// database.insert_trace(trace_2);
+    /// assert!(!database.is_known_input(&trace_2_input_path));
+    /// ```
+    pub fn register_input(&mut self, input: &Path) {
+        if let Ok(input) = input.canonicalize()
+            && !self.is_known_input(&input)
+        {
+            self.known_inputs.insert(input);
+        }
+    }
+
     /// Check if a given input file is known to the database.
     ///
     /// By "known" we mean that it has already been evaluated: either it was accepted and exists in
@@ -46,26 +91,73 @@ impl TraceDatabase {
             .unwrap_or(false)
     }
 
-    /// Register a new input file.
+    /// Insert a new trace to the database.
     ///
-    /// This should be done once an input file has been evaluated, whether is has been accepted
-    /// (and added to the database) or not.
-    pub fn register_input(&mut self, input: &Path) {
-        if let Ok(input) = input.canonicalize()
-            && !self.is_known_input(&input)
-        {
-            self.known_inputs.insert(input);
-        }
+    /// # Examples
+    ///
+    /// ```
+    /// use tempfile::{self, NamedTempFile};
+    /// use rosa_core::trace::{
+    ///     database::TraceDatabase,
+    ///     Trace,
+    /// };
+    ///
+    /// let mut database = TraceDatabase::new();
+    ///
+    /// // We first encounter an input file for "trace_1" and its corresponding trace. Since the
+    /// // database is empty, we register the input and insert the trace.
+    /// let trace_1_input_path = NamedTempFile::new().unwrap().into_temp_path();
+    /// let trace_1 = Trace::build(
+    ///     "trace_1",
+    ///     &[],
+    ///     &[1, 2, 3, 4],
+    ///     u16::MAX as usize,
+    ///     &[0, 59, 99, 335],
+    ///     400,
+    /// ).unwrap();
+    ///
+    /// if !database.is_known_input(&trace_1_input_path) {
+    ///     database.register_input(&trace_1_input_path);
+    ///     if !database.has_trace(&trace_1.id()) {
+    ///         database.insert_trace(trace_1.clone());
+    ///     }
+    /// }
+    /// assert!(database.is_known_input(&trace_1_input_path));
+    /// assert!(database.has_trace(&trace_1.id()));
+    ///
+    /// // Then, we encounter an input file for "trace_2" and its corresponding trace. The input
+    /// // file's path is new, so we will have to evaluate the trace. It turns out that "trace_2"
+    /// // is identical to "trace_1", so we will not insert it; however, next time we see the
+    /// // "trace_2" input, we do not have to evaluate the trace again, as the database knows we've
+    /// // already examined its input.
+    /// let trace_2_input_path = NamedTempFile::new().unwrap().into_temp_path();
+    /// let trace_2 = Trace::build(
+    ///     "trace_2",
+    ///     &[],
+    ///     &[1, 2, 3, 4],
+    ///     u16::MAX as usize,
+    ///     &[0, 59, 99, 335],
+    ///     400,
+    /// ).unwrap();
+    ///
+    /// if !database.is_known_input(&trace_2_input_path) {
+    ///     database.register_input(&trace_2_input_path);
+    ///     if !database.has_trace(&trace_2.id()) {
+    ///         database.insert_trace(trace_2);
+    ///         unreachable!("we shouldn't insert the same trace twice");
+    ///     }
+    /// }
+    /// assert!(database.is_known_input(&trace_2_input_path));
+    /// assert_eq!(trace_1.id(), trace_2.id());
+    /// assert!(database.has_trace(&trace_2.id()));
+    /// ```
+    pub fn insert_trace(&mut self, trace: Trace) {
+        self.traces.insert(trace.id(), trace);
     }
 
     /// Check whether or not a trace exists in the database.
     pub fn has_trace(&self, id: &str) -> bool {
         self.traces.contains_key(id)
-    }
-
-    /// Insert a new trace to the database.
-    pub fn insert_trace(&mut self, trace: Trace) {
-        self.traces.insert(trace.id(), trace);
     }
 }
 

@@ -9,3 +9,4 @@ edition = "2024"
 [workspace.dependencies]
 serde = { version = "1.0.228", features = ["derive"] }
 itertools = "0.14.0"
+tempfile = "3.17.1"

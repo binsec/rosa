@@ -646,6 +646,7 @@ version = "0.6.0-alpha26.dev"
 dependencies = [
  "itertools 0.14.0",
  "serde",
+ "tempfile",
 ]
 
 [[package]]
