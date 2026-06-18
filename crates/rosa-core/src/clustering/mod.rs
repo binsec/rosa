@@ -24,6 +24,38 @@ impl Cluster {
     ///
     /// If the traces are not uniform (i.e., having edge and syscall vectors of the same size),
     /// then an [Err] is returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rosa_core::{
+    ///     trace::Trace,
+    ///     clustering::Cluster,
+    /// };
+    ///
+    /// let traces = [
+    ///     Trace::build("trace_1", &[0x01, 0x02], &[0, 1], 3, &[1, 0], 2).unwrap(),
+    ///     Trace::build("trace_2", &[0x03, 0x04], &[1, 0], 3, &[0, 1], 2).unwrap(),
+    /// ];
+    ///
+    /// let cluster = Cluster::build("my_cluster", &traces).unwrap();
+    /// assert_eq!(cluster.traces().len(), 2);
+    /// assert_eq!(cluster.shape(), Some((3, 2)));
+    ///
+    /// // All traces must have the same shape (i.e., edge and syscall sizes).
+    /// let traces = [
+    ///     Trace::build("trace_1", &[0x01, 0x02], &[0, 1], 3, &[1, 0], 2).unwrap(),
+    ///     Trace::build("trace_2", &[0x03, 0x04], &[1, 0], 2, &[0, 1], 2).unwrap(),
+    /// ];
+    /// assert_eq!(
+    ///     Cluster::build("my_cluster", &traces).unwrap_err().message,
+    ///     format!(
+    ///         "cluster my_cluster: trace {} has shape (3, 2) but trace {} has shape (2, 2).",
+    ///         traces[0].id(),
+    ///         traces[1].id(),
+    ///     ),
+    /// );
+    /// ```
     pub fn build(name: &str, traces: &[Trace]) -> Result<Self, RosaError> {
         // Ensure that all traces have the same shape.
         //
@@ -38,7 +70,7 @@ impl Cluster {
                 (first_trace_shape == trace_shape)
                     .then_some(())
                     .ok_or(error!(
-                        "cluster {}: trace {} has shape ({}, {}), but trace {} has shape ({}, {}).",
+                        "cluster {}: trace {} has shape ({}, {}) but trace {} has shape ({}, {}).",
                         name,
                         first_trace.id(),
                         first_trace_shape.0,
@@ -249,6 +281,7 @@ impl Cluster {
 /// measured in terms of the components of the traces. See [Criterion] and [DistanceMetric].
 ///
 /// # Examples
+///
 /// ```
 /// use rosa_core::{
 ///     clustering::{self, Cluster},
@@ -398,6 +431,7 @@ where
 /// containing the trace.
 ///
 /// # Examples
+///
 /// ```
 /// use rosa_core::{
 ///     clustering,
@@ -432,6 +466,12 @@ where
 /// assert_eq!(strict_clusters[1].traces().len(), 1);
 /// assert_eq!(strict_clusters[0].traces()[0].name(), "trace_1");
 /// assert_eq!(strict_clusters[1].traces()[0].name(), "trace_2");
+/// // Both edge and system call minimum distances should be 0 within each cluster, since each
+/// // cluster only contains one trace.
+/// assert_eq!(strict_clusters[0].min_edge_distance(&Hamming), 0);
+/// assert_eq!(strict_clusters[0].min_syscall_distance(&Hamming), 0);
+/// assert_eq!(strict_clusters[1].min_edge_distance(&Hamming), 0);
+/// assert_eq!(strict_clusters[1].min_syscall_distance(&Hamming), 0);
 ///
 /// // With some tolerance, both traces will be grouped into the same cluster.
 /// let relaxed_clusters = clustering::cluster_traces(
@@ -441,6 +481,10 @@ where
 /// assert_eq!(relaxed_clusters[0].traces().len(), 2);
 /// assert_eq!(relaxed_clusters[0].traces()[0].name(), "trace_1");
 /// assert_eq!(relaxed_clusters[0].traces()[1].name(), "trace_2");
+/// assert_eq!(relaxed_clusters[0].min_edge_distance(&Hamming), 1);
+/// // While the specified syscall tolerance is 0, since the criterion is [Criterion::EdgesOnly],
+/// // it is not taken into account.
+/// assert_eq!(relaxed_clusters[0].min_syscall_distance(&Hamming), 2);
 /// ```
 pub fn cluster_traces<DM>(
     traces: &[Trace],
