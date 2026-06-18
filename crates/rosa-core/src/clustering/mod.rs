@@ -144,6 +144,9 @@ impl Cluster {
     ///
     /// assert_eq!(
     ///     cluster.edge_distances(&Hamming),
+    ///     // trace_1 <-> trace_2: edge distance of 1
+    ///     // trace_1 <-> trace_3: edge distance of 3
+    ///     // trace_2 <-> trace_3: edge distance of 2
     ///     vec![1, 3, 2],
     /// );
     /// ```
@@ -207,6 +210,9 @@ impl Cluster {
     ///
     /// assert_eq!(
     ///     cluster.syscall_distances(&Hamming),
+    ///     // trace_1 <-> trace_2: syscall distance of 1
+    ///     // trace_1 <-> trace_3: syscall distance of 2
+    ///     // trace_2 <-> trace_3: syscall distance of 1
     ///     vec![1, 2, 1],
     /// );
     /// ```
