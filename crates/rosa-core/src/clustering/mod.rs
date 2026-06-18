@@ -150,9 +150,9 @@ impl Cluster {
     ///
     /// # Safety
     ///
-    /// [Itertools.combinations] is used to get all unique **pairs** of traces. If the number of
+    /// [Itertools::combinations] is used to get all unique **pairs** of traces. If the number of
     /// traces is below 2, then this method returns an empty vector. Otherwise, the
-    /// [Itertools.combinations] iterator returns a vector element for each pair, where the vector
+    /// [Itertools::combinations] iterator returns a vector element for each pair, where the vector
     /// is expected to contain two elements. This method asserts this via `.expect()`.
     pub fn edge_distances(&self, distance_metric: &impl DistanceMetric) -> Vec<u64> {
         self.traces
