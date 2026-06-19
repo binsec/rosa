@@ -1,6 +1,6 @@
 --- a/include/forkserver.h
 +++ b/include/forkserver.h
-@@ -35,6 +35,7 @@
+@@ -37,6 +37,7 @@
  #include <unistd.h>
  
  #include "types.h"
@@ -8,7 +8,7 @@
  
  #ifdef __linux__
  /**
-@@ -108,6 +109,8 @@ typedef struct afl_forkserver {
+@@ -110,6 +111,8 @@ typedef struct afl_forkserver {
  
    u8 *trace_bits;                       /* SHM with instrumentation bitmap  */
  
@@ -84,7 +84,7 @@
 +#endif /* _AFL_RUNTIME_TRACE_H */
 --- a/include/sharedmem.h
 +++ b/include/sharedmem.h
-@@ -31,6 +31,7 @@
+@@ -33,6 +33,7 @@
  #include <unistd.h>
  
  #include "types.h"
@@ -92,7 +92,7 @@
  
  typedef struct sharedmem {
  
-@@ -42,10 +43,20 @@ typedef struct sharedmem {
+@@ -44,10 +45,20 @@ typedef struct sharedmem {
    char g_shm_file_path[L_tmpnam];
    int  cmplog_g_shm_fd;
    char cmplog_g_shm_file_path[L_tmpnam];
@@ -113,7 +113,7 @@
  #endif
  
    u8 *map;                                          /* shared memory region */
-@@ -57,6 +68,10 @@ typedef struct sharedmem {
+@@ -59,6 +70,10 @@ typedef struct sharedmem {
    int             shmemfuzz_mode;
    struct cmp_map *cmp_map;
  
@@ -126,7 +126,7 @@
  u8  *afl_shm_init(sharedmem_t *, size_t, unsigned char non_instrumented_mode,
 --- a/src/afl-forkserver.c
 +++ b/src/afl-forkserver.c
-@@ -204,6 +204,12 @@ static list_t fsrv_list = {.element_prealloc_count = 0};
+@@ -246,6 +246,12 @@ static list_t fsrv_list = {.element_prealloc_count = 0};
  
  static void fsrv_exec_child(afl_forkserver_t *fsrv, char **argv) {
  
@@ -139,7 +139,7 @@
    if (fsrv->qemu_mode || fsrv->cs_mode) {
  
      setenv("AFL_DISABLE_LLVM_INSTRUMENTATION", "1", 0);
-@@ -1016,6 +1022,12 @@ void afl_fsrv_start(afl_forkserver_t *fsrv, char **argv,
+@@ -1359,6 +1365,12 @@ void afl_fsrv_start(afl_forkserver_t *fsrv, char **argv,
  
        unsetenv(CMPLOG_SHM_ENV_VAR);  // we do not want that in non-cmplog fsrv
  
@@ -152,7 +152,7 @@
      }
  
      /* Umpf. On OpenBSD, the default fd limit for root users is set to
-@@ -2187,6 +2199,11 @@ fsrv_run_result_t __attribute__((hot)) afl_fsrv_run_target(
+@@ -2690,6 +2702,11 @@ fsrv_run_result_t __attribute__((hot)) afl_fsrv_run_target(
      if (likely(!fsrv->nyx_mode)) {
  
        memset(fsrv->trace_bits, 0, fsrv->map_size);
@@ -164,7 +164,7 @@
        MEM_BARRIER();
  
      }
-@@ -2194,6 +2211,11 @@ fsrv_run_result_t __attribute__((hot)) afl_fsrv_run_target(
+@@ -2697,6 +2714,11 @@ fsrv_run_result_t __attribute__((hot)) afl_fsrv_run_target(
  #else
      /* Clear shared memory for clean execution */
      memset(fsrv->trace_bits, 0, fsrv->map_size);
@@ -178,7 +178,7 @@
  
 --- a/src/afl-fuzz-bitmap.c
 +++ b/src/afl-fuzz-bitmap.c
-@@ -551,7 +551,10 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
+@@ -566,7 +566,10 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
    }
  
    u8  fn[PATH_MAX];
@@ -189,7 +189,7 @@
    u8  keeping = 0, res, is_timeout = 0;
    u8  san_fault = 0, san_idx = 0, feed_san = 0;
    s32 fd;
-@@ -708,12 +711,23 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
+@@ -755,12 +758,23 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
  
      if (!afl->afl_env.afl_sha1_filenames) {
  
@@ -215,7 +215,7 @@
  
      } else {
  
-@@ -721,6 +735,11 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
+@@ -768,6 +782,11 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
        queue_fn = alloc_printf(
            "%s/queue/%s%s%s", afl->out_dir, hex, afl->file_extension ? "." : "",
            afl->file_extension ? (const char *)afl->file_extension : "");
@@ -227,7 +227,7 @@
        ck_free((char *)hex);
  
      }
-@@ -731,6 +750,11 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
+@@ -778,6 +797,11 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
          "%s/queue/id_%06u%s%s", afl->out_dir, afl->queued_items,
          afl->file_extension ? "." : "",
          afl->file_extension ? (const char *)afl->file_extension : "");
@@ -239,7 +239,7 @@
  
  #endif                                                    /* ^!SIMPLE_FILES */
      fd = permissive_create(afl, queue_fn);
-@@ -743,6 +767,34 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
+@@ -790,6 +814,34 @@ u8 __attribute__((hot)) save_if_interesting(afl_state_t *afl, void *mem,
  
      add_to_queue(afl, queue_fn, len, 0);
  
@@ -276,7 +276,7 @@
  
 --- a/src/afl-fuzz-init.c
 +++ b/src/afl-fuzz-init.c
-@@ -914,6 +914,8 @@ void perform_dry_run(afl_state_t *afl) {
+@@ -935,6 +935,8 @@ void perform_dry_run(afl_state_t *afl) {
  
      u8  res;
      s32 fd;
@@ -285,7 +285,7 @@
  
      if (unlikely(!q->len)) {
  
-@@ -939,6 +941,40 @@ void perform_dry_run(afl_state_t *afl) {
+@@ -960,6 +962,40 @@ void perform_dry_run(afl_state_t *afl) {
  
      res = calibrate_case(afl, q, use_mem, 0, 1);
  
@@ -326,7 +326,7 @@
      /* For AFLFast schedules we update the queue entry */
      if (unlikely(afl->schedule >= FAST && afl->schedule <= RARE) &&
          likely(q->exec_cksum)) {
-@@ -2059,6 +2095,14 @@ static void handle_existing_out_dir(afl_state_t *afl) {
+@@ -2089,6 +2125,14 @@ static void handle_existing_out_dir(afl_state_t *afl) {
    if (delete_files(fn, case_prefix)) { goto dir_cleanup_failed; }
    ck_free(fn);
  
@@ -341,7 +341,7 @@
    /* All right, let's do <afl->out_dir>/crashes/id:* and
     * <afl->out_dir>/hangs/id:*. */
  
-@@ -2390,6 +2434,12 @@ void setup_dirs_fds(afl_state_t *afl) {
+@@ -2426,6 +2470,12 @@ void setup_dirs_fds(afl_state_t *afl) {
    if (mkdir(tmp, afl->dir_perm)) { PFATAL("Unable to create '%s'", tmp); }
    ck_free(tmp);
  
@@ -356,7 +356,7 @@
    if (afl->sync_id) {
 --- a/src/afl-fuzz.c
 +++ b/src/afl-fuzz.c
-@@ -1622,6 +1622,17 @@ int main(int argc, char **argv_orig, char **envp) {
+@@ -1623,6 +1623,17 @@ void afl_parse_commandline(afl_state_t *afl, int argc, char **argv) {
  
    }
  
@@ -374,7 +374,7 @@
    if (afl->sync_id && strcmp(afl->sync_id, "addseeds") == 0) {
  
      FATAL("-M/-S name 'addseeds' is a reserved name, choose something else");
-@@ -2687,6 +2698,13 @@ int main(int argc, char **argv_orig, char **envp) {
+@@ -2704,6 +2715,13 @@ void afl_alloc_shared_memory(afl_state_t *afl) {
  
    #endif
  
@@ -388,7 +388,7 @@
    if (!afl->non_instrumented_mode && !afl->unicorn_mode &&
        !afl->fsrv.frida_mode && !afl->fsrv.cs_mode &&
        !afl->afl_env.afl_skip_bin_check) {
-@@ -2716,6 +2734,14 @@ int main(int argc, char **argv_orig, char **envp) {
+@@ -2733,6 +2751,14 @@ void afl_alloc_shared_memory(afl_state_t *afl) {
        afl->fsrv.trace_bits =
            afl_shm_init(&afl->shm, new_map_size, afl->non_instrumented_mode,
                         afl->perm, afl->chown_needed ? afl->fsrv.gid : -1);
@@ -405,7 +405,7 @@
    #ifdef __AFL_CODE_COVERAGE
 --- a/src/afl-sharedmem.c
 +++ b/src/afl-sharedmem.c
-@@ -37,6 +37,7 @@
+@@ -39,6 +39,7 @@
  #include "sharedmem.h"
  #include "cmplog.h"
  #include "list.h"
@@ -413,7 +413,7 @@
  
  #include <stdio.h>
  #include <unistd.h>
-@@ -77,6 +78,12 @@ void afl_shm_deinit(sharedmem_t *shm) {
+@@ -79,6 +80,12 @@ void afl_shm_deinit(sharedmem_t *shm) {
  
      unsetenv(SHM_ENV_VAR);
  
@@ -426,7 +426,7 @@
    }
  
  #ifdef USEMMAP
-@@ -128,13 +135,72 @@ void afl_shm_deinit(sharedmem_t *shm) {
+@@ -130,13 +137,72 @@ void afl_shm_deinit(sharedmem_t *shm) {
  
    }
  
@@ -499,7 +499,7 @@
  }
  
  /* Configure shared memory.
-@@ -149,11 +215,15 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
+@@ -151,11 +217,15 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
  
    shm->map = NULL;
    shm->cmp_map = NULL;
@@ -515,7 +515,7 @@
  
    const int shmflags = O_RDWR | O_EXCL;
  
-@@ -289,6 +359,91 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
+@@ -291,6 +361,91 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
  
    }
  
@@ -607,7 +607,7 @@
  #else
    u8             *shm_str;
    struct shmid_ds shmid_ds;
-@@ -352,6 +507,33 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
+@@ -354,6 +509,33 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
  
    }
  
@@ -641,7 +641,7 @@
    if (!non_instrumented_mode) {
  
      shm_str = alloc_printf("%d", shm->shm_id);
-@@ -377,6 +559,18 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
+@@ -379,6 +561,18 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
  
    }
  
@@ -660,7 +660,7 @@
    shm->map = shmat(shm->shm_id, NULL, 0);
  
    if (shm->map == (void *)-1 || !shm->map) {
-@@ -389,6 +583,14 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
+@@ -391,6 +585,14 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
  
      }
  
@@ -675,7 +675,7 @@
      PFATAL("shmat() failed");
  
    }
-@@ -409,6 +611,25 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
+@@ -411,6 +613,25 @@ u8 *afl_shm_init(sharedmem_t *shm, size_t map_size,
  
    }
  

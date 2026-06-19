@@ -1,6 +1,6 @@
 --- a/accel/tcg/cpu-exec.c
 +++ b/accel/tcg/cpu-exec.c
-@@ -86,6 +86,19 @@ __thread abi_ulong afl_prev_loc;
+@@ -87,6 +87,19 @@ __thread abi_ulong afl_prev_loc;
  
  struct cmp_map *__afl_cmp_map;
  
@@ -20,7 +20,7 @@
  /* Set in the child process in forkserver mode: */
  
  static int forkserver_installed = 0;
-@@ -935,6 +948,31 @@ void afl_setup(void) {
+@@ -954,6 +967,31 @@ void afl_setup(void) {
  
    }
  
@@ -52,16 +52,35 @@
    if (getenv("AFL_INST_LIBS")) {
  
      afl_start_code = 0;
-@@ -1411,6 +1449,8 @@ void afl_persistent_iter(CPUArchState *env) {
- 
-         /* Exit the persistent loop on pipe error */
-         afl_area_ptr = dummy;
+@@ -1262,7 +1300,12 @@ static void afl_persistent_sync(void) {
+     u32 expected = AFL_CHILD_RUN;
+     while (!__atomic_compare_exchange_n(afl_child_sync, &expected, AFL_CHILD_DONE,
+                                         0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+-      if (expected == AFL_CHILD_EXITED) { afl_area_ptr = dummy; exit(0); }
++      if (expected == AFL_CHILD_EXITED) {
++        afl_area_ptr = dummy;
 +        __afl_runtime_trace.edges = dummy;
 +        __afl_runtime_trace.syscalls = dummy;
-         exit(0);
++        exit(0);
++      }
+     }
  
-       }
-@@ -1437,6 +1477,8 @@ void afl_persistent_iter(CPUArchState *env) {
+     afl_fs_sync_wake(afl_child_sync);
+@@ -1273,7 +1316,12 @@ static void afl_persistent_sync(void) {
+       afl_fs_sys_futex(afl_child_sync, FUTEX_WAIT, AFL_CHILD_DONE);
+     }
+ 
+-    if (v == AFL_CHILD_EXITED) { afl_area_ptr = dummy; exit(0); }
++    if (v == AFL_CHILD_EXITED) {
++      afl_area_ptr = dummy;
++      __afl_runtime_trace.edges = dummy;
++      __afl_runtime_trace.syscalls = dummy;
++      exit(0);
++    }
+ 
+   } else {
+ 
+@@ -1515,6 +1563,8 @@ void afl_persistent_iter(CPUArchState *env) {
    } else {
  
      afl_area_ptr = dummy;
@@ -72,7 +91,7 @@
    }
 --- a/accel/tcg/translate-all.c
 +++ b/accel/tcg/translate-all.c
-@@ -89,6 +89,7 @@ void HELPER(afl_maybe_log)(target_ulong cur_loc) {
+@@ -169,6 +169,7 @@ void HELPER(afl_maybe_log)(target_ulong cur_loc) {
    register uintptr_t afl_idx = cur_loc ^ afl_prev_loc;
  
    INC_AFL_AREA(afl_idx);
@@ -108,9 +127,9 @@
  #include "api.h"
  
  /* We use one additional file descriptor to relay "needs translation"
-@@ -126,6 +127,9 @@ extern __thread abi_ulong afl_prev_loc;
- 
- extern struct cmp_map *__afl_cmp_map;
+@@ -134,6 +135,9 @@ extern int      afl_old_coverage;
+ void     afl_idtable_init(uint32_t map_size);
+ uint32_t afl_idtable_count(void);
  
 +/* Runtime trace info. */
 +extern struct runtime_trace __afl_runtime_trace;
