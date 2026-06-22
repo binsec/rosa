@@ -61,13 +61,16 @@ pub fn save_cluster_to_file(cluster: &Cluster, file: &Path) -> Result<(), RosaEr
 /// # Examples
 ///
 /// ```
-/// use std::path::Path;
+/// use std::{
+///     fs,
+///     path::PathBuf,
+/// };
+/// use tempfile;
 /// use rosa_core::{
 ///     clustering::Cluster,
 ///     trace::Trace,
 /// };
 ///
-/// // Dummy clusters to demonstrate function use.
 /// let clusters = vec![
 ///     Cluster::build(
 ///         "cluster_1",
@@ -88,9 +91,22 @@ pub fn save_cluster_to_file(cluster: &Cluster, file: &Path) -> Result<(), RosaEr
 ///     ).unwrap(),
 /// ];
 ///
-/// let _ = rosa_cli::clustering::save_clusters_to_dir(
-///     &clusters, &Path::new("/path/to/clusters_dir/")
-/// );
+/// if let Ok(tmp_dir) = tempfile::tempdir() {
+///
+///     assert!(
+///         rosa_cli::clustering::save_clusters_to_dir(
+///             &clusters, tmp_dir.path()
+///         ).is_ok()
+///     );
+///
+///     assert_eq!(
+///         fs::read_dir(tmp_dir.path())
+///             .unwrap()
+///             .map(|entry| entry.unwrap().path())
+///             .collect::<Vec<PathBuf>>(),
+///         [tmp_dir.path().join("cluster_1.txt")],
+///     );
+/// }
 /// ```
 pub fn save_clusters_to_dir(clusters: &[Cluster], output_dir: &Path) -> Result<(), RosaError> {
     clusters.iter().try_for_each(|cluster| {
