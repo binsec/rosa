@@ -60,6 +60,11 @@ pub struct AFLPlusPlus {
     /// platforms.
     #[serde(default = "AFLPlusPlus::default_max_syscall_id")]
     pub max_syscall_id: usize,
+    /// The timeout (in seconds) when invoking `strace` (in standard mode).
+    /// This is to ensure that `strace` does not run forever and block.
+    /// Set to 0 to deactivate.
+    #[serde(default = "AFLPlusPlus::default_strace_timeout_seconds")]
+    pub strace_timeout_seconds: usize,
 }
 
 /// The supported modes for AFL++.
@@ -107,6 +112,11 @@ impl AFLPlusPlus {
     /// The default maximum syscall ID.
     pub const fn default_max_syscall_id() -> usize {
         400
+    }
+
+    /// The default timeout when invoking `strace` (in seconds).
+    pub const fn default_strace_timeout_seconds() -> usize {
+        5
     }
 
     /// Get the PID of the fuzzer.
@@ -320,8 +330,7 @@ impl AFLPlusPlus {
 
         let strace_args = [
             vec![
-                // TODO make this value a parameter of the configuration?
-                "5s".to_string(),
+                format!("{}s", self.strace_timeout_seconds),
                 "strace".to_string(),
                 "-e".to_string(),
                 "abbrev=all".to_string(),
@@ -855,6 +864,7 @@ mod tests {
             extra_args: extra_args.clone(),
             env: env.clone(),
             max_syscall_id: AFLPlusPlus::default_max_syscall_id(),
+            strace_timeout_seconds: AFLPlusPlus::default_strace_timeout_seconds(),
         };
         assert_eq!(
             config.cmd(),
@@ -893,6 +903,7 @@ mod tests {
             extra_args: Vec::new(),
             env: HashMap::new(),
             max_syscall_id: AFLPlusPlus::default_max_syscall_id(),
+            strace_timeout_seconds: AFLPlusPlus::default_strace_timeout_seconds(),
         };
         assert_eq!(
             config.cmd(),

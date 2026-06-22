@@ -94,6 +94,7 @@ fn generate_fuzzer_config(
                 AFLPlusPlusMode::Standard
             },
             max_syscall_id: AFLPlusPlus::default_max_syscall_id(),
+            strace_timeout_seconds: AFLPlusPlus::default_strace_timeout_seconds(),
         }),
     }
 }
