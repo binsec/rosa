@@ -29,13 +29,6 @@ use crate::{
     trace::load_trace_from_file,
 };
 
-/// The maximum system call ID supported in the source version.
-///
-/// This value is chosen somewhat arbitrarily, and it is based on x86_64 Linux system calls. It
-/// might have to be modified for other platforms.
-// TODO maybe this should be an optional parameter in the config?
-const MAX_SYSCALLS: usize = 600;
-
 /// The AFL++ fuzzer.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AFLPlusPlus {
@@ -61,6 +54,12 @@ pub struct AFLPlusPlus {
     pub extra_args: Vec<String>,
     /// Any environment variables to set for the fuzzer.
     pub env: HashMap<String, String>,
+    /// The maximum syscall ID (i.e., number associated with the syscall).
+    /// All syscall IDs should be smaller than or equal to this number.
+    /// The default value is based on x86_64 Linux and might need to be modified for other
+    /// platforms.
+    #[serde(default = "AFLPlusPlus::default_max_syscall_id")]
+    pub max_syscall_id: usize,
 }
 
 /// The supported modes for AFL++.
@@ -105,6 +104,11 @@ pub enum AFLPlusPlusInput {
 }
 
 impl AFLPlusPlus {
+    /// The default maximum syscall ID.
+    pub const fn default_max_syscall_id() -> usize {
+        400
+    }
+
     /// Get the PID of the fuzzer.
     ///
     /// The PID of the fuzzer can be found in the `fuzzer_stats` file, if it exists.
@@ -466,7 +470,7 @@ impl AFLPlusPlus {
                 &edges,
                 max_edges,
                 &syscalls,
-                MAX_SYSCALLS,
+                self.max_syscall_id + 1,
             )
             .unwrap(),
         ))
@@ -850,6 +854,7 @@ mod tests {
             target: target.clone(),
             extra_args: extra_args.clone(),
             env: env.clone(),
+            max_syscall_id: AFLPlusPlus::default_max_syscall_id(),
         };
         assert_eq!(
             config.cmd(),
@@ -887,6 +892,7 @@ mod tests {
             target: target.clone(),
             extra_args: Vec::new(),
             env: HashMap::new(),
+            max_syscall_id: AFLPlusPlus::default_max_syscall_id(),
         };
         assert_eq!(
             config.cmd(),

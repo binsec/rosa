@@ -93,6 +93,7 @@ fn generate_fuzzer_config(
             } else {
                 AFLPlusPlusMode::Standard
             },
+            max_syscall_id: AFLPlusPlus::default_max_syscall_id(),
         }),
     }
 }

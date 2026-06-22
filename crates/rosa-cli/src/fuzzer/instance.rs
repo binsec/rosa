@@ -54,6 +54,7 @@ impl FuzzerInstance {
     ///             target: vec!["./target".to_string()],
     ///             extra_args: vec!["-Q".to_string()],
     ///             env: HashMap::from([("AFL_DEBUG".to_string(), "1".to_string())]),
+    ///             max_syscall_id: AFLPlusPlus::default_max_syscall_id(),
     ///         }),
     ///     },
     ///     PathBuf::from("/path/to/scratch_dir"),
