@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// A trace cluster, containing similar traces.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Cluster {
     /// The name of the cluster.
     name: String,
@@ -372,26 +372,29 @@ where
     let (_, cluster_index) = clusters.iter().enumerate().fold(
         ((u64::MAX, u64::MAX), None),
         |(min_distance, cluster_index), (index, cluster)| {
-            let min_edge_distance = cluster
+            // We are minimizing the maximum distance to the cluster's members, so that if we end
+            // up adding this trace to the cluster, we can ensure that the maximum distance doesn't
+            // inflate past the tolerances.
+            let max_edge_distance = cluster
                 .traces
                 .iter()
                 .map(|cluster_trace| distance_metric.distance(trace.edges(), cluster_trace.edges()))
-                .min();
-            let min_syscall_distance = cluster
+                .max();
+            let max_syscall_distance = cluster
                 .traces
                 .iter()
                 .map(|cluster_trace| {
                     distance_metric.distance(trace.syscalls(), cluster_trace.syscalls())
                 })
-                .min();
+                .max();
 
             let new_min_distance = match criterion {
-                Criterion::EdgesOnly => (min_edge_distance.unwrap_or(u64::MAX), u64::MAX),
-                Criterion::SyscallsOnly => (min_syscall_distance.unwrap_or(u64::MAX), u64::MAX),
-                Criterion::EdgesOrSyscalls => match (min_edge_distance, min_syscall_distance) {
+                Criterion::EdgesOnly => (max_edge_distance.unwrap_or(u64::MAX), u64::MAX),
+                Criterion::SyscallsOnly => (max_syscall_distance.unwrap_or(u64::MAX), u64::MAX),
+                Criterion::EdgesOrSyscalls => match (max_edge_distance, max_syscall_distance) {
                     // Get the objectively smallest distance.
-                    (Some(min_edge_distance), Some(min_syscall_distance)) => {
-                        (cmp::min(min_edge_distance, min_syscall_distance), u64::MAX)
+                    (Some(max_edge_distance), Some(max_syscall_distance)) => {
+                        (cmp::min(max_edge_distance, max_syscall_distance), u64::MAX)
                     }
                     // If either is None, return the other one (or unwrap).
                     (None, dist) | (dist, None) => (dist.unwrap_or(u64::MAX), u64::MAX),
@@ -399,7 +402,7 @@ where
                 Criterion::EdgesAndSyscalls => {
                     // If there are multiple traces with the minimum edge distance, get the one
                     // that also has minimum syscall distance.
-                    let new_min_edge_distance = min_edge_distance.unwrap_or(u64::MAX);
+                    let new_min_edge_distance = max_edge_distance.unwrap_or(u64::MAX);
                     let new_min_syscall_distance = cluster
                         .traces
                         .iter()
@@ -410,7 +413,7 @@ where
                         .map(|cluster_trace| {
                             distance_metric.distance(trace.syscalls(), cluster_trace.syscalls())
                         })
-                        .min()
+                        .max()
                         .unwrap_or(u64::MAX);
 
                     (new_min_edge_distance, new_min_syscall_distance)
@@ -435,6 +438,10 @@ where
 /// This is a naive clustering algorithm; it tries to put a trace into the most similar existing
 /// cluster if it fits the criterion and the tolerances, otherwise it creates a new cluster
 /// containing the trace.
+///
+/// # Preconditions
+///
+/// This function optimizes for zero-tolerance by assuming that all traces are **unique**.
 ///
 /// # Examples
 ///
@@ -502,14 +509,15 @@ pub fn cluster_traces<DM>(
 where
     DM: DistanceMetric + Clone,
 {
-    if edge_tolerance == 0
-        && syscall_tolerance == 0
-        && (criterion == Criterion::EdgesAndSyscalls || criterion == Criterion::EdgesOnly)
+    if (edge_tolerance == 0 && criterion == Criterion::EdgesOnly)
+        || (syscall_tolerance == 0 && criterion == Criterion::SyscallsOnly)
+        || (edge_tolerance == 0 && syscall_tolerance == 0)
     {
-        // If both tolerances are 0, and we care about edges, we will never be able to put two
-        // traces in the same cluster. This is because we only keep traces that have unique edge
-        // vectors. It's worth it to simply create the corresponding clusters here, as it's much
-        // faster.
+        // If there is 0 tolerance in the component we car about, we will never be able to put two
+        // traces in the same cluster. This allows us to speed up clustering by simply putting each
+        // trace in its own cluster. This assumes all traces are unique (see precondition note in
+        // the function doc); note that it does not make much sense to cluster a non-unique set of
+        // traces.
         traces
             .iter()
             .enumerate()
@@ -549,12 +557,12 @@ where
 
                         let edge_criterion = max_edge_distance
                             <= cmp::max(
-                                most_similar_cluster.min_edge_distance(&distance_metric),
+                                most_similar_cluster.max_edge_distance(&distance_metric),
                                 edge_tolerance,
                             );
                         let syscall_criterion = max_syscall_distance
                             <= cmp::max(
-                                most_similar_cluster.min_syscall_distance(&distance_metric),
+                                most_similar_cluster.max_syscall_distance(&distance_metric),
                                 syscall_tolerance,
                             );
 
