@@ -1,4 +1,4 @@
-//! TODO: doc
+//! I/O functionality for [rosa_core::trace].
 
 use std::{
     fs::{self, File},

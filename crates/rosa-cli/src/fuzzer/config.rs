@@ -1,4 +1,7 @@
-//! TODO: doc
+//! Trait-to-Enum bridge for [FuzzerBackend].
+//!
+//! This allows us to provide concrete configurations per supported implementation of
+//! [FuzzerBackend].
 
 use std::{
     collections::HashMap,

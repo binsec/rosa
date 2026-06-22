@@ -1,4 +1,6 @@
-//! TODO: doc
+//! Fuzzer instance spawning and management.
+//!
+//! Allows to create, spawn, (gracefully) stop, and inspect fuzzer processes.
 
 use std::{
     fs::File,

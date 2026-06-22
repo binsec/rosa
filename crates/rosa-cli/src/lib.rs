@@ -1,6 +1,5 @@
 #![deny(missing_docs)]
 #![doc(test(attr(deny(warnings))))]
-// TODO: add crate-level README
 #![doc = include_str!("../../../README.md")]
 
 pub mod clustering;

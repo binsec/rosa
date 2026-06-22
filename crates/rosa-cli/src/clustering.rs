@@ -1,4 +1,4 @@
-//! TODO: doc
+//! I/O functionality for [rosa_core::clustering].
 
 use std::{fs, path::Path};
 

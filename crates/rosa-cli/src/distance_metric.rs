@@ -1,4 +1,7 @@
-//! The [DistanceMetric]s used in the configuration of the ROSA CLI.
+//! Trait-to-Enum bridge for [rosa_core::distance_metric::DistanceMetric].
+//!
+//! This allows us to provide concrete configurations for the supported implementations of
+//! [rosa_core::distance_metric::DistanceMetric].
 
 use serde::{Deserialize, Serialize};
 

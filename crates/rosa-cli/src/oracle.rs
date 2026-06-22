@@ -1,4 +1,8 @@
-//! The [Oracle]s used in the configuration of the ROSA CLI.
+//! Trait-to-Enum bridge for [rosa_core::oracle::Oracle], I/O functionality for
+//! [rosa_core::oracle].
+//!
+//! This allows us to provide concrete configurations for the supported implementations of
+//! [rosa_core::oracle::Oracle].
 
 use std::{fs, path::Path};
 
