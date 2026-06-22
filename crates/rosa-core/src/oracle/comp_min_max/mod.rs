@@ -44,7 +44,7 @@ where
             .ok_or(error!("cluster {} is empty.", cluster.id()))?;
 
         (trace_shape == cluster_shape).then_some(()).ok_or(error!(
-            "oracle: trace {} has shape ({}, {}), but cluster {} has shape ({}, {}).",
+            "oracle: trace {} has shape ({}, {}) but cluster {} has shape ({}, {}).",
             trace.id(),
             trace_shape.0,
             trace_shape.1,

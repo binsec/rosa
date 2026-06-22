@@ -40,7 +40,7 @@ fn mismatched_trace_and_cluster_sizes() {
             .expect_err("oracle should fail")
             .message,
         format!(
-            "oracle: trace {} has shape ({}, {}), but cluster {} has shape ({}, {}).",
+            "oracle: trace {} has shape ({}, {}) but cluster {} has shape ({}, {}).",
             trace.id(),
             trace.shape().0,
             trace.shape().1,
@@ -63,7 +63,7 @@ fn mismatched_trace_and_cluster_sizes() {
             .expect_err("oracle should fail")
             .message,
         format!(
-            "oracle: trace {} has shape ({}, {}), but cluster {} has shape ({}, {}).",
+            "oracle: trace {} has shape ({}, {}) but cluster {} has shape ({}, {}).",
             trace.id(),
             trace.shape().0,
             trace.shape().1,
