@@ -99,6 +99,22 @@
  
    // afl_prev_loc = ((cur_loc & (MAP_SIZE - 1) >> 1)) |
    //                ((cur_loc & 1) << ((int)ceil(log2(MAP_SIZE)) -1));
+@@ -178,6 +179,7 @@ void HELPER(afl_maybe_log)(target_ulong cur_loc) {
+ void HELPER(afl_maybe_log_trace)(target_ulong cur_loc) {
+   register uintptr_t afl_idx = cur_loc;
+   INC_AFL_AREA(afl_idx);
++  LOG_AFL_EDGE(afl_idx);
+ }
+ 
+ void HELPER(afl_maybe_log_cf)(target_ulong cur_loc) {
+@@ -188,6 +190,7 @@ void HELPER(afl_maybe_log_cf)(target_ulong cur_loc) {
+   register uintptr_t afl_idx =
+       afl_idtable_lookup((uint64_t)afl_prev_loc, (uint64_t)cur_loc);
+   INC_AFL_AREA(afl_idx);
++  LOG_AFL_EDGE(afl_idx);
+   afl_prev_loc = cur_loc;
+ }
+ 
 --- a/linux-user/i386/cpu_loop.c
 +++ b/linux-user/i386/cpu_loop.c
 @@ -240,6 +240,15 @@ void cpu_loop(CPUX86State *env)
