@@ -223,6 +223,10 @@ fn run(
     let (phase_1_timed_traces, phase_2_timed_traces) = match config.phase_one {
         PhaseOne::Corpus(ref corpus_dir) => {
             let phase_one_traces = rosa_cli::trace::load_traces_from_dir(corpus_dir)?;
+            (!phase_one_traces.is_empty()).then_some(()).ok_or(error!(
+                "phase-one corpus '{}' is empty.",
+                corpus_dir.display()
+            ))?;
             // Save the traces in the output directory.
             rosa_cli::trace::save_traces_to_dir(&phase_one_traces, &config.traces_dir())?;
             // Save the trace decisions and log the traces in the database.
