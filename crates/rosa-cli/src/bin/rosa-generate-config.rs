@@ -201,7 +201,7 @@ fn generate_config() -> Result<(Config, PathBuf), RosaError> {
         &default_seed_dir.display().to_string(),
     )?;
     let binary_only_mode = get_input(
-        "Binary only mode (y/n)",
+        "Binary-only mode (y/n)",
         |x| match x {
             "y" => Some(true),
             "n" => Some(false),
