@@ -111,7 +111,7 @@ pub enum AFLPlusPlusInput {
 impl AFLPlusPlus {
     /// The default maximum syscall ID.
     pub const fn default_max_syscall_id() -> usize {
-        400
+        500
     }
 
     /// The default timeout when invoking `strace` (in seconds).
