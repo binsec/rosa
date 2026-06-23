@@ -382,6 +382,10 @@ fn run(
     // Load phase-1 corpus if needed.
     if let PhaseOne::Corpus(ref corpus_dir) = config.phase_one {
         let phase_one_traces = rosa_cli::trace::load_traces_from_dir(corpus_dir)?;
+        (!phase_one_traces.is_empty()).then_some(()).ok_or(error!(
+            "phase-one corpus '{}' is empty.",
+            corpus_dir.display()
+        ))?;
         // Save the traces in the output directory.
         rosa_cli::trace::save_traces_to_dir(&phase_one_traces, &config.traces_dir())?;
 
