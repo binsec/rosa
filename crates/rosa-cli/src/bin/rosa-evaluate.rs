@@ -103,6 +103,20 @@ struct Cli {
         help = "Trace time limit (in seconds)"
     )]
     time_limit: Option<u64>,
+
+    /// Specify a custom marker for backdoor triggering.
+    ///
+    /// This marker should be printed (preferably to `stderr`, but `stdout` is also examined) when
+    /// the backdoor is triggered, to determine whether an input actually managed to trigger the
+    /// backdoor.
+    #[arg(
+        long_help,
+        short = 'm',
+        long = "marker",
+        default_value_t = format!("***BACKDOOR TRIGGERED***"),
+        help = "Marker to signal backdoor triggering (printed to `stderr`/`stdout`)"
+    )]
+    marker: String,
 }
 
 /// A kind of sample/finding.
@@ -149,7 +163,7 @@ struct Sample {
 /// Check a ROSA decision.
 ///
 /// The test input is run through the ground-truth version of the target program, and we check to
-/// see if `"***BACKDOOR TRIGGERED***"` appears in the output (`stderr` or `stdout`). We then check
+/// see if a marker appears in the output (`stderr` or `stdout`). We then check
 /// against the decision to find out if the finding is a true/false positive/negative.
 fn check_decision(
     cmd: &[String],
@@ -157,6 +171,7 @@ fn check_decision(
     test_input_path: &Path,
     timed_decision: &TimedDecision,
     discriminant_id: String,
+    marker: &str,
     show_output: bool,
 ) -> Result<Sample, RosaError> {
     let test_input_file = File::open(test_input_path).map_err(|err| {
@@ -192,8 +207,7 @@ fn check_decision(
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
-    let backdoor =
-        stdout.contains("***BACKDOOR TRIGGERED***") || stderr.contains("***BACKDOOR TRIGGERED***");
+    let backdoor = stdout.contains(marker) || stderr.contains(marker);
 
     if show_output {
         println_info!("stdout:");
@@ -224,6 +238,7 @@ fn run(
     target_program_cmd: Option<String>,
     target_program_env: Option<String>,
     trace_ids: &[String],
+    marker: &str,
     show_summary: bool,
     show_output: bool,
     deduplicate: bool,
@@ -311,6 +326,7 @@ fn run(
                     .decision
                     .discriminants
                     .fingerprint(config.oracle_criterion, &timed_decision.decision.cluster_id),
+                marker,
                 show_output,
             )
         })
@@ -396,6 +412,7 @@ fn main() -> ExitCode {
         cli.target_program_cmd,
         cli.target_program_env,
         &cli.trace_ids,
+        &cli.marker,
         cli.show_summary,
         cli.show_output,
         cli.deduplicate,
