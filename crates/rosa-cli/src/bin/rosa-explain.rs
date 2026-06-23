@@ -184,8 +184,6 @@ fn run(output_dir: &Path, trace_id: &str, component: Component) -> Result<(), Ro
         .join(", ")
     );
 
-    println_info!("");
-
     println_info!("Found in the cluster but not the trace:");
     println!(
         "{}",
