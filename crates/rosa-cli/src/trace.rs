@@ -26,6 +26,7 @@ pub enum Component {
 /// order to make dealing with traces easier, we assign an ID to each of them.
 ///
 /// # Examples
+///
 /// ```
 /// use std::path::Path;
 /// use rosa_cli::trace;
@@ -122,6 +123,7 @@ pub fn load_trace_from_file(
 /// Save the test input of a trace to a file.
 ///
 /// # Examples
+///
 /// ```
 /// use std::path::Path;
 /// use rosa_core::trace::Trace;
@@ -155,6 +157,7 @@ pub fn save_test_input_to_file(trace: &Trace, output_file: &Path) -> Result<(), 
 ///   ```
 ///
 /// # Examples
+///
 /// ```
 /// use std::path::Path;
 /// use rosa_core::trace::Trace;
@@ -207,6 +210,7 @@ pub fn save_trace_dump_to_file(trace: &Trace, output_file: &Path) -> Result<(), 
 /// [collect_one_trace](crate::fuzzer::FuzzerBackend::collect_one_trace) instead.
 ///
 /// # Examples
+///
 /// ```
 /// use std::path::Path;
 /// use rosa_cli::trace;
@@ -270,6 +274,7 @@ pub fn load_traces_from_dir(traces_dir: &Path) -> Result<Vec<Trace>, RosaError> 
 /// - A file containing the **trace dump** of the trace.
 ///
 /// # Examples
+///
 /// ```
 /// use std::path::Path;
 /// use rosa_core::trace::Trace;

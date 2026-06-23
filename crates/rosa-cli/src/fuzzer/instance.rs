@@ -33,6 +33,7 @@ impl FuzzerInstance {
     /// Create a new fuzzer instance (without spawning it).
     ///
     /// # Examples
+    ///
     /// ```
     /// use std::{path::PathBuf, collections::HashMap};
     /// use rosa_cli::fuzzer::{
