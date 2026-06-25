@@ -365,10 +365,11 @@ where
 {
     // The `min_distance` here has two components, to account for all possible criteria.
     // In most cases (i.e., everything besides [Criterion::EdgesAndSyscalls]) only the first
+    // (primary)
     // component matters, as we are only taking a single metric into account.
     // However, when using [Criterion::EdgesAndSyscalls], we want to minimize *both* edge and
     // system call distance (with edge distance taking priority). Hence, we use the second
-    // component to keep track of the "secondary"/tiebreaker metric which is syscall distance.
+    // (secondary) component to keep track of the "tiebreaker" metric which is syscall distance.
     let (_, cluster_index) = clusters.iter().enumerate().fold(
         ((u64::MAX, u64::MAX), None),
         |(min_distance, cluster_index), (index, cluster)| {
@@ -379,47 +380,30 @@ where
                 .traces
                 .iter()
                 .map(|cluster_trace| distance_metric.distance(trace.edges(), cluster_trace.edges()))
-                .max();
+                .max()
+                .unwrap_or(u64::MAX);
             let max_syscall_distance = cluster
                 .traces
                 .iter()
                 .map(|cluster_trace| {
                     distance_metric.distance(trace.syscalls(), cluster_trace.syscalls())
                 })
-                .max();
+                .max()
+                .unwrap_or(u64::MAX);
 
             let new_min_distance = match criterion {
-                Criterion::EdgesOnly => (max_edge_distance.unwrap_or(u64::MAX), u64::MAX),
-                Criterion::SyscallsOnly => (max_syscall_distance.unwrap_or(u64::MAX), u64::MAX),
-                Criterion::EdgesOrSyscalls => match (max_edge_distance, max_syscall_distance) {
-                    // Get the objectively smallest distance.
-                    (Some(max_edge_distance), Some(max_syscall_distance)) => {
-                        (cmp::min(max_edge_distance, max_syscall_distance), u64::MAX)
-                    }
-                    // If either is None, return the other one (or unwrap).
-                    (None, dist) | (dist, None) => (dist.unwrap_or(u64::MAX), u64::MAX),
-                },
-                Criterion::EdgesAndSyscalls => {
-                    // If there are multiple traces with the minimum edge distance, get the one
-                    // that also has minimum syscall distance.
-                    let new_min_edge_distance = max_edge_distance.unwrap_or(u64::MAX);
-                    let new_min_syscall_distance = cluster
-                        .traces
-                        .iter()
-                        .filter(|cluster_trace| {
-                            distance_metric.distance(trace.edges(), cluster_trace.edges())
-                                == new_min_edge_distance
-                        })
-                        .map(|cluster_trace| {
-                            distance_metric.distance(trace.syscalls(), cluster_trace.syscalls())
-                        })
-                        .max()
-                        .unwrap_or(u64::MAX);
-
-                    (new_min_edge_distance, new_min_syscall_distance)
-                }
+                Criterion::EdgesOnly => (max_edge_distance, min_distance.1),
+                Criterion::SyscallsOnly => (max_syscall_distance, min_distance.1),
+                Criterion::EdgesOrSyscalls => (
+                    cmp::min(max_edge_distance, max_syscall_distance),
+                    min_distance.1,
+                ),
+                Criterion::EdgesAndSyscalls => (max_edge_distance, max_syscall_distance),
             };
 
+            // If the new primary distance is smaller, or if it's the same but the tiebreaker is
+            // smaller, update the minimum distance and the current index of the most similar
+            // cluster.
             if (new_min_distance.0 < min_distance.0)
                 || (new_min_distance.0 == min_distance.0 && new_min_distance.1 < min_distance.1)
             {
