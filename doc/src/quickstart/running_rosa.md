@@ -6,19 +6,22 @@ We are now ready to run ROSA! You can explicitly specify the configuration file 
 
 ```console
 {container} $ rosa
-[rosa]  ** rosa backdoor detector - version 0.5.0 **
-[rosa]  Cluster formation config:
-[rosa]    Distance metric: hamming
-[rosa]    Criterion: edges-only
-[rosa]    Edge tolerance: 0
-[rosa]    Syscall tolerance: 0
-[rosa]  Cluster selection config:
-[rosa]    Distance metric: hamming
-[rosa]    Criterion: edges-and-syscalls
-[rosa]  Oracle config:
-[rosa]    Distance metric: hamming
-[rosa]    Criterion: syscalls-only
-[rosa]    Algorithm: comp-min-max
+[rosa]  ** rosa backdoor detector - version 0.6.0-rc.1 **
+[rosa]  Configuration:
+  Phase 1:
+    Stopping at 60 seconds
+  Cluster formation:
+    Distance metric: hamming
+    Criterion: edges-only
+    Edge tolerance: 0
+    Syscall tolerance: 0
+  Cluster selection:
+    Distance metric: hamming
+    Criterion: syscalls-only
+  Oracle:
+    Algorithm: comp-min-max
+    Distance metric: hamming
+    Criterion: syscalls-only
 [rosa]  Ready to go!
 [rosa]  Starting up fuzzers...
 ```
