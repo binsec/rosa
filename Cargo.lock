@@ -654,7 +654,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "rosa-cli"
-version = "0.6.0-alpha26.dev"
+version = "0.6.0-rc.1"
 dependencies = [
  "clap",
  "colored",
@@ -673,7 +673,7 @@ dependencies = [
 
 [[package]]
 name = "rosa-core"
-version = "0.6.0-alpha26.dev"
+version = "0.6.0-rc.1"
 dependencies = [
  "itertools 0.14.0",
  "serde",
