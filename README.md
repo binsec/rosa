@@ -4,10 +4,6 @@
 [![Zenodo DOI badge](https://img.shields.io/badge/Zenodo%20DOI-10.5281%2Fzenodo.14724250-blue?style=flat)](https://doi.org/10.5281/zenodo.14724250)
 [![SWH](https://archive.softwareheritage.org/badge/origin/https://github.com/binsec/rosa/)](https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/binsec/rosa)
 
-[![Paper DOI badge](https://img.shields.io/badge/Paper%20DOI-10.1109%2FICSE55347.2025.00183-blue?style=flat)](https://doi.org/10.1109/ICSE55347.2025.00183)
-[![Zenodo DOI badge](https://img.shields.io/badge/Zenodo%20DOI-10.5281%2Fzenodo.14724250-blue?style=flat)](https://doi.org/10.5281/zenodo.14724250)
-[![SWH](https://archive.softwareheritage.org/badge/origin/https://github.com/binsec/rosa/)](https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/binsec/rosa)
-
 ## About
 
 ROSA[^rosa-name] is a fuzzing-based toolchain for backdoor detection in binary programs. It uses a
