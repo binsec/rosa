@@ -6,9 +6,8 @@ authors = [
     "Stefano Zacchiroli (stefano.zacchiroli@cea.fr)",
 ]
 language = "en"
-multilingual = false
 src = "src"
-title = "ROSA: Finding Backdoors with Fuzzing"
+title = "The ROSA backdoor detection toolchain"
 
 [output.html]
 mathjax-support = true

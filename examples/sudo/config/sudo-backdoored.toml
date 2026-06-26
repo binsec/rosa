@@ -1,12 +1,13 @@
 output_dir = "rosa-out-sudo-backdoored"
 
-[seed_conditions]
+[phase_one]
 seconds = 60
 
 
 [[fuzzers]]
 [fuzzers.backend]
 kind = "afl++"
+mode = "qemu"
 name = "main"
 is_main = true
 afl_fuzz = "/root/rosa/fuzzers/aflpp/aflpp/afl-fuzz"
@@ -18,17 +19,17 @@ target = [
     "--",
     "id",
 ]
+input = "stdin"
 extra_args = [
-    "-Q",
     "-c",
     "0",
     "-p",
     "explore",
     "-a",
     "ascii",
-    "-r",
 ]
 [fuzzers.backend.env]
+ROSA_AFL_DUMP_RUNTIME_TRACES = "1"
 AFL_NO_ARITH = "1"
 AFL_SYNC_TIME = "1"
 AFL_SKIP_CPUFREQ = "1"
@@ -39,6 +40,7 @@ AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES = "1"
 [[fuzzers]]
 [fuzzers.backend]
 kind = "afl++"
+mode = "qemu"
 name = "fast-libs"
 is_main = false
 afl_fuzz = "/root/rosa/fuzzers/aflpp/aflpp/afl-fuzz"
@@ -50,8 +52,8 @@ target = [
     "--",
     "id",
 ]
+input = "stdin"
 extra_args = [
-    "-Q",
     "-c",
     "0",
     "-p",
@@ -70,6 +72,7 @@ AFL_INST_LIBS = "1"
 [[fuzzers]]
 [fuzzers.backend]
 kind = "afl++"
+mode = "qemu"
 name = "exploit-libs"
 is_main = false
 afl_fuzz = "/root/rosa/fuzzers/aflpp/aflpp/afl-fuzz"
@@ -81,8 +84,8 @@ target = [
     "--",
     "id",
 ]
+input = "stdin"
 extra_args = [
-    "-Q",
     "-c",
     "0",
     "-p",
@@ -99,6 +102,7 @@ AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES = "1"
 [[fuzzers]]
 [fuzzers.backend]
 kind = "afl++"
+mode = "qemu"
 name = "explore-bin"
 is_main = false
 afl_fuzz = "/root/rosa/fuzzers/aflpp/aflpp/afl-fuzz"
@@ -110,8 +114,8 @@ target = [
     "--",
     "id",
 ]
+input = "stdin"
 extra_args = [
-    "-Q",
     "-c",
     "0",
     "-p",
@@ -129,6 +133,7 @@ AFL_NO_ARITH = "1"
 [[fuzzers]]
 [fuzzers.backend]
 kind = "afl++"
+mode = "qemu"
 name = "fast-bin"
 is_main = false
 afl_fuzz = "/root/rosa/fuzzers/aflpp/aflpp/afl-fuzz"
@@ -140,8 +145,8 @@ target = [
     "--",
     "id",
 ]
+input = "stdin"
 extra_args = [
-    "-Q",
     "-c",
     "0",
     "-p",
@@ -159,6 +164,7 @@ AFL_SKIP_CPUFREQ = "1"
 [[fuzzers]]
 [fuzzers.backend]
 kind = "afl++"
+mode = "qemu"
 name = "exploit-bin"
 is_main = false
 afl_fuzz = "/root/rosa/fuzzers/aflpp/aflpp/afl-fuzz"
@@ -170,8 +176,8 @@ target = [
     "--",
     "id",
 ]
+input = "stdin"
 extra_args = [
-    "-Q",
     "-c",
     "0",
     "-p",

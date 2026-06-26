@@ -30,14 +30,14 @@ fuzzer's root directory (again, see the `aflpp/` case for a concrete example).
 
 ## Adapting the ROSA library
 
-First, you need to add the new fuzzer backend module. For this example, we'll place it in
-`src/fuzzer/my_fuzzer.rs`.
+First, you need to add the new fuzzer backend to the `fuzzer` module in the `rosa-cli` crate. For
+this example, we'll place it in `crates/rosa-cli/src/fuzzer/my_fuzzer.rs`.
 
-In `fuzzer.rs`, we need to declare the new module:
+In `crates/rosa-cli/src/fuzzer/mod.rs`, we need to declare the new module:
 
 ```rust
-pub mod aflpp;
-pub mod my_fuzzer;
+pub mod aflpp;      // <- AFL++ backend
+pub mod my_fuzzer;  // <- My fuzzer backend
 ```
 
 Then, in `my_fuzzer.rs`, we need to declare the configuration of our fuzzer backend. It must derive
@@ -45,6 +45,8 @@ from `serde::Serialize`, `serde::Deserialize` and `Clone`, but you may otherwise
 you wish:
 
 ```rust
+use serde::{Deserialize, Serialize};
+
 // My new fuzzer.
 #[derive(Serialize, Deserialize, Clone)]
 pub struct MyFuzzer {
@@ -61,7 +63,8 @@ understand, while still allowing to access essentially the full API of the fuzze
 After the definition of `MyFuzzer`, we must implement the `FuzzerBackend` trait:
 
 ```rust
-#[typetag::serde(name = "my-fuzzer")]
+use crate::fuzzer::FuzzerBackend;
+
 impl FuzzerBackend for MyFuzzer {
     // ...
 }
@@ -69,5 +72,5 @@ impl FuzzerBackend for MyFuzzer {
 
 The compiler should guide you through the implementation. Essentially, the `FuzzerBackend` trait
 guarantees a stable interface to the rest of the ROSA library and toolchain, while the backend has
-to provide some implementations to guarantee this interface. You can look at `src/fuzzer/aflpp.rs`
-(the AFL++ fuzzer backend) for inspiration.
+to provide some implementations to guarantee this interface. You can look at
+`crates/rosa-cli/src/fuzzer/aflpp.rs` (the AFL++ fuzzer backend) for inspiration.

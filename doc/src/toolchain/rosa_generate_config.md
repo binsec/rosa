@@ -30,5 +30,8 @@ configuration file:
   the `-o` option passed to AFL++.
 - **Path to seed directory**: the full path to the seed corpus directory to be passed to the fuzzer.
   This is the `-i` option passed to AFL++.
+- **Mode**: the mode to use for the fuzzer (binary-only or standard). If binary-only, QEMU-level
+  instrumentation is used; otherwise, in standard mode, ROSA assumes that it's dealing with a
+  source-level instrumented binary, following a standard AFL++ setup.
 
-[^rosa-paper]: <https://doi.org/10.1109/ICSE55347.2025.00183>
+[^rosa-paper]: See [10.1109/ICSE55347.2025.00183](https://doi.org/10.1109/ICSE55347.2025.00183).

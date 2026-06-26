@@ -56,24 +56,22 @@ instances.[^instrumentation-inconsistencies]
 If activated (it is the case by default), a separate thread is also started for the
 [TUI](./status_screen.md).
 
-### The ROSA library
+### The `rosa-core` library
 
-In reality, `rosa` is simply a frontend for a backdoor detection library:
+In reality, `rosa` is simply a frontend, using the `rosa-core` library, which contains the following
+modules:
 
-- `clustering.rs` contains a definition for clusters and clustering algorithms;
-- `config.rs` contains a definition for configuration files and handling of any I/O (e.g., for the
-  finding directory);
-- `criterion.rs` contains a definition for the criteria used throughout the library, which allow to
-  take into account one or multiple components of the runtime traces;
-- `distance_metric.rs` contains definitions of distance metrics used to compare runtime traces (see
-  also [_Extending the distance metrics_](./extensions/distance_metrics.md));
-- `error.rs` contains error definitions for ROSA;
-- `fuzzer.rs` and `fuzzer/` contain definitions and handling for the fuzzer backends (see also
-  [_Using other fuzzers_](./extensions/fuzzers.md));
-- `lib.rs` regroups the modules and defines the ROSA library;
-- `oracle.rs` and `oracle/` contain the metamorphic oracle algorithms (see also
+- `clustering`: definition of trace clusters and clustering algorithms;
+- `distance_metric`: definitions of distance metrics used to compare runtime traces (also see
+  [_Extending the distance metrics_](./extensions/distance_metrics.md));
+- `oracle`: definitions of (metamorphic) oracle algorithms (also see
   [_Extending the ROSA oracle_](./extensions/oracle.md));
-- `trace.rs` contains definitions and tooling to collect and handle input-trace pairs.
+- `trace`: definition of runtime trace and associated tooling (including deduplication);
+- `criterion`: definitions for the criteria used throughout the library, which define which
+  components of the runtime trace (CFG edges, system calls) to take into account.
+
+This library is fully independent, and can also be used programmatically to create new tooling
+around ROSA.
 
 [^edge-approximation]: For a detailed explanation of how AFL++ (and AFL) approximate CFG edge
     coverage, see

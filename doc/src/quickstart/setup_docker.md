@@ -16,6 +16,7 @@ creating a temporary directory and mounting it as a volume in the container itse
 
 ```console
 {host}      $ docker run -ti --rm -p 4000:4000 \
-                         -v $HOME/rosa-experiment:/root/rosa-experiment plumtrie/rosa:latest
+                  -v $HOME/rosa-experiment:/root/rosa-experiment \
+                  plumtrie/rosa:latest
 {container} $ cd /root/rosa-experiment/
 ```

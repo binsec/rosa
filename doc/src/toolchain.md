@@ -3,6 +3,9 @@
 ROSA is not just the backdoor detection tool [`rosa`](./toolchain/rosa.md); it is also a collection
 of tools to clarify, analyze and test backdoor detection:
 
+- [`rosa-filter-diff`](./toolchain/rosa_filter_diff.md): implementation of the Lily
+  approach,[^lily-paper] which can be used in a vetting context (e.g., CI or release) to prevent
+  _backdoor injections_ between two versions of a given program.
 - [`rosa-generate-config`](./toolchain/rosa_generate_config.md): generate a default configuration
   with a command-line wizard.
 - [`rosa-explain`](./toolchain/rosa_explain.md): given a finding, explain the decision made by the
@@ -17,3 +20,5 @@ of tools to clarify, analyze and test backdoor detection:
   runtime traces (associated with two test inputs).
 - [`rosa-simulate`](./toolchain/rosa_simulate.md): simulate a detection campaign with a different
   ROSA configuration given an existing backdoor detection campaign.
+
+[^lily-paper]: To appear in [ASE'26](https://conf.researchr.org/home/ase-2026).

@@ -1,4 +1,8 @@
-# ROSA: Finding Backdoors with Fuzzing
+# The ROSA backdoor detection toolchain
+
+[![Paper DOI badge](https://img.shields.io/badge/Paper%20DOI-10.1109%2FICSE55347.2025.00183-blue?style=flat)](https://doi.org/10.1109/ICSE55347.2025.00183)
+[![Zenodo DOI badge](https://img.shields.io/badge/Zenodo%20DOI-10.5281%2Fzenodo.14724250-blue?style=flat)](https://doi.org/10.5281/zenodo.14724250)
+[![SWH](https://archive.softwareheritage.org/badge/origin/https://github.com/binsec/rosa/)](https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/binsec/rosa)
 
 [![Paper DOI badge](https://img.shields.io/badge/Paper%20DOI-10.1109%2FICSE55347.2025.00183-blue?style=flat)](https://doi.org/10.1109/ICSE55347.2025.00183)
 [![Zenodo DOI badge](https://img.shields.io/badge/Zenodo%20DOI-10.5281%2Fzenodo.14724250-blue?style=flat)](https://doi.org/10.5281/zenodo.14724250)
@@ -6,7 +10,7 @@
 
 ## About
 
-ROSA[^1] is a fuzzing-based toolchain for backdoor detection in binary programs. It uses a
+ROSA[^rosa-name] is a fuzzing-based toolchain for backdoor detection in binary programs. It uses a
 state-of-the-art fuzzer ([AFL++](https://github.com/AFLplusplus/AFLplusplus)) coupled with a novel
 [metamorphic oracle](https://en.wikipedia.org/wiki/Metamorphic_testing) to detect many different
 types of backdoors in different types of binary programs.
@@ -82,7 +86,7 @@ $ cargo build --release
 To install ROSA, run:
 
 ```console
-$ cargo install --path .
+$ cargo install --path crates/rosa-cli
 ```
 
 #### Building AFL++
@@ -146,6 +150,8 @@ Please read [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## Citing this repo
 
+### Citing the "ROSA: Finding Backdoors with Fuzzing" paper (ICSE'25)
+
 NOTE: the latest version (v2) of the paper is available at
 <https://binsec.github.io/assets/publications/papers/2025-icse.pdf> with minor corrections to the
 representative input selection algorithm (Section IV-A and Section IV-C).
@@ -167,8 +173,14 @@ following snippet:
 }
 ```
 
+### Citing the "Not In My Git Yard: Catching Backdoors at Commit and Release Time" paper (ASE'26)
+
+(Coming soon)
+
+### Citing this repository
+
 When citing the actual repository/tool itself, use [CITATION.cff](./CITATION.cff).
 
-[^1]: ROSA is a reference to the song
+[^rosa-name]: ROSA is a reference to the song
     [_El Paso_](https://genius.com/Marty-robbins-el-paso-lyrics#:~:text=the%20back%20door%20of%20Rosa%27s),
     but also stands for _Runtime trace Oracle-based Selection Algorithm_.

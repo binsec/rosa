@@ -71,10 +71,10 @@ discriminants specifically:
 ```console
 {container} $ rosa-explain rosa-out e205ab0700d8b183
 [rosa]  Explaining trace 3afd12ca01c71b06:
-[rosa]    Trace indicates a backdoor: true
-[rosa]    Detection reason: syscalls
-[rosa]    Oracle criterion: syscalls-only
-[rosa]    Most similar cluster: cluster_000000
+  Trace indicates a backdoor: true
+  Detection reason: syscalls
+  Oracle criterion: syscalls-only
+  Most similar cluster: cluster_000000
 [rosa]  Found in the trace but not the cluster:
 15, 32, 33, 56, 59, 61, 106, 111, 271, 273, 436
 [rosa]  Found in the cluster but not the trace:

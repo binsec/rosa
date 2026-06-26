@@ -1,0 +1,11 @@
+[package]
+name = "rosa-core"
+version = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+serde = { workspace = true }
+itertools = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
