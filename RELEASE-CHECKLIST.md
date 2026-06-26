@@ -31,3 +31,4 @@
     `docker push plumtrie/rosa:latest`.
 15. Prepare for the next version by bumping the PATCH number in the version and appending `"-dev"`.
     This means that `"1.2.3"` should become `"1.2.4-dev"`.
+16. Update the `swh` identifier in `CITATION.cff`.
