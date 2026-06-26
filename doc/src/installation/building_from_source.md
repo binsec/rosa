@@ -28,7 +28,7 @@ $ cargo build --release
 To install ROSA, run:
 
 ```console
-$ cargo install --path .
+$ cargo install --path crates/rosa-cli
 ```
 
 #### Building AFL++
