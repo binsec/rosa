@@ -1,11 +1,18 @@
-# ROSA: Finding Backdoors with Fuzzing
+# The ROSA backdoor detection toolchain
+
+[![Paper DOI badge](https://img.shields.io/badge/Paper%20DOI-10.1109%2FICSE55347.2025.00183-blue?style=flat)](https://doi.org/10.1109/ICSE55347.2025.00183)
+[![Zenodo DOI badge](https://img.shields.io/badge/Zenodo%20DOI-10.5281%2Fzenodo.14724250-blue?style=flat)](https://doi.org/10.5281/zenodo.14724250)
+[![SWH](https://archive.softwareheritage.org/badge/origin/https://github.com/binsec/rosa/)](https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/binsec/rosa)
 
 ## About
 
-ROSA[^1] is a fuzzing-based toolchain for backdoor detection in binary programs. It uses a
+ROSA[^rosa-name] is a fuzzing-based toolchain for backdoor detection in binary programs. It uses a
 state-of-the-art fuzzer ([AFL++](https://github.com/AFLplusplus/AFLplusplus)) coupled with a novel
 [metamorphic oracle](https://en.wikipedia.org/wiki/Metamorphic_testing) to detect many different
 types of backdoors in different types of binary programs.
+
+A presentation of ROSA (including a live demo) was given at FOSDEM'26:
+<https://mirrors.dotsrc.org/fosdem/2026/ub5132/BHNWLN-rosa-backdoor-detector.mp4>
 
 ## Installation
 
@@ -75,7 +82,7 @@ $ cargo build --release
 To install ROSA, run:
 
 ```console
-$ cargo install --path .
+$ cargo install --path crates/rosa-cli
 ```
 
 #### Building AFL++
@@ -139,8 +146,37 @@ Please read [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## Citing this repo
 
-TODO: add citation/link towards paper
+### Citing the "ROSA: Finding Backdoors with Fuzzing" paper (ICSE'25)
 
-[^1]: ROSA is a reference to the song
+NOTE: the latest version (v2) of the paper is available at
+<https://binsec.github.io/assets/publications/papers/2025-icse.pdf> with minor corrections to the
+representative input selection algorithm (Section IV-A and Section IV-C).
+
+When citing the associated [ICSE'25 paper](https://doi.org/10.1109/ICSE55347.2025.00183), use the
+following snippet:
+
+```bibtex
+@inproceedings{kokkonis-2025-rosa,
+    author = {Kokkonis, Dimitri and Marcozzi, Michaël and Decoux, Emilien and Zacchiroli, Stefano},
+    booktitle = {2025 IEEE/ACM 47th International Conference on Software Engineering (ICSE)},
+    title = {{ROSA: Finding Backdoors with Fuzzing}},
+    year = {2025},
+    volume = {},
+    number = {},
+    pages = {2816-2828},
+    keywords = {Runtime;Automation;Manuals;Binary codes;Fuzzing;Benchmark testing;Robustness;Software;Performance analysis;Standards;fuzzing;dynamic analysis;metamorphic testing;backdoors;vulnerability detection},
+    doi = {10.1109/ICSE55347.2025.00183},
+}
+```
+
+### Citing the "Not In My Git Yard: Catching Backdoors at Commit and Release Time" paper (ASE'26)
+
+(Coming soon)
+
+### Citing this repository
+
+When citing the actual repository/tool itself, use [CITATION.cff](./CITATION.cff).
+
+[^rosa-name]: ROSA is a reference to the song
     [_El Paso_](https://genius.com/Marty-robbins-el-paso-lyrics#:~:text=the%20back%20door%20of%20Rosa%27s),
     but also stands for _Runtime trace Oracle-based Selection Algorithm_.

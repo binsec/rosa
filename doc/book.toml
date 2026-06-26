@@ -7,7 +7,7 @@ authors = [
 ]
 language = "en"
 src = "src"
-title = "ROSA: Finding Backdoors with Fuzzing"
+title = "The ROSA backdoor detection toolchain"
 
 [output.html]
 mathjax-support = true

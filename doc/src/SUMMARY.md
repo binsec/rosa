@@ -16,6 +16,7 @@
 - [Configuration guide](./config_guide.md)
 - [The ROSA toolchain](./toolchain.md)
   - [rosa](./toolchain/rosa.md)
+  - [Lily / rosa-filter-diff](./toolchain/rosa_filter_diff.md)
   - [rosa-generate-config](./toolchain/rosa_generate_config.md)
   - [rosa-explain](./toolchain/rosa_explain.md)
   - [rosa-evaluate](./toolchain/rosa_evaluate.md)

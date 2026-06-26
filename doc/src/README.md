@@ -1,9 +1,14 @@
 # Introduction
 
-This is the documentation of ROSA,[^1] a fuzzing-based toolchain for backdoor detection in binary
-programs. It uses a state-of-the-art fuzzer ([AFL++](https://github.com/AFLplusplus/AFLplusplus))
-coupled with a novel [metamorphic oracle](https://en.wikipedia.org/wiki/Metamorphic_testing) to
-detect many different types of backdoors in different types of binary programs.
+This is the documentation of ROSA,[^rosa-name] a fuzzing-based toolchain for backdoor detection in
+binary programs. It uses a state-of-the-art fuzzer
+([AFL++](https://github.com/AFLplusplus/AFLplusplus)) coupled with a novel
+[metamorphic oracle](https://en.wikipedia.org/wiki/Metamorphic_testing) to detect many different
+types of backdoors in different types of binary programs.
+
+Additionally, the toolchain contains an implementation of the Lily approach,[^lily-paper] which can
+be used in a vetting context (e.g., CI or release) to detect _backdoor injections_ between two
+versions of a given program.
 
 The documentation is split into multiple parts:
 
@@ -26,6 +31,8 @@ following command at the root of the ROSA repo:
 $ cargo doc --open
 ```
 
-[^1]: ROSA is a reference to the song
+[^rosa-name]: ROSA is a reference to the song
     [_El Paso_](https://genius.com/Marty-robbins-el-paso-lyrics#:~:text=the%20back%20door%20of%20Rosa%27s),
     but also stands for _Runtime trace Oracle-based Selection Algorithm_.
+
+[^lily-paper]: To appear in [ASE'26](https://conf.researchr.org/home/ase-2026).

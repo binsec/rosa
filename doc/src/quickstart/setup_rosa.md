@@ -37,6 +37,7 @@ default):
 [rosa]  Path to fuzzer? [default: /root/rosa/fuzzers/aflpp/aflpp/afl-fuzz] >
 [rosa]  Fuzzer output directory name? [default: fuzzer-out] >
 [rosa]  Path to seed directory? [default: seeds] >
+[rosa]  Binary-only mode (y/n)? [default: y] >
 [rosa]  Done! The configuration is saved in 'config.toml'.
 ```
 
