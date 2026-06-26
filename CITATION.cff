@@ -32,7 +32,7 @@ identifiers:
     value: 10.5281/zenodo.14724250
     description: Zenodo artifact
   - type: swh
-    value: 'swh:1:rev:d30f7f1800a5dde3b9991125f9b911f8396c6346'
+    value: 'swh:1:rev:71e42bc09fdbf58e0c2f3f20c2e5e64fa52f1335'
 repository-code: 'https://github.com/binsec/rosa'
 abstract: >-
   A code-level backdoor is a hidden access, programmed and
