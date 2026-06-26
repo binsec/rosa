@@ -11,7 +11,7 @@
     ```
 04. Check for dependency updates (via `cargo update`).
 05. Update `VERSION` and the version field in `Cargo.toml`; this should simply be removing the
-    `"-dev"` part.
+    `"-dev"` part. Run `cargo build` to update the `Cargo.toml` file.
 06. Run `mdbook serve doc` and peruse the documentation to make sure it looks correct.
 07. Update `CHANGELOG.md`.
 08. Build the Docker image with the `build.sh` script and make sure it succeeds (check that an image
