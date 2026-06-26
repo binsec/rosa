@@ -58,5 +58,5 @@ paper.[^lily-paper]
 
 [^lily-paper]: To appear in [ASE'26](https://conf.researchr.org/home/ase-2026).
 
-[^fuzzing-duration]: Lily has been shown to work with short fuzzing campaigns; in CI-level jobs, typically, only 10
-    minutes are allocated to fuzzing.
+[^fuzzing-duration]: Lily has been shown to work with short fuzzing campaigns; in CI-level jobs,
+    typically, only 10 minutes are allocated to fuzzing.
