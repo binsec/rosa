@@ -11,7 +11,7 @@
     ```
 04. Check for dependency updates (via `cargo update`).
 05. Update `VERSION` and the version field in `Cargo.toml`; this should simply be removing the
-    `"-dev"` part. Run `cargo build` to update the `Cargo.toml` file.
+    `"-dev"` part. Run `cargo build` to update the `Cargo.lock` file.
 06. Run `mdbook serve doc` and peruse the documentation to make sure it looks correct.
 07. Update `CHANGELOG.md`.
 08. Build the Docker image with the `build.sh` script and make sure it succeeds (check that an image
@@ -30,5 +30,6 @@
 14. Tag and push the new image as "latest": `docker tag plumtrie/rosa:X.Y.Z plumtrie/rosa:latest`,
     `docker push plumtrie/rosa:latest`.
 15. Prepare for the next version by bumping the PATCH number in the version and appending `"-dev"`.
-    This means that `"1.2.3"` should become `"1.2.4-dev"`.
+    This means that `"1.2.3"` should become `"1.2.4-dev"`. Again, run `cargo build` to update the
+    `Cargo.lock` file.
 16. Update the `swh` identifier in `CITATION.cff`.
