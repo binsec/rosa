@@ -10,7 +10,7 @@ the recommended way to vet the suspicious findings produced by ROSA.
 Generally, the user is expected to invoke `rosa-explain` like so:
 
 ```console
-$ rosa-explain /path/to/finding-directory <suspicious trace UID>
+$ rosa-explain /path/to/finding-directory <suspicious trace ID>
 ```
 
 You can run `rosa-explain --help` to get detailed documentation at the command-line level.

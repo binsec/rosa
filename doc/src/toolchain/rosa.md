@@ -15,7 +15,7 @@ follows:
   of bytes (i.e., they may or may not contain valid UTF-8 text).
 - `clusters/`: this directory contains the information regarding the clustering of
   family-representative inputs (collected during phase 1) into input families. Specifically, it
-  contains text files named with a cluster UID, which contain the UIDs of the family-representative
+  contains text files named with a cluster ID, which contain the IDs of the family-representative
   inputs of the cluster (see the `traces/` directory).
 - `config.toml`: this file is a copy of the ROSA configuration file used to produce these findings.
 - `decisions/`: this directory contains details on the decisions taken by the ROSA oracle for each
@@ -23,9 +23,9 @@ follows:
   _per input file_ analyzed by ROSA. These files contain the following information:
   - `seconds`: the time (in seconds since the beginning of the detection campaign) at which this
     oracle decision was taken.
-  - `decision.trace_uid`: the UID of the input/trace pair involved in the decision.
+  - `decision.trace_id`: the ID of the input/trace pair involved in the decision.
   - `decision.trace_name`: the original name of the input/trace pair (as collected from the fuzzer).
-  - `decision.cluster_uid`: the UID of the corresponding cluster/input family.
+  - `decision.cluster_id`: the ID of the corresponding cluster/input family.
   - `decision.is_backdoor`: the actual decision of the oracle ("is a backdoor"/"is not a backdoor").
   - `decision.reason`: the reason for the oracle's decision. It can be either "seed", "edges",
     "syscalls" or "edges-and-syscalls", with "seed" signifying that the input was a seed (i.e.,
