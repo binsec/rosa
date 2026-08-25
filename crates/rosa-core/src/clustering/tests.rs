@@ -162,24 +162,27 @@ fn cluster_traces_syscalls_only() {
         Trace::build("trace_3", &[], &[], 10, &[1, 2], 5).unwrap(),
         Trace::build("trace_4", &[], &[], 10, &[3], 5).unwrap(),
         Trace::build("trace_5", &[], &[], 10, &[3, 4], 5).unwrap(),
+        // Trace 6 has some different edges but the same system calls as trace 5.
+        Trace::build("trace_6", &[], &[1, 2], 10, &[3, 4], 5).unwrap(),
     ];
 
-    // With zero syscall-wise tolerance, each trace should go in its own cluster.
+    // With zero syscall-wise tolerance, each trace should go in its own cluster, except trace 6,
+    // which is the same as trace 5 (they should go in the same cluster).
     assert_eq!(
         cluster_traces!(&phase_one_traces, Criterion::SyscallsOnly, Hamming, 0, 0).len(),
-        phase_one_traces.len()
+        phase_one_traces.len() - 1
     );
     // Changing the edge tolerance should not change anything, as we are only taking syscalls into
     // account.
     assert_eq!(
         cluster_traces!(&phase_one_traces, Criterion::SyscallsOnly, Hamming, 1000, 0).len(),
-        phase_one_traces.len()
+        phase_one_traces.len() - 1
     );
 
     // With an syscall tolerance of 1, we should have 3 clusters:
     // - trace_1, trace_2 (distance 1)
     // - trace_3 (distance 0)
-    // - trace_4, trace_5 (distance 1)
+    // - trace_4, trace_5, trace_6 (distance 1)
     let clusters = cluster_traces!(&phase_one_traces, Criterion::SyscallsOnly, Hamming, 0, 1);
     assert_eq!(clusters.len(), 3);
     assert_eq!(
@@ -204,13 +207,13 @@ fn cluster_traces_syscalls_only() {
             .iter()
             .map(|trace| trace.name())
             .collect::<Vec<&str>>(),
-        vec!["trace_4", "trace_5"]
+        vec!["trace_4", "trace_5", "trace_6"]
     );
 
     // With an syscall tolerance of 2, we should have 3 clusters:
     // - trace_1, trace_2 (distance 1)
     // - trace_3 (distance 0)
-    // - trace_4, trace_5 (distance 1)
+    // - trace_4, trace_5, trace_6 (distance 1)
     let clusters = cluster_traces!(&phase_one_traces, Criterion::SyscallsOnly, Hamming, 0, 2);
     assert_eq!(clusters.len(), 3);
     assert_eq!(
@@ -235,12 +238,12 @@ fn cluster_traces_syscalls_only() {
             .iter()
             .map(|trace| trace.name())
             .collect::<Vec<&str>>(),
-        vec!["trace_4", "trace_5"]
+        vec!["trace_4", "trace_5", "trace_6"]
     );
 
     // With an syscall tolerance of 3, we should have 2 clusters:
     // - trace_1, trace_2, trace_3, trace_4 (distance 3)
-    // - trace_5 (distance 0)
+    // - trace_5, trace_6 (distance 0)
     let clusters = cluster_traces!(&phase_one_traces, Criterion::SyscallsOnly, Hamming, 0, 3);
     assert_eq!(clusters.len(), 2);
     assert_eq!(
@@ -257,7 +260,7 @@ fn cluster_traces_syscalls_only() {
             .iter()
             .map(|trace| trace.name())
             .collect::<Vec<&str>>(),
-        vec!["trace_5"]
+        vec!["trace_5", "trace_6"]
     );
 
     // With an syscall tolerance of 1, all traces should fit in a single cluster.

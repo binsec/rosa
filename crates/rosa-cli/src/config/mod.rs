@@ -127,11 +127,11 @@ pub struct Config {
 impl Config {
     /// The default cluster formation criterion.
     pub const fn default_cluster_formation_criterion() -> Criterion {
-        // By default, we separate clusters by CFG edges only. This is because of how we define
-        // input families in the original paper. Additionally, this criterion implicitly takes
-        // system calls into account, as passing by the same CFG edges implies producing the same
-        // types of system calls.
-        Criterion::EdgesOnly
+        // Since the default oracle configuration only discriminates based on system calls, it does
+        // not make sense to save multiple different clusters with the same system calls (but
+        // different edges). As such, we only save unique system call coverage profiles when forming
+        // clusters.
+        Criterion::SyscallsOnly
     }
     /// The default cluster formation distance metric.
     pub const fn default_cluster_formation_distance_metric() -> DistanceMetricKind {

@@ -425,7 +425,9 @@ where
 ///
 /// # Preconditions
 ///
-/// This function optimizes for zero-tolerance by assuming that all traces are **unique**.
+/// This function optimizes for zero-tolerance by assuming that all traces are **unique with respect
+/// to edge coverage**. This is usually guaranteed by the fuzzer backend, as no two collected edges
+/// are ever kept if they have the same exact edge coverage.
 ///
 /// # Examples
 ///
@@ -493,15 +495,19 @@ pub fn cluster_traces<DM>(
 where
     DM: DistanceMetric + Clone,
 {
-    if (edge_tolerance == 0 && criterion == Criterion::EdgesOnly)
-        || (syscall_tolerance == 0 && criterion == Criterion::SyscallsOnly)
-        || (edge_tolerance == 0 && syscall_tolerance == 0)
+    if edge_tolerance == 0
+        && [Criterion::EdgesOnly, Criterion::EdgesAndSyscalls].contains(&criterion)
     {
-        // If there is 0 tolerance in the component we car about, we will never be able to put two
-        // traces in the same cluster. This allows us to speed up clustering by simply putting each
-        // trace in its own cluster. This assumes all traces are unique (see precondition note in
-        // the function doc); note that it does not make much sense to cluster a non-unique set of
-        // traces.
+        // All traces we collect are deduplicated via their edge coverage, so we cannot have two
+        // traces with the same edge coverage. As such, when the edge tolerance is 0, and we require
+        // that the edges always be part of the criterion (i.e., with [Criterion::EdgesOnly] and
+        // [Criterion::SyscallsOnly], but not with [Criterion::EdgesOrSyscalls] because the syscalls
+        // might "win" over the edges), we can simplify by just putting each trace in its own
+        // cluster.
+        //
+        // Note that this assumes that all traces are unique with regards to edges (see precondition
+        // note in the function doc). Also note that it does not make much sense to cluster a
+        // non-unique set of traces.
         traces
             .iter()
             .enumerate()

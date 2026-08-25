@@ -13,6 +13,10 @@
 - Refactored `Trace` and `Cluster` to be valid by construction. Now their inner state is private, so
   you can only construct them via `build*()` methods, which guarantee that they are not malformed
   (e.g., empty system call vectors in trace).
+- Changed default configurations to use `syscalls-only`/`Criterion::SyscallsOnly` for cluster
+  formation. This is a small optimization which helps the oracle down the line, as only unique
+  system call coverage profiles are saved, and time is not lost comparing against multiple clusters
+  with the same exact system call coverage.
 
 ### New features
 
