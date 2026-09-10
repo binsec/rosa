@@ -30,9 +30,12 @@ authors:
 identifiers:
   - type: doi
     value: 10.5281/zenodo.14724250
-    description: Zenodo artifact
+    description: ROSA Zenodo artifact
+  - type: doi
+    value: 10.5281/zenodo.19337349
+    description: Lily Zenodo artifact
   - type: swh
-    value: 'swh:1:rev:2bd97b1c06c315a986d969fddec6049b1cc27118'
+    value: 'swh:1:rev:b60403c27c175198bd743f00bb28d0764c63a6cd'
 repository-code: 'https://github.com/binsec/rosa'
 abstract: >-
   A code-level backdoor is a hidden access, programmed and
