@@ -162,11 +162,11 @@ fn run(output_dir: &Path, trace_id: &str, component: Component) -> Result<(), Ro
     println_info!(
         "{}",
         [
-            format!("Explaining trace {}:", &trace_id),
-            format!("  Trace indicates a backdoor: {}", &decision.is_backdoor),
-            format!("  Detection reason: {}", &decision.reason),
-            format!("  Oracle criterion: {}", &config.oracle_criterion),
-            format!("  Most similar cluster: {}", &decision.cluster_id),
+            format!("Explaining trace {}:", trace_id),
+            format!("  Trace indicates a backdoor: {}", decision.is_backdoor),
+            format!("  Detection reason: {}", decision.reason),
+            format!("  Oracle criterion: {}", config.oracle_criterion),
+            format!("  Most similar cluster: {}", decision.cluster_id),
         ]
         .join("\n")
     );
