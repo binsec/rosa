@@ -1,7 +1,8 @@
 # The ROSA backdoor detection toolchain
 
-[![Paper DOI badge](https://img.shields.io/badge/Paper%20DOI-10.1109%2FICSE55347.2025.00183-blue?style=flat)](https://doi.org/10.1109/ICSE55347.2025.00183)
-[![Zenodo DOI badge](https://img.shields.io/badge/Zenodo%20DOI-10.5281%2Fzenodo.14724250-blue?style=flat)](https://doi.org/10.5281/zenodo.14724250)
+[![ROSA Paper DOI badge](https://img.shields.io/badge/ROSA%20Paper%20DOI-10.1109%2FICSE55347.2025.00183-blue?style=flat)](https://doi.org/10.1109/ICSE55347.2025.00183)
+[![ROSA Zenodo DOI badge](https://img.shields.io/badge/ROSA%20Zenodo%20DOI-10.5281%2Fzenodo.14724250-blue?style=flat)](https://doi.org/10.5281/zenodo.14724250)
+[![Lily Zenodo DOI badge](https://img.shields.io/badge/Lily%20Zenodo%20DOI-10.5281%2Fzenodo.19337349-blue?style=flat)](https://doi.org/10.5281/zenodo.19337349)
 [![SWH](https://archive.softwareheritage.org/badge/origin/https://github.com/binsec/rosa/)](https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/binsec/rosa)
 
 ## About
