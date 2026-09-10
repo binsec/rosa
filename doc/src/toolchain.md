@@ -16,6 +16,8 @@ of tools to clarify, analyze and test backdoor detection:
 - [`rosa-showmap`](./toolchain/rosa_showmap.md): show the coverage (of edges or system calls) of a
   given runtime trace (associated with a test input). Similar to
   [`afl-showmap`](https://aflplus.plus/docs/fuzzing_in_depth/#g-checking-the-coverage-of-the-fuzzing).
+- [`rosa-trace`](./toolchain/rosa_trace.md): trace an input through the program to obtain its
+  corresponding `.trace` file.
 - [`rosa-trace-dist`](./toolchain/rosa_trace_dist.md): show the distance (or difference) between two
   runtime traces (associated with two test inputs).
 - [`rosa-simulate`](./toolchain/rosa_simulate.md): simulate a detection campaign with a different

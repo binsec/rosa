@@ -19,8 +19,8 @@ Lily_ and _Novel Lily_):
    reusing the results of step (3) with the _next_ version once the full chain of steps has been
    completed for the first time.
 2. Trace the inputs through the _current_ version of the program to normalize them, as explained in
-   the paper.[^lily-paper] This can be achieved with `rosa-trace` (assuming `representative-inputs/`
-   contains the representative inputs):
+   the paper.[^lily-paper] This can be achieved with [`rosa-trace`](./rosa_trace.md) (assuming
+   `representative-inputs/` contains the representative inputs):
    ```bash
    for input in representative-inputs/*
    do

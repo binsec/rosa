@@ -228,12 +228,9 @@ impl Config {
         "",
     ];
     /// The README to put in the `logs` directory in the output directory.
-    const LOGS_DIR_README: [&'static str; 6] = [
+    const LOGS_DIR_README: [&'static str; 3] = [
         "This directory contains the logs created by the fuzzer processes (both stdout and",
         "stderr).",
-        "",
-        "The file `fuzzer_seed.log` corresponds to the seed collection run of the fuzzer,",
-        "while the file `fuzzer_detection.log` corresponds to the detection run of the fuzzer.",
         "",
     ];
     /// The README to put in the `traces` directory in the output directory.

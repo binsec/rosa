@@ -1,9 +1,8 @@
 # Extending ROSA
 
-<div class="warning">
-    Before implementing any extensions, be sure to read <code>CONTRIBUTING.md</code> to avoid
-    pitfalls and make sure that you have a valid development environment.
-</div>
+> [!WARNING]
+> Before implementing any extensions, be sure to read `CONTRIBUTING.md` to avoid pitfalls and make
+> sure that you have a valid development environment.
 
 The ROSA library and toolchain has been designed to be easily extendable. Most notably, the
 following parts of the library are fully exposed to developers to easily add extensions:

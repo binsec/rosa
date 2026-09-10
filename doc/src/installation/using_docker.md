@@ -30,10 +30,9 @@ Before running the script (or simply `docker build ...`), make sure that you hav
 the submodules** used in this repo. You can do this either by cloning the repo with
 `--recurse-submodules`, or by running `git submodule update --init --recursive` post-cloning.
 
-<div class="warning">
-    Be advised that the build might take some time, especially including the time it takes to clone
-    all of the submodules.
-</div>
+> [!WARNING]
+> Be advised that the build might take some time, especially including the time it takes to clone
+> all of the submodules.
 
 Once the Docker image is built, the `run.sh` convenience script may be used to run it. Generally,
 released versions of the image will be tagged, so you can run `git checkout <TAG>` and run

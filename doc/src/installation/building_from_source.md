@@ -1,10 +1,9 @@
 # Building ROSA from source
 
-<div class="warning">
-    ROSA is currently only supported on Linux x86(_64) systems (actually tested on Ubuntu Linux
-    22.04 on x86_64). It <strong>most definitely depends on libc</strong>, so it might not work out
-    of the box (or at all) in other systems.
-</div>
+> [!WARNING]
+> ROSA is currently only supported on Linux x86(\_64) systems (actually tested on Ubuntu Linux 22.04
+> and 24.04 on x86_64). It <strong>most definitely depends on libc</strong>, so it might not work
+> out of the box (or at all) in other systems.
 
 In order to build ROSA from source, you need the Rust toolchain (specifically
 [Cargo](https://crates.io/crates/cargo)). The recommended way to obtain it is via

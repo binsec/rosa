@@ -21,6 +21,7 @@
   - [rosa-explain](./toolchain/rosa_explain.md)
   - [rosa-evaluate](./toolchain/rosa_evaluate.md)
   - [rosa-showmap](./toolchain/rosa_showmap.md)
+  - [rosa-trace](./toolchain/rosa_trace.md)
   - [rosa-trace-dist](./toolchain/rosa_trace_dist.md)
   - [rosa-simulate](./toolchain/rosa_simulate.md)
 - [How ROSA works](./internals.md)

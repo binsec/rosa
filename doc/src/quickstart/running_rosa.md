@@ -12,7 +12,7 @@ We are now ready to run ROSA! You can explicitly specify the configuration file 
     Stopping at 60 seconds
   Cluster formation:
     Distance metric: hamming
-    Criterion: edges-only
+    Criterion: syscalls-only
     Edge tolerance: 0
     Syscall tolerance: 0
   Cluster selection:
@@ -43,8 +43,8 @@ machine.[^detection_time] When detection happens, you will see the _backdoors_ c
 
 ![The ROSA status screen (TUI), shortly after the beginning of the detection campaign.](../images/sudo-backdoor-detected.png)
 
-You can stop the backdoor detection at any time by hitting `Ctrl-C`.
+You can stop the backdoor detection campaign at any time by hitting `Ctrl-C`.
 
 [^detection_time]: On a Dell laptop with a 20-core 12th Gen Intel(R) Core(TM) i7-12800H CPU and 64
-    GiB of RAM, inside the ROSA Docker container, the detection takes more or less 6
+    GiB of RAM, inside the ROSA Docker container, the detection takes about 2 to 6
     minutes.

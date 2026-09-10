@@ -29,9 +29,10 @@ These settings control the formation of clusters (or input families):
 
 - `cluster_formation_criterion` (string): the criterion to use during the formation of the clusters.
   This determines which component(s) will be taken into account during clustering. Possible values:
-  - `"edges-only"`: only CFG edges are taken into account (default value; the definition of input
-    families describes inputs that cover approximately the same CFG edges).
-  - `"syscalls-only"`: only system calls are taken into account.
+  - `"edges-only"`: only CFG edges are taken into account.
+  - `"syscalls-only"`: only system calls are taken into account (default value; it is an
+    under-approximation of input families, covering all representative _behaviors_ observed during
+    the first phase).
   - `"edges-or-syscalls"`: logical _or_ between `"edges-only"` and `"syscalls-only"`.
   - `"edges-and-syscalls"`: logical _and_ between `"edges-only"` and `"syscalls-only"`.
 - `cluster_formation_distance_metric` (string): the distance metric to use when comparing
