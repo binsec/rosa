@@ -158,15 +158,19 @@ following snippet:
 
 ```bibtex
 @inproceedings{kokkonis-2025-rosa,
-    author = {Kokkonis, Dimitri and Marcozzi, Michaël and Decoux, Emilien and Zacchiroli, Stefano},
-    booktitle = {2025 IEEE/ACM 47th International Conference on Software Engineering (ICSE)},
+    author = {Kokkonis, Dimitri and Marcozzi, Micha{\"e}l and Decoux, Emilien and Zacchiroli, Stefano},
     title = {{ROSA: Finding Backdoors with Fuzzing}},
     year = {2025},
-    volume = {},
-    number = {},
-    pages = {2816-2828},
-    keywords = {Runtime;Automation;Manuals;Binary codes;Fuzzing;Benchmark testing;Robustness;Software;Performance analysis;Standards;fuzzing;dynamic analysis;metamorphic testing;backdoors;vulnerability detection},
+    isbn = {9798331505691},
+    publisher = {IEEE Press},
+    url = {https://doi.org/10.1109/ICSE55347.2025.00183},
     doi = {10.1109/ICSE55347.2025.00183},
+    booktitle = {Proceedings of the IEEE/ACM 47th International Conference on Software Engineering},
+    pages = {2816–2828},
+    numpages = {13},
+    keywords = {fuzzing, dynamic analysis, metamorphic testing, backdoors, vulnerability detection},
+    location = {Ottawa, Ontario, Canada},
+    series = {ICSE '25},
 }
 ```
 
