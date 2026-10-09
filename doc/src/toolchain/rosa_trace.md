@@ -17,4 +17,4 @@ $ rosa-trace /path/to/rosa-config.toml /path/to/input-file
 
 You can run `rosa-trace --help` to get detailed documentation at the command-line level.
 
-[^lily-paper]: To appear in [ASE'26](https://conf.researchr.org/home/ase-2026).
+[^lily-paper]: See [10.1145/3832783.3834352](https://doi.org/10.1145/3832783.3834352).

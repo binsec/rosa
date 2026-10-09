@@ -23,4 +23,4 @@ of tools to clarify, analyze and test backdoor detection:
 - [`rosa-simulate`](./toolchain/rosa_simulate.md): simulate a detection campaign with a different
   ROSA configuration given an existing backdoor detection campaign.
 
-[^lily-paper]: To appear in [ASE'26](https://conf.researchr.org/home/ase-2026).
+[^lily-paper]: See [10.1145/3832783.3834352](https://doi.org/10.1145/3832783.3834352).

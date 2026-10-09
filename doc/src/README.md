@@ -35,4 +35,4 @@ $ cargo doc --open
     [_El Paso_](https://genius.com/Marty-robbins-el-paso-lyrics#:~:text=the%20back%20door%20of%20Rosa%27s),
     but also stands for _Runtime trace Oracle-based Selection Algorithm_.
 
-[^lily-paper]: To appear in [ASE'26](https://conf.researchr.org/home/ase-2026).
+[^lily-paper]: See [10.1145/3832783.3834352](https://doi.org/10.1145/3832783.3834352).

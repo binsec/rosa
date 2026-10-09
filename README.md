@@ -176,7 +176,27 @@ following snippet:
 
 ### Citing the "Not In My Git Yard: Catching Backdoors at Commit and Release Time" paper (ASE'26)
 
-(Coming soon)
+When citing the associated [ASE'26 paper](https://doi.org/10.1145/3832783.3834352), use the
+following snippet:
+
+```bibtex
+@inproceedings{kokkonis-2026-lily,
+    author = {Kokkonis, Dimitri and Marcozzi, Micha{\"e}l and Zacchiroli, Stefano},
+    title = {Not In My Git Yard: Catching Backdoors at Commit and Release Time},
+    year = {2026},
+    isbn = {9798400728822},
+    publisher = {Association for Computing Machinery},
+    address = {New York, NY, USA},
+    url = {https://doi.org/10.1145/3832783.3834352},
+    doi = {10.1145/3832783.3834352},
+    booktitle = {Proceedings of the 41st IEEE/ACM International Conference on Automated Software Engineering},
+    pages = {273–284},
+    numpages = {12},
+    keywords = {Backdoors, Continuous Integration, Dynamic Analysis, Fuzzing, Release Vetting, Software Supply Chain Security},
+    location = {Munich, Germany},
+    series = {ASE '26},
+}
+```
 
 ### Citing this repository
 

@@ -56,7 +56,7 @@ Scripts to automate the generation of these reports can be found in the
 [reproduction package](https://doi.org/10.5281/zenodo.19337349) associated with the original
 paper.[^lily-paper]
 
-[^lily-paper]: To appear in [ASE'26](https://conf.researchr.org/home/ase-2026).
+[^lily-paper]: See [10.1145/3832783.3834352](https://doi.org/10.1145/3832783.3834352).
 
 [^fuzzing-duration]: Lily has been shown to work with short fuzzing campaigns; in CI-level jobs,
     typically, only 10 minutes are allocated to fuzzing.
