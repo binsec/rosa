@@ -104,15 +104,14 @@ fn generate_fuzzer_config(
 /// Ask a question and parse some input. The input will be passed to a conversion function, and if
 /// it is empty a default value will be used instead. A printable default is supplied to be shown
 /// to the user.
-fn get_input<T, F>(
+fn get_input<T>(
     question: &str,
-    convert: F,
+    convert: fn(&str) -> Option<T>,
     default: T,
     printable_default: &str,
 ) -> Result<T, RosaError>
 where
     T: std::cmp::PartialEq + Clone + std::fmt::Debug,
-    F: Fn(&str) -> Option<T>,
 {
     let stdin = io::stdin();
 
